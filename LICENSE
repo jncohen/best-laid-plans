@@ -1,0 +1,51 @@
+Best Laid Plans — A Simulation in Planning Under Uncertainty
+Copyright (c) 2026 Joseph N. Cohen
+
+This work is licensed under the Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0).
+
+To view a copy of this license, visit:
+    https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+────────────────────────────────────────────────────────────────────────────
+
+You are free to:
+
+  SHARE   — copy and redistribute the material in any medium or format
+  ADAPT   — remix, transform, and build upon the material
+
+under the following terms:
+
+  ATTRIBUTION      You must give appropriate credit, provide a link to the
+                   license, and indicate if changes were made.
+
+  NONCOMMERCIAL    You may not use the material for commercial purposes.
+
+  SHARE-ALIKE      If you remix, transform, or build upon the material, you
+                   must distribute your contributions under the same license
+                   as the original.
+
+No warranties are given. The license may not give you all of the permissions
+necessary for your intended use.
+
+────────────────────────────────────────────────────────────────────────────
+
+ACADEMIC LINEAGE
+
+This simulation is independent work. Its mechanics draw on published
+scholarship, which is unprotectable subject matter under 17 U.S.C. § 102(b);
+its narrative, interface, parameters and coursework are original.
+
+Intellectual debts, gratefully acknowledged:
+
+  Ford, D. & Sterman, J. (1998). Dynamic Modeling of Product Development
+      Processes. MIT System Dynamics Group D-4672.
+  Cooper, K. (1993). The Rework Cycle: Why Projects Are Mismanaged.
+  Abdel-Hamid, T. & Madnick, S. (1991). Software Project Dynamics.
+      Prentice-Hall.
+  Austin, R. D. Project Management Simulation: Scope, Resources, Schedule.
+      — prior art in the genre. No material from that commercial product
+      was consulted in building this one.
+
+Underlying ideas: Knight (1921) on risk versus uncertainty; Taleb (2007) on
+tail risk; Mellers et al. (2015) on calibration as a cultivable skill.

@@ -1,0 +1,30 @@
+{
+  "name": "best-laid-plans",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "oxlint src && cd .. && oxlint -c frontend/.oxlintrc.json tools",
+    "preview": "vite preview",
+    "test": "node ../tools/test-plan.mjs",
+    "render-check": "npx --yes esbuild render-check.jsx --bundle --platform=node --format=cjs --outfile=node_modules/.render-check.cjs --loader:.jsx=jsx --jsx=automatic --log-level=error && node node_modules/.render-check.cjs",
+    "verify": "npm run lint && npm run test && npm run render-check && npm run build",
+    "plan": "node ../tools/plan-sweep.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "esbuild": "^0.28.2",
+    "oxlint": "^1.75.0",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.2.0"
+  }
+}
