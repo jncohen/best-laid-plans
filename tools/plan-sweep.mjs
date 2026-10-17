@@ -248,10 +248,11 @@ const STUDENT_N = Number(process.env.STUDENT_N || Math.min(N, 400));
 const PLAN = { crews: 3, inspect: 0.1, shift: 'none' };
 const ALL_TOOLS = ['status', 'cost', 'schedule', 'chat', 'last5', 'records', 'scenarios', 'analytics', 'simulator'];
 const asForecast = (f) => ({ week: f.week, low: f.low, high: f.high, onTimeChance: f.chance });
-const pick3 = (i) => { const r = ((i * 2654435761) >>> 0) / 4294967296; const s = [...ALL_TOOLS].sort((a, b) => ((a.charCodeAt(0) * 31 + i) % 7) - ((b.charCodeAt(0) * 31 + i) % 7) || a.localeCompare(b)); return s.slice(Math.floor(r * 3), Math.floor(r * 3) + 3); };
+// Round 1 is unlimited, but a coaster opens only a few tabs before asking the AI: 2 to 6 of them, varying by code.
+const pickTabs = (i) => { const r = ((i * 2654435761) >>> 0) / 4294967296; const n = 2 + Math.floor(r * 5); const s = [...ALL_TOOLS].sort((a, b) => ((a.charCodeAt(0) * 31 + i) % 7) - ((b.charCodeAt(0) * 31 + i) % 7) || a.localeCompare(b)); return s.slice(0, n); };
 function playStudent(type, seed, i) {
   const p = new Project(seed);
-  const opened = type === 'ai-coast' ? pick3(i) : type === 'anchor' ? ['status'] : ['records', 'last5', 'status'];
+  const opened = type === 'ai-coast' ? pickTabs(i) : type === 'anchor' ? ['status'] : ['records', 'last5', 'status'];
   const f0 = type === 'anchor' ? statusReport(SCREEN).forecast
     : type === 'ai-coast' ? (opened.includes('records') || opened.includes('last5') ? records(SCREEN, PLAN).matched : statusReport(SCREEN).forecast)
       : records(SCREEN, PLAN).matched;
@@ -273,14 +274,17 @@ function playStudent(type, seed, i) {
   }
   return p;
 }
-const STUDENTS = { anchor: 'Anchor (pace, plays the plan)', 'record-coast': 'Record and coast', 'ai-coast': 'AI and coast (3 tabs)', adaptive: 'Adaptive (2 views a week)' };
+const STUDENTS = { anchor: 'Anchor (pace, plays the plan)', 'record-coast': 'Record and coast', 'ai-coast': 'AI and coast (2-6 tabs)', adaptive: 'Adaptive (2 views a week)' };
 const studentRows = {};
 for (const type of Object.keys(STUDENTS)) {
   const ps = Array.from({ length: STUDENT_N }, (_, i) => playStudent(type, 50000 + i, i));
   const sc = ps.map((p) => p.scores());
-  const weeklyHeld = mean(ps.map((p) => { const o = p.outcomeWeek(); return mean(p.forecastLog.map((e) => +(o >= (e.low ?? e.forecast) && o <= (e.high ?? e.forecast)))); }));
+  const heldFrom = (p, w0) => { const o = p.outcomeWeek(), es = p.forecastLog.filter((e) => e.week >= w0); return es.length ? mean(es.map((e) => +(o >= (e.low ?? e.forecast) && o <= (e.high ?? e.forecast)))) : null; };
+  const weeklyHeld = mean(ps.map((p) => heldFrom(p, 0)));
+  // From week 2, where the 3-view limit applies.
+  const heldWeek2 = mean(ps.map((p) => heldFrom(p, 2)).filter((x) => x !== null));
   studentRows[type] = { forecast: mean(sc.map((x) => x.forecast)), updating: mean(sc.map((x) => x.updating)), delivery: mean(sc.map((x) => x.delivery)),
-    held: mean(sc.map((x) => +x.held)), weeklyHeld, onTime: mean(sc.map((x) => +x.onTime)), broke: mean(ps.map((p) => +(p.result === 'BANKRUPT'))) };
+    held: mean(sc.map((x) => +x.held)), weeklyHeld, heldWeek2, onTime: mean(sc.map((x) => +x.onTime)), broke: mean(ps.map((p) => +(p.result === 'BANKRUPT'))) };
 }
 console.log(`\nStudent types (${STUDENT_N} codes): Forecast = week-1 score, Updating = weekly forecasts, Delivery counts bankruptcy as 0`);
 console.log('Type'.padEnd(30) + 'Forecast'.padStart(9) + 'Updating'.padStart(9) + 'Delivery'.padStart(9) + 'Held'.padStart(6) + 'Wk held'.padStart(8) + 'OnTime'.padStart(7) + 'Broke'.padStart(6));
@@ -294,7 +298,7 @@ checks.push(
     `adaptive ${A.delivery.toFixed(1)}, record-coast ${RC.delivery.toFixed(1)}, AI-coast ${AC.delivery.toFixed(1)}`],
   ['15. Neither coasting type is best on both Updating and Delivery', !['record-coast', 'ai-coast'].some((k) => bestOn('updating') === k && bestOn('delivery') === k),
     `best Updating: ${STUDENTS[bestOn('updating')]}; best Delivery: ${STUDENTS[bestOn('delivery')]}`],
-  ['16. A careful player is calibrated within 3 views a week (adaptive weekly ranges hold >= 70%)', A.weeklyHeld >= 0.7, `adaptive weekly ranges held ${pct(A.weeklyHeld)}; week-1 range held ${pct(A.held)}`],
+  ['16. A careful player is calibrated within 3 views a week from week 2 (adaptive weekly ranges from week 2 hold >= 70%)', A.heldWeek2 >= 0.7, `adaptive weekly ranges from week 2 held ${pct(A.heldWeek2)} (all weeks ${pct(A.weeklyHeld)}); week-1 range held ${pct(A.held)}`],
 );
 
 console.log('\n=== TARGETS ===');

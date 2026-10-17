@@ -7,7 +7,7 @@ import Reveal from './src/plan/Reveal.jsx';
 import { TABS, screenData, liveScreen } from './src/plan/desk.js';
 import DeskTab from './src/plan/DeskTabs.jsx';
 import TabStrip from './src/plan/DeskStrip.jsx';
-import { isCheck } from './src/plan/engine.js';
+import { isCheck, viewLimit } from './src/plan/engine.js';
 
 let fails = 0;
 const ok = (n, fn) => {
@@ -20,6 +20,14 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
 ok('Tab strip: with 3 views used, unviewed tool tabs are locked and say so', () => {
   const h = renderToString(<TabStrip tab="status" opened={['status', 'records', 'last5']} onOpen={() => {}} checks={{ left: 0, limit: 3, when: 'this week', counts: isCheck }} />);
   if (!h.includes('used your 3 views this week') || (h.match(/disabled=""/g) || []).length < 8 || /disabled=""[^>]*>[^<]*The Contract/.test(h)) throw new Error('locking wrong');
+  // The front tab is never locked, before week 1 or during play.
+  for (const front of [{ id: 'commit', short: 'Your Plan & Prediction' }, { id: 'decide', short: "This Week's Decisions" }]) {
+    const f = renderToString(<TabStrip tab="status" opened={['status', 'records', 'last5']} onOpen={() => {}} front={front} checks={{ left: 0, limit: 3, when: 'this week', counts: isCheck }} />);
+    if (/<button[^>]*disabled=""[^>]*>[^<]*(Your Plan|This Week)/.test(f)) throw new Error(`${front.id} locked with 0 views left`);
+  }
+  // Round 1: no limit, nothing locked, and the notice across the top.
+  const r1 = renderToString(<TabStrip tab="status" opened={['status', 'records', 'last5', 'chat']} onOpen={() => {}} checks={{ left: Infinity, limit: viewLimit(1), when: 'before week 1', counts: isCheck }} />);
+  if (r1.includes('disabled=""') || !r1.includes('Round 1 only: look at everything you like. From week 2, you get 3 tool views a week.')) throw new Error('round 1 not unlimited');
   return h;
 });
 {
@@ -47,9 +55,26 @@ ok('Tab strip: with 3 views used, unviewed tool tabs are locked and say so', () 
 {
   const p = new Project('render-plan');
   p.commit({ week: 10, low: 9, high: 12, onTimeChance: 70 });
-  ok('Play, week 1', () => renderToString(<Play project={p} onPlay={() => {}} />));
+  ok('Play, week 1: round 1, unlimited, with the notice', () => {
+    const h = renderToString(<Play project={p} onPlay={() => {}} initialSeen={['status', 'records', 'last5', 'chat', 'cost']} />);
+    if (!h.includes('Round 1 only: look at everything you like') || h.includes('🔒') || !h.includes('Play week')) throw new Error('round 1 locked or notice missing');
+    return h;
+  });
   for (let w = 0; w < 7; w++) p.play({ hire: w === 0 ? 2 : 0, inspect: 0.1, shift: w > 4, forecast: 11 + w });
   ok('Play, mid-game with history', () => renderToString(<Play project={p} onPlay={() => {}} />));
+  // With 0 views left, This Week's Decisions and its play controls still work, and unviewed tools lock.
+  ok('Play, views used up: the front tab and play controls still work', () => {
+    const h = renderToString(<Play project={p} onPlay={() => {}} initialSeen={['status', 'records', 'last5']} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+    if (!h.includes(`Play week ${p.week + 1}`) || /<button[^>]*disabled=""[^>]*>[^<]*(This Week's Decisions|Play week)/.test(h)) throw new Error('decisions locked');
+    if (!h.includes("You've used your 3 views this week") || !h.includes('🔒')) throw new Error('unviewed tools not locked');
+    if (h.includes('Round 1 only')) throw new Error('round 1 notice after week 1');
+    return h;
+  });
+  ok('Play, views used up, on a tool tab: the way back is open', () => {
+    const h = renderToString(<Play project={p} onPlay={() => {}} initialSeen={['status', 'records', 'last5']} initialTab="records" />).replace(/&#x27;/g, "'");
+    if (!h.includes("Back to This Week's Decisions") || /<button[^>]*disabled=""[^>]*>[^<]*This Week/.test(h)) throw new Error('no way back');
+    return h;
+  });
   playPolicy(p, { inspect: 0.1 });
   ok('Reveal, delivered', () => renderToString(<Reveal project={p} onReplay={() => {}} />));
 }

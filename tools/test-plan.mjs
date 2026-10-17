@@ -2,7 +2,7 @@
 import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean, playPolicy, matchContracts, planFromProject, summarizeContracts,
   encodePlan, decodePlan, normalizePlan, playedPlan, judgeForecast } from '../frontend/src/plan/engine.js';
 import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/plan/table.js';
-import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, attentionRule } from '../frontend/src/plan/engine.js';
+import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, attentionRule, round1Rule, viewLimit, canOpen, isCheck } from '../frontend/src/plan/engine.js';
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, analytics, riskSimulator, scenarios, consensus, aiPrompt, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
 
@@ -447,7 +447,11 @@ console.log('Attention: at most 3 views a week, no charge');
   const many = play((p) => { ['status', 'records', 'schedule', 'chat', 'contract', 'ai'].forEach((t) => p.noteDesk(2, t)); }, { tool: '', tabs: 6, minutes: 3, edited: true, order: ['status', 'records', 'last5', 'chat', 'cost', 'schedule'] });
   t('views never cost output or change an outcome', JSON.stringify(many.history.map((h) => h.built)) === JSON.stringify(none.history.map((h) => h.built)));
   t('a week counts distinct tool tabs; The Contract and Ask an AI do not count', many.checksFor(2) === 4 && play((p) => ['status', 'status', 'contract', 'ai'].forEach((t) => p.noteDesk(2, t))).checksFor(2) === 1);
-  t('the limit is 3 a week and 3 before week 1, stated in the briefing', CONFIG.viewsPerWeek === 3 && CONFIG.viewsBeforeWeek1 === 3 && /at most 3 tool tabs each week \(3 before week 1\)/.test(attentionRule()));
+  t('round 1 (briefing and week 1) is unlimited, then 3 a week, stated in the briefing', viewLimit(0) === Infinity && viewLimit(1) === Infinity && viewLimit(2) === 3 && viewLimit(15) === 3
+    && attentionRule().startsWith(round1Rule()) && round1Rule() === 'Round 1 only: look at everything you like. From week 2, you get 3 tool views a week.' && /at most 3 tool tabs each week from week 2/.test(attentionRule()));
+  const used = ['status', 'records', 'last5'];
+  t('with 0 views left, the front tab, The Contract and Ask an AI still open; viewed tabs re-open; new tools do not', ['commit', 'decide', 'contract', 'ai', 'status'].every((id) => canOpen(id, used, 3))
+    && !canOpen('chat', used, 3) && !isCheck('commit') && !isCheck('decide') && canOpen('chat', [...used, 'cost', 'schedule'], viewLimit(1)));
 }
 
 console.log("Inspectors' sample: a plain observation, drawn before play, never changing an outcome");

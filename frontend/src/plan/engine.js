@@ -79,10 +79,11 @@ export const CONFIG = {
   // units they found defective. It reads the true defect rate with this relative error.
   sampleError: 0.08,
 
-  // Attention: at most this many tool tabs can be viewed each week (and before week 1).
-  // The front tab, The Contract and Ask an AI don't count; re-opening a tab that week is free.
+  // Attention: round 1 (the briefing and the week-1 decisions) is unlimited. From week 2, at
+  // most this many tool tabs can be viewed each week. The front tab, The Contract and Ask an
+  // AI never count; re-opening a tab that week is free.
   viewsPerWeek: 3,
-  viewsBeforeWeek1: 3,
+  unlimitedRound1: true,
 
   // Updating score: weight on the interval score of each weekly 80% range
   updatingIntervalWeight: 3,
@@ -483,11 +484,23 @@ export function updatingScore(log, outcome, onTime, cfg = CONFIG) {
   return Math.round(total / weight);
 }
 
-/** A tool check: opening a tool tab. The Contract and Ask an AI don't count, nor using a tool's numbers. */
-export const isCheck = (tab) => !!tab && tab !== 'contract' && tab !== 'ai' && tab !== 'ai-copy' && !tab.startsWith('use:');
+/** The student's own tab: Your Plan & Prediction before week 1, This Week's Decisions during play. Never counted, never locked. */
+export const isFront = (tab) => tab === 'commit' || tab === 'decide';
+
+/** A tool check: opening a tool tab. The front tab, The Contract and Ask an AI don't count, nor using a tool's numbers. */
+export const isCheck = (tab) => !!tab && !isFront(tab) && tab !== 'contract' && tab !== 'ai' && tab !== 'ai-copy' && !tab.startsWith('use:');
+
+/** Tool views allowed before playing `week`: unlimited in round 1 (the briefing and week 1), then viewsPerWeek. */
+export const viewLimit = (week, c = CONFIG) => (c.unlimitedRound1 && week <= 1 ? Infinity : c.viewsPerWeek);
+
+/** Whether a tab can open, given the tool tabs already viewed this week: anything not counted, anything viewed, or while views are left. */
+export const canOpen = (tab, opened, limit) => !isCheck(tab) || opened.includes(tab) || opened.filter(isCheck).length < limit;
+
+/** Round 1's notice, shown across the top of the tab strip and in The Contract. */
+export const round1Rule = (c = CONFIG) => `Round 1 only: look at everything you like. From week 2, you get ${c.viewsPerWeek} tool views a week.`;
 
 /** The attention rule, in the briefing's words. */
-export const attentionRule = (c = CONFIG) => `You can view at most ${c.viewsPerWeek} tool tabs each week (${c.viewsBeforeWeek1} before week 1). Re-opening a tab you've already viewed that week is free, and so are The Contract and Ask an AI.`;
+export const attentionRule = (c = CONFIG) => `${c.unlimitedRound1 ? `${round1Rule(c)} ` : ''}You can view at most ${c.viewsPerWeek} tool tabs each week${c.unlimitedRound1 ? ' from week 2' : ''}. Re-opening a tab you've already viewed that week is free, and so are your own tab, The Contract and Ask an AI.`;
 
 /** The onboarding rule, in the briefing's words. */
 export const onboardingRule = (c = CONFIG) => (c.onboardingDrag === 'new'

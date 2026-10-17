@@ -35,10 +35,11 @@ favour of a show of hands. It is not live until it is merged into
    - **The Contract** (second) has the terms, every disclosure and both scores;
    - **Last 5 Contracts** has the last contract's six-week pace and its story;
    - **Records** has all 40 past contracts.
-3. Before committing they may open up to 3 tool tabs (below), or none. Attention is
-   limited: at most 3 tool tabs a week, the same before week 1. Once 3 are used, the
-   other tabs lock until the next week. The Contract, Ask an AI and re-opening a tab
-   already viewed that week don't count. Each
+3. Before committing they may open any of the tool tabs (below), or none. Round 1, the
+   briefing and the week-1 decisions, is unlimited, and a notice across the top of the
+   tab strip says so. From week 2, attention is limited to 3 tool tabs a week; once 3
+   are used, the other tabs lock until the next week. The student's own tab, The
+   Contract, Ask an AI and re-opening a tab already viewed that week never count. Each
    tool computes a forecast from what the briefing shows and nothing else. Like real
    tools, the tabs carry no labels about what they can and can't see; the reveal
    lists that for each one. "Use this on my prediction" copies a tool's numbers
@@ -112,8 +113,9 @@ for projecting a tab in class.
 - **Events.** About half of contracts lose a crew for 2 weeks (still paid), somewhere
   in weeks 3–9. About 40% hit a parts delay that idles half the line for a week, in
   weeks 4–10. Both are drawn from the scenario code before play.
-- **Attention.** At most 3 tool tabs a week (3 before week 1). It costs nothing; the
-  rest simply lock until next week.
+- **Attention.** "Round 1 only: look at everything you like. From week 2, you get 3
+  tool views a week." It costs nothing; the rest simply lock until next week. The
+  front tab (Your Plan & Prediction, This Week's Decisions) and The Contract never lock.
 - **Bankruptcy.** The company can overspend the budget by up to $0.5M on credit. If a
   week's payroll would take it past that, it can't pay its crews: it goes bankrupt
   and the contract ends. During play, a warning appears before a week that would do

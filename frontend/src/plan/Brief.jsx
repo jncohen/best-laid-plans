@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CONFIG, isCheck } from './engine';
+import { CONFIG, isCheck, viewLimit, canOpen } from './engine';
 import { tabById, screenData } from './desk.js';
 import TabStrip from './DeskStrip';
 import { Card, Slider } from './ui';
@@ -53,8 +53,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const intervalOk = forecastSet && low <= week && week <= high;
 
   const open = (id) => {
-    // At most viewsBeforeWeek1 tool tabs before week 1; tabs already viewed stay open.
-    if (isCheck(id) && !opened.includes(id) && opened.filter(isCheck).length >= c.viewsBeforeWeek1) return;
+    // Round 1 is unlimited; the front tab and The Contract never count.
+    if (!canOpen(id, opened, viewLimit(1, c))) return;
     setTab(id);
     if (id !== 'commit') setOpened((o) => (o.includes(id) ? o : [...o, id]));
     window.scrollTo(0, 0);
@@ -85,7 +85,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
       </header>
 
       <TabStrip tab={tab} opened={opened} onOpen={open}
-        checks={{ left: Math.max(0, c.viewsBeforeWeek1 - opened.filter(isCheck).length), limit: c.viewsBeforeWeek1, when: 'before week 1', counts: isCheck }} />
+        checks={{ left: Math.max(0, viewLimit(1, c) - opened.filter(isCheck).length), limit: viewLimit(1, c), when: 'before week 1', counts: isCheck }} />
 
       {tab !== 'commit' ? (
         <>

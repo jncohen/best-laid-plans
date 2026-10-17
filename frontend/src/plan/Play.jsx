@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CONFIG, pastContracts, describePlan, onboardingRule, isCheck, failuresLine } from './engine';
+import { CONFIG, pastContracts, describePlan, onboardingRule, isCheck, failuresLine, viewLimit, canOpen } from './engine';
 import { TABS, screenData, liveScreen } from './desk.js';
 import DeskTab from './DeskTabs';
 import TabStrip from './DeskStrip';
@@ -9,7 +9,7 @@ import { ProgressSpark, ForecastChart } from './charts';
 
 const DECIDE = { id: 'decide', short: "This Week's Decisions" };
 
-export default function Play({ project, onPlay }) {
+export default function Play({ project, onPlay, initialSeen = [], initialTab = 'decide' }) {
   const c = CONFIG;
   const p = project;
   const past = pastContracts();
@@ -25,8 +25,8 @@ export default function Play({ project, onPlay }) {
   // The running forecast's range and chance, carried from week to week; the week-1 commitment is what is scored.
   const [range, setRange] = useState({ low: lastLog?.low ?? p.forecast.low, high: lastLog?.high ?? p.forecast.high, chance: lastLog?.chance ?? p.forecast.onTimeChance });
   // The decisions tab opens each week; tool tabs sit beside it. Switching tabs keeps every choice above.
-  const [deskTab, setDeskTab] = useState('decide');
-  const [seenTabs, setSeenTabs] = useState([]);
+  const [deskTab, setDeskTab] = useState(initialTab);
+  const [seenTabs, setSeenTabs] = useState(initialSeen);
   // For "How you played": did the student move the running forecast this week, and how long did the week take.
   const [touched, setTouched] = useState(false);
   const [useNote, setUseNote] = useState(null); // the failures behind numbers taken from the record
@@ -35,6 +35,9 @@ export default function Play({ project, onPlay }) {
   const moveRange = (f) => { setRange((r) => (typeof f === 'function' ? f(r) : f)); setTouched(true); };
 
   const nextWeek = p.week + 1;
+  const limit = viewLimit(nextWeek, c);
+  // In round 1 the AI prompt holds every tab opened so far, the briefing's included.
+  const promptTabs = nextWeek === 1 ? [...new Set([...(p.desk?.order || []), ...seenTabs])] : seenTabs;
   // A forecast earlier than the week about to be played is no longer possible.
   const shownForecast = Math.max(forecast, nextWeek);
   const cost = p.weekCost({ hire, shift });
@@ -54,8 +57,9 @@ export default function Play({ project, onPlay }) {
     setDeskTab('decide');
   };
   const openTab = (id) => {
-    // At most viewsPerWeek tool tabs a week; tabs already viewed this week stay open.
-    if (isCheck(id) && !seenTabs.includes(id) && seenTabs.filter(isCheck).length >= c.viewsPerWeek) return;
+    // Unlimited in week 1 (round 1), then viewsPerWeek tool tabs a week; tabs already viewed this week stay open,
+    // and This Week's Decisions, The Contract and Ask an AI never count.
+    if (!canOpen(id, seenTabs, limit)) return;
     setDeskTab(id);
     if (id !== 'decide' && !seenTabs.includes(id)) { setSeenTabs((t) => [...t, id]); p.noteDesk(nextWeek, id); }
     window.scrollTo(0, 0);
@@ -81,12 +85,12 @@ export default function Play({ project, onPlay }) {
       </header>
 
       <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} front={DECIDE} tabs={TABS.slice(1)}
-        checks={{ left: Math.max(0, c.viewsPerWeek - seenTabs.filter(isCheck).length), limit: c.viewsPerWeek, when: 'this week', counts: isCheck }} />
+        checks={{ left: Math.max(0, limit - seenTabs.filter(isCheck).length), limit, when: 'this week', counts: isCheck }} />
 
       {deskTab !== 'decide' ? (
         <>
           <DeskTab id={deskTab} S={S} plan={p.plan || { crews: 0, inspect: 0, shift: 'none' }} planReady={!!p.plan} onUse={useTool} live={live}
-            onCopyPrompt={() => p.noteDesk(nextWeek, 'ai-copy')} opened={seenTabs} />
+            onCopyPrompt={() => p.noteDesk(nextWeek, 'ai-copy')} opened={promptTabs} />
           <button type="button" onClick={() => openTab('decide')} className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
             Back to This Week's Decisions
           </button>
