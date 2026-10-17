@@ -2,7 +2,7 @@
 // only by desk.js, which sees only what the briefing shows.
 import { useState } from 'react';
 import {
-  statusReport, sprintBurndown, budgetTracker, schedule, lessonsLearned, teamChat, expertPanel, predictionMarket, aiAssistant,
+  statusReport, sprintBurndown, costManagement, schedule, lessonsLearned, teamChat, expertPanel, predictionMarket, aiAssistant,
   industryBenchmark, scenarios, riskRegister, analytics, riskSimulator, consensus, FORECASTERS, FORECASTER_NAMES, tabById,
 } from './desk.js';
 import { pastContracts, describePlan } from './engine';
@@ -142,30 +142,45 @@ function BurndownTab({ S, onUse }) {
   );
 }
 
-function BudgetTab({ S, plan, planNote }) {
-  const b = budgetTracker(S, plan);
-  const max = Math.max(b.budget, b.total);
+function CostTab({ S, plan, onUse, planNote }) {
+  const c = costManagement(S, plan);
+  const R = S.rules;
+  const end = R.horizon, h = 180;
+  const top = Math.max(c.limit, c.burn[c.burn.length - 1].spent) * 1.05;
+  const x = (w) => 44 + (w / end) * (W - 56), y = (v) => 12 + (1 - v / top) * (h - 36);
+  const m = (v) => `$${(v / 1e6).toFixed(1)}M`;
   return (
-    <Frame id="budget" kind="on-track tracker" planNote={planNote}>
-      <div className="text-center py-2">
-        <div className={`text-3xl font-bold ${b.onTrack ? 'text-sky-300' : 'text-rose-300'}`}>{b.onTrack ? "You're on track" : "You're off track"}</div>
-        <div className="text-sm text-slate-300 mt-1">{money(b.total)} planned of {money(b.budget)} · {money(b.budget - b.total)} {b.onTrack ? 'to spare' : 'over'}</div>
+    <Frame id="cost" kind="project cost control" f={c.forecast} onUse={onUse} planNote={planNote}>
+      <div className="grid grid-cols-4 gap-2">
+        <Tile label="Budget (BAC)" value={m(c.cost.bac)} />
+        <Tile label="Est. at completion" value={m(c.cost.eac)} sub="EAC" tone="text-sky-300" />
+        <Tile label="CPI" value={c.cost.cpi} sub="BAC ÷ EAC" tone="text-sky-300" />
+        <Tile label="Cash runway" value={`${c.runwayWeeks} wk`} sub={`at ${money(c.perWeek)}/wk`} tone="text-sky-300" />
       </div>
-      <div className="h-4 bg-slate-950 rounded-full overflow-hidden mt-2">
-        <div className="h-full bg-sky-500" style={{ width: `${(100 * b.total) / max}%` }} />
-      </div>
-      <ul className="mt-3 space-y-2">
-        {b.lines.map((l) => (
-          <li key={l.label} className="text-sm">
-            <div className="flex justify-between text-slate-300"><span>{l.label}</span><span className="font-mono">{money(l.amount)}</span></div>
-            <div className="h-1.5 bg-slate-950 rounded-full overflow-hidden mt-1"><div className="h-full bg-sky-400/70" style={{ width: `${(100 * l.amount) / max}%` }} /></div>
-          </li>
-        ))}
-      </ul>
-      <p className="text-[11px] text-slate-500 mt-3">
-        Spending {money(b.perWeek)} a week for {b.weeks} weeks (the Schedule's length for your plan). Small print: "on track" is about money.
-        It says nothing about when the customer accepts the contract.
+      <p className="text-sm text-slate-300 mt-3">
+        Spend to date: <span className="font-mono">$0</span> of {money(c.budget)}, plus a {money(c.creditLine)} credit line.
+        Your plan costs {money(c.cost.eac)} if it finishes when the Schedule says (week {c.forecast.week}):{' '}
+        <strong className={c.onBudget ? 'text-sky-300' : 'text-rose-300'}>{c.onBudget ? `${money(c.cost.vac)} under budget` : `${money(-c.cost.vac)} over budget`}</strong>.
       </p>
+      <svg viewBox={`0 0 ${W} ${h}`} width="100%" className="mt-3" role="img" aria-label="Cumulative spend against the budget and the bankruptcy line">
+        <line x1={x(0)} x2={x(end)} y1={y(c.budget)} y2={y(c.budget)} stroke="#64748b" strokeDasharray="3 3" />
+        <text x={x(0) + 4} y={y(c.budget) - 4} {...svgText}>budget {m(c.budget)}</text>
+        <line x1={x(0)} x2={x(end)} y1={y(c.limit)} y2={y(c.limit)} stroke="#fb7185" strokeWidth="1.5" />
+        <text x={x(end) - 4} y={y(c.limit) - 4} textAnchor="end" fontSize="11" fill="#fda4af">bankruptcy: budget + credit line</text>
+        <line x1={x(R.deadline)} x2={x(R.deadline)} y1={8} y2={h - 22} stroke="#fb7185" strokeDasharray="4 3" />
+        <polyline points={[[0, 0], ...c.burn.map((b) => [b.week, b.spent])].map(([w, v]) => `${x(w)},${y(v)}`).join(' ')} fill="none" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="5 4" />
+        <polyline points={[[0, 0], ...c.burn.slice(0, c.forecast.week).map((b) => [b.week, b.spent])].map(([w, v]) => `${x(w)},${y(v)}`).join(' ')} fill="none" stroke="#38bdf8" strokeWidth="3" />
+        {c.brokeWeek && <circle cx={x(c.brokeWeek)} cy={y(c.limit)} r="5" fill="#fb7185" />}
+        {[0, 4, 8, 12, 16, 20].map((w) => <text key={w} x={x(w)} y={h - 6} textAnchor="middle" {...svgText}>{w}</text>)}
+      </svg>
+      <p className="text-[11px] text-slate-500">
+        Solid: planned spend to the Schedule's finish. Dashed: the same burn if the work runs on.
+        {c.brokeWeek ? ` At this burn rate the money runs out in week ${c.brokeWeek}: past the credit line the company can't make payroll and goes bankrupt.` : ` At this burn rate the money lasts past week ${R.horizon}.`}
+      </p>
+      <ul className="mt-2 space-y-1 text-xs text-slate-300">
+        {c.lines.map((l) => <li key={l.label} className="flex justify-between"><span>{l.label}</span><span className="font-mono">{money(l.amount)}</span></li>)}
+      </ul>
+      <p className="text-[11px] text-slate-500 mt-2">The schedule forecast below is the one this spend plan assumes, the Schedule's. Cost control sees money, not defects.</p>
     </Frame>
   );
 }
@@ -525,7 +540,7 @@ export default function DeskTab({ id, S, plan, planReady, onUse }) {
   switch (id) {
     case 'status': return <StatusTab {...props} />;
     case 'burndown': return <BurndownTab {...props} />;
-    case 'budget': return <BudgetTab {...props} />;
+    case 'cost': return <CostTab {...props} />;
     case 'schedule': return <ScheduleTab {...props} />;
     case 'lessons': return <LessonsTab {...props} />;
     case 'chat': return <ChatTab {...props} />;

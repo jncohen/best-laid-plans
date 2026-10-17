@@ -121,7 +121,7 @@ export default function Records({ past, plan = null, onUse = null }) {
                 <td className="px-2 py-1.5">wk {r.scopeWeek}, +{r.scopeUnits}</td>
                 <td className="px-2 py-1.5 text-sky-300">wk {r.dashboardFullWeek}</td>
                 <td className={`px-2 py-1.5 ${r.rejected ? 'text-rose-300' : 'text-slate-500'}`}>{r.rejected}</td>
-                <td className="px-2 py-1.5 text-amber-300 font-bold">wk {r.accepted}</td>
+                <td className="px-2 py-1.5 text-amber-300 font-bold">{r.bankrupt ? <span className="text-rose-300">Bankrupt, wk {r.endedWeek}</span> : r.delivered === false ? `Terminated, wk ${r.endedWeek}` : `wk ${r.accepted}`}</td>
                 <td className="px-2 py-1.5">{r.onTime ? 'yes' : 'no'}</td>
               </tr>
             ))}

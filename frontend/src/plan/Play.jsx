@@ -66,7 +66,7 @@ export default function Play({ project, onPlay }) {
         <div className="grid grid-cols-4 gap-3 mt-4">
           <Stat label="Units left" value={Math.round(p.backlog)} sub={`of ${p.totalScope}`} />
           <Stat label="Crews" value={p.crews} sub={p.onboarding > 0 ? 'onboarding' : ''} />
-          <Stat label="Budget left" value={money(p.budget)} tone={p.budget < 0 ? 'text-rose-400' : 'text-emerald-300'} />
+          <Stat label="Budget left" value={money(p.budget)} sub={p.budget < 0 ? `credit left ${money(c.creditLine + p.budget)}` : `+ ${money(c.creditLine)} credit`} tone={p.budget < 0 ? 'text-rose-400' : 'text-emerald-300'} />
           <Stat label="Defects found" value={last ? Math.round(last.found + last.rejected) : 0} sub="last week" tone={last && last.rejected > 0 ? 'text-rose-400' : 'text-white'} />
         </div>
         {p.history.length > 0 && (
@@ -121,6 +121,9 @@ export default function Play({ project, onPlay }) {
             </div>
           </div>
 
+          {p.budget - cost < -c.creditLine && (
+            <p className="text-xs text-rose-300">This week would take you past the {money(c.creditLine)} credit line. The company couldn't make payroll: it would go bankrupt and the contract would end.</p>
+          )}
           <button type="button" onClick={run}
             className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">
             Run week {nextWeek} · {money(cost)}

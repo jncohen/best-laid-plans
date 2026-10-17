@@ -1,9 +1,9 @@
 // Tests for the game engine (frontend/src/plan/engine.js).
-import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean, parseResultCode, playPolicy, matchContracts, planFromProject, summarizeContracts,
+import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean, playPolicy, matchContracts, planFromProject, summarizeContracts,
   encodePlan, decodePlan, normalizePlan, playedPlan, judgeForecast } from '../frontend/src/plan/engine.js';
 import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/plan/table.js';
-import { encodeDesk, decodeDesk, pastManagers, playManager } from '../frontend/src/plan/engine.js';
-import { screenData, allForecasts, statusReport, schedule, lessonsLearned, records, analytics, riskSimulator, scenarios, consensus, aiAssistant, teamChat, budgetTracker, TABS } from '../frontend/src/plan/desk.js';
+import { pastManagers, playManager, recordWeek } from '../frontend/src/plan/engine.js';
+import { screenData, allForecasts, statusReport, schedule, lessonsLearned, records, analytics, riskSimulator, scenarios, consensus, aiAssistant, teamChat, costManagement, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -87,7 +87,8 @@ console.log('The numbers the lecture quotes');
   t('seed ledger: scope change in week 4, +15 units', ledger.shockWeek === 4 && ledger.shockSize === 15);
   t('seed compass: scope change in week 6, +19 units', compass.shockWeek === 6 && compass.shockSize === 19);
   const past = pastContracts();
-  t('all 40 past contracts: median 14', past.median === 14);
+  // PROVISIONAL (seed 476): the bankrupt contract counts as never delivered, so the median is 15, not the lecture's 14. Joe is choosing between this and seed 659 (median 14).
+  t('all 40 past contracts: median 15 (seed 476, bankrupt counted as never delivered)', past.median === 15);
   t('all 40 past contracts: 10-90 range 12-17', past.p10 === 12 && past.p90 === 17);
   // 5 on time since the record became 40 seeded managers (decision-desk, Joe, Oct 17); 6 under the fixed recipes.
   t('all 40 past contracts: 5 on time', past.contracts.filter((r) => r.onTime).length === 5);
@@ -103,7 +104,7 @@ console.log('The past contracts are a table');
   t('crews added match the hire log', rows.every((r) => r.hires.reduce((a, h) => a + h.crews, 0) === r.crewsAdded));
   t('dashboard reads 100% no later than acceptance', rows.every((r) => r.dashboardFullWeek <= r.accepted));
   t('on time means accepted by the deadline', rows.every((r) => r.onTime === (r.delivered && r.accepted <= CONFIG.deadline)));
-  t('weeks list matches the table', past.weeks.every((w, i) => w === rows[i].accepted));
+  t('weeks list matches the table', past.weeks.every((w, i) => w === recordWeek(rows[i])));
   const again = pastContracts({ ...CONFIG });
   t('the record is rebuilt identically (deterministic)', JSON.stringify(again.contracts) === JSON.stringify(rows));
   for (let i = 0; i < 5; i++) { const p = new Project(`other-${i}`); playPolicy(p, { hire: 1 }); }
@@ -132,16 +133,11 @@ console.log('Matching past contracts to a plan');
   t('hands-off play reads back as hands-off', flat.crews === 0 && flat.inspect === 0 && flat.shift === false);
 }
 
-console.log('Scores and result codes');
+console.log('Scores');
 {
   const p = runPolicy('score', { hire: 3, inspect: 0.1 });
   const s = p.scores();
   t('scores are within 0-100', s.delivery >= 0 && s.delivery <= 100 && s.forecast >= 0 && s.forecast <= 100);
-  const code = p.resultCode("O'Brien, J.!");
-  const r = parseResultCode(code);
-  t('a result code round-trips', r && r.seed === p.seed && r.week === 11 && r.low === 10 && r.high === 13 && r.onTimeChance === 60 && r.outcome === s.outcome);
-  t('the name in a code is sanitised', r && !r.name.includes('|') && !r.name.includes(','));
-  t('junk is not a result code', parseResultCode('hello') === null && parseResultCode('BLP1|x|y') === null);
   const term = new Project('term');
   term.commit({ week: 12, low: 11, high: 13, onTimeChance: 50 });
   while (!term.done) term.play({ hire: -3, inspect: 0.3 });
@@ -187,29 +183,11 @@ console.log('Fairness invariants');
     && past.contracts.some((r) => r.hires.some((h) => h.week >= 4)));
 }
 
-console.log('Plans in result codes');
+console.log('Plans');
 {
   for (const plan of [{ crews: 0, inspect: 0, shift: 'none' }, { crews: 3, inspect: 0.1, shift: 'none' }, { crews: 2, inspect: 0.3, shift: 'every' }, { crews: 1, inspect: 0.2, shift: 'late' }]) {
     t(`plan ${encodePlan(plan)} encodes and decodes`, JSON.stringify(decodePlan(encodePlan(plan))) === JSON.stringify(normalizePlan(plan)));
   }
-  const kept = new Project('code-kept');
-  kept.commit({ week: 13, low: 11, high: 14, onTimeChance: 45, plan: { crews: 3, inspect: 0.1, shift: 'none' } });
-  playPolicy(kept, { hire: 3, inspect: 0.1 });
-  const ck = kept.resultCode('Alex');
-  const rk = parseResultCode(ck);
-  t('a kept plan adds three characters to the code', ck.split('|')[10] === '31n');
-  t('a BLP3 code round-trips the plan', rk && rk.version === 3 && JSON.stringify(rk.plan) === JSON.stringify(kept.plan) && JSON.stringify(rk.played) === JSON.stringify(playedPlan(kept)) && rk.name === 'Alex');
-  const changed = new Project('code-changed');
-  changed.commit({ week: 11, low: 10, high: 12, onTimeChance: 75, plan: { crews: 0, inspect: 0, shift: 'none' } });
-  playPolicy(changed, { hire: 3, inspect: 0.1 });
-  const rc = parseResultCode(changed.resultCode('B'));
-  t('a changed plan carries both plans', changed.resultCode('B').split('|')[10] === '00n31n' && rc.plan.crews === 0 && rc.played.crews === 3);
-  t('every field of a BLP3 code round-trips', rc.week === 11 && rc.low === 10 && rc.high === 12 && rc.onTimeChance === 75 && rc.outcome === changed.scores().outcome && rc.seed === changed.seed);
-  const old = parseResultCode('BLP1|1u65p58|11|10|12|75|12|D|10|4500|Alex');
-  t('old BLP1 codes still parse, with no plan', old && old.version === 1 && old.week === 11 && old.outcome === 12 && old.name === 'Alex' && old.plan === null);
-  t('old BLP1 codes with no name still parse', parseResultCode('BLP1|1u65p58|11|10|12|75|12|D|10|4500')?.name === '');
-  t('a BLP2 code with a garbled plan still parses, without the plan', parseResultCode('BLP2|1u65p58|11|10|12|75|12|D|10|4500|9xq|A')?.plan === null);
-  t('codes read aloud may come back in lower case', parseResultCode('blp2|1u65p58|11|10|12|75|12|d|10|4500|31N|a')?.plan?.crews === 3);
 }
 
 console.log('The table summarises what matchContracts finds');
@@ -268,7 +246,7 @@ console.log('The Decision Desk sees only the screen');
   const code = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
   t('desk.js never builds a Project or reads a scenario code', !/\bProject\b|seedFromString|playPolicy|shockWeek|shockSize|productivity|defectProne|_noise|hidden/.test(code));
   const imports = [...code.matchAll(/import\s*\{([^}]*)\}\s*from\s*'\.\/engine\.js'/g)].flatMap((m) => m[1].split(',').map((x) => x.trim()));
-  t('desk.js takes from the engine only the record, the last contract and the stated rules', imports.every((x) => ['CONFIG', 'lastContract', 'pastContracts', 'matchContracts', 'summarizeContracts', 'normalizePlan'].includes(x)));
+  t('desk.js takes from the engine only the record, the last contract and the stated rules', imports.every((x) => ['CONFIG', 'lastContract', 'pastContracts', 'matchContracts', 'summarizeContracts', 'normalizePlan', 'recordWeek'].includes(x)));
   const S = screenData();
   t('the screen holds only what the briefing shows', JSON.stringify(Object.keys(S)) === JSON.stringify(['history', 'last', 'contracts', 'rules'])
     && !('baseDefectRate' in S.rules) && !('shockWeeks' in S.rules) && !('productivityRange' in S.rules) && !('defectProneRange' in S.rules));
@@ -281,7 +259,9 @@ console.log('The Decision Desk sees only the screen');
   t('the AI Assistant shows its context and says what it is based on', aiAssistant(S, COMMON_PLANS[4]).context.length === 2 && /Status Report/.test(aiAssistant(S, COMMON_PLANS[4]).basis));
   t('every Team Chat colleague names the desk frame they reason from', teamChat(S, COMMON_PLANS[0]).every((c) => c.frame && c.reasoning && c.forecast));
   t('the most confident colleague is the Status Report\'s', teamChat(S, COMMON_PLANS[0]).sort((a, b) => b.confidence - a.confidence)[0].frame === 'Status Report');
-  t('Budget Tracker produces no schedule forecast', budgetTracker(S, COMMON_PLANS[4]).forecast === null);
+  t('Cost Management implies the Schedule\'s finish, and shows the credit line', JSON.stringify(costManagement(S, COMMON_PLANS[4]).forecast) === JSON.stringify(schedule(S, COMMON_PLANS[4]).forecast)
+    && costManagement(S, COMMON_PLANS[4]).limit === CONFIG.budget + CONFIG.creditLine);
+  t('Cost Management: +2 crews with a shift every week runs out of money in week 13', costManagement(S, { crews: 2, inspect: 0, shift: 'every' }).brokeWeek === 13);
   t('every tab has a one-line sees and can\'t-see, except the front tab', TABS.slice(1).every((x) => x.sees && x.cant) && TABS.length === 19);
   t('tab letters are unique', new Set(TABS.map((x) => x.letter).filter(Boolean)).size === 18);
 }
@@ -296,26 +276,42 @@ console.log('Desk numbers on ledger (work order, Oct 17)');
   t('Lessons Learned: 17 (16-18) 10', f(lessonsLearned(S).forecast) === '17 (16-18) 10');
   // On the seeded-manager record (Oct 17 lists had 17 (15-20) 0 / 13 (11-14) 43 and 17 (15-19) 0 / 13 (11-14) 45).
   t('Records like my plan: hands-off 17 (15-19) 0, +3/10% 14 (12-15) 30', f(records(S, HO).matched) === '17 (15-19) 0' && f(records(S, C3I).matched) === '14 (12-15) 30');
-  t('Analytics: hands-off 17 (15-19) 0, +3/10% 13 (11-15) 39', f(analytics(S, HO).forecast) === '17 (15-19) 0' && f(analytics(S, C3I).forecast) === '13 (11-15) 39');
+  t('Analytics: hands-off 17 (14-20) 3, +3/10% 13 (10-16) 36', f(analytics(S, HO).forecast) === '17 (14-20) 3' && f(analytics(S, C3I).forecast) === '13 (10-16) 36');
   t('Risk Simulator: hands-off 12 (11-12) 93, +3/10% 9 (9-10) 100', f(riskSimulator(S, HO).forecast) === '12 (11-12) 93' && f(riskSimulator(S, C3I).forecast) === '9 (9-10) 100');
   t('Scenarios: hands-off 11/12/15/17, +3/10% 9/9/10/12', scenarios(S, HO).rows.map((r) => r.week).join('/') === '11/12/15/17' && scenarios(S, C3I).rows.map((r) => r.week).join('/') === '9/9/10/12');
-  t('Consensus of five, +3/10%: 12 (10-13)', f(consensus(S, C3I, ['records-all', 'records-plan', 'analytics', 'simulator', 'schedule']).forecast).startsWith('12 (10-13)'));
+  t('Consensus of five, +3/10%: 12 (10-14)', f(consensus(S, C3I, ['records-all', 'records-plan', 'analytics', 'simulator', 'schedule']).forecast).startsWith('12 (10-14)'));
 }
 
-console.log('Desk usage in result codes');
+console.log('Desk usage, recorded on the project');
 {
   const p = new Project('desk-code');
   p.commit({ week: 13, low: 11, high: 14, onTimeChance: 45, plan: { crews: 3, inspect: 0.1, shift: 'none' }, desk: { tool: 'o', tabs: 7, minutes: 6.4, edited: true, order: ['status', 'analytics'] } });
   playPolicy(p, { hire: 3, inspect: 0.1 });
-  const code = p.resultCode('Alex');
-  const r = parseResultCode(code);
-  t('the desk field is short ("o7m6e")', code.split('|')[11] === 'o7m6e');
-  t('the desk round-trips', r.desk && r.desk.tool === 'o' && r.desk.tabs === 7 && r.desk.minutes === 6 && r.desk.edited === true && r.name === 'Alex');
-  t('no tool and no edits encode as "x0m2"', encodeDesk({ tool: '', tabs: 0, minutes: 2, edited: false }) === 'x0m2' && decodeDesk('x0m2').tool === '');
-  t('the tab order stays on the project, not in the code', p.desk.order.length === 2 && !code.includes('status'));
-  t('BLP2 codes still parse, with a plan and no desk', (() => { const o = parseResultCode('BLP2|1u65p58|13|11|14|45|12|D|10|4500|31n|Alex'); return o && o.version === 2 && o.plan.crews === 3 && o.desk === null && o.name === 'Alex'; })());
+  t('the desk use is recorded: tool, tabs, whole minutes, edited, tab order', p.desk.tool === 'o' && p.desk.tabs === 7 && p.desk.minutes === 6 && p.desk.edited && p.desk.order.join() === 'status,analytics');
   const same = new Project('desk-code'); same.commit({ week: 13, low: 11, high: 14, onTimeChance: 45 }); playPolicy(same, { hire: 3, inspect: 0.1 });
   t('what the desk recorded never changes an outcome', JSON.stringify(same.history) === JSON.stringify(p.history));
+}
+
+console.log('Bankruptcy past the credit line');
+{
+  const p = new Project('ledger');
+  p.commit({ week: 12, low: 11, high: 13, onTimeChance: 50 });
+  playPolicy(p, { hire: 2, shiftFrom: 1 });
+  const s = p.scores();
+  t('+2 crews with a shift every week goes bankrupt on ledger, and scores 0 on delivery', p.result === 'BANKRUPT' && s.delivery === 0 && p.history.at(-1).events[0].includes('bankrupt'));
+  t('the forecast is scored on the projected week, as for termination', s.outcome === p.outcomeWeek() && s.outcome > p.week);
+  let neverPast = true, onlyWhenPast = true;
+  for (let i = 0; i < 300; i++) {
+    const q = new Project(`bk-${i}`);
+    playPolicy(q, { hire: i % 4, inspect: [0, 0.1, 0.2, 0.3][i % 4], shiftFrom: i % 3 ? 99 : 1 });
+    if (q.history.some((h) => h.budget < -CONFIG.creditLine)) neverPast = false;
+    if (q.result === 'BANKRUPT' && q.budget - q.weekCost({ shift: q.week >= (i % 3 ? 99 : 1) }) >= -CONFIG.creditLine) onlyWhenPast = false;
+  }
+  t('the budget never goes below the credit line', neverPast);
+  t('bankruptcy comes only when the next payroll would pass the credit line', onlyWhenPast);
+  const best = playPolicy(new Project('ledger'), { hire: 3, inspect: 0.1 });
+  t('the best plan on ledger never goes broke ($4.5M, week 12)', best.result === 'DELIVERED' && best.spent === 4_500_000 && best.outcomeWeek() === 12);
+  t('the credit line is a stated rule the desk can see', screenData().rules.creditLine === CONFIG.creditLine);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

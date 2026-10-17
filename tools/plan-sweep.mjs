@@ -22,6 +22,8 @@
  *   9-11. The Decision Desk (frontend/src/plan/desk.js): record-based tools hold
  *      >= 80%, inside-view tools <= 10%, and the AI Assistant exactly as often as
  *      the Status Report it is given. Every tool, colleague included, is reported.
+ *   12. Bankruptcy (past the credit line) never hits a plan that wins: no strategy
+ *      on time >= 40% of the time goes bankrupt in more than 5% of runs.
  */
 import { Project, CONFIG, COMMON_PLANS, pastContracts, historyMean, lastContract, matchContracts, planFromProject } from '../frontend/src/plan/engine.js';
 import { screenData, allForecasts } from '../frontend/src/plan/desk.js';
@@ -106,7 +108,7 @@ console.log(`${'Other'.padEnd(28)}${String(others.length).padStart(3)}\n`);
 console.log('Dash, All40, Match: share of runs whose outcome falls inside that forecast\'s range.');
 console.log('DashLate: share of runs whose outcome is later than the dashboard projection.');
 const hdr = 'Strategy'.padEnd(34) + 'Deliv'.padStart(6) + 'sd'.padStart(5) + 'OnTime'.padStart(7) + 'Med'.padStart(5) + 'p10-90'.padStart(8)
-  + 'Dash'.padStart(6) + 'DashLate'.padStart(9) + 'All40'.padStart(6) + 'Match'.padStart(6) + '90→done'.padStart(8) + 'Spent$M'.padStart(8) + 'Term'.padStart(6);
+  + 'Dash'.padStart(6) + 'DashLate'.padStart(9) + 'All40'.padStart(6) + 'Match'.padStart(6) + '90→done'.padStart(8) + 'Spent$M'.padStart(8) + 'Term'.padStart(6) + 'Broke'.padStart(6);
 console.log(hdr); console.log('-'.repeat(hdr.length));
 const rows = {};
 for (const [name, s] of Object.entries(S)) {
@@ -128,13 +130,14 @@ for (const [name, s] of Object.entries(S)) {
     ninety: mean(ps.map((p) => (p.ninetyWeek() ? p.outcomeWeek() - p.ninetyWeek() : 0))),
     spent: mean(ps.map((p) => p.spent)) / 1e6,
     term: mean(ps.map((p) => (p.result === 'TERMINATED' ? 1 : 0))),
+    broke: mean(ps.map((p) => (p.result === 'BANKRUPT' ? 1 : 0))),
     plan: s.plan,
   };
   rows[name] = r;
   console.log(name.padEnd(34) + r.deliv.toFixed(1).padStart(6) + r.sd.toFixed(1).padStart(5) + pct(r.onTime).padStart(7)
-    + String(r.med).padStart(5) + rng(r.p10, r.p90).padStart(8) + pct(r.ivHold).padStart(6) + pct(r.dashLate).padStart(9)
+    + String(Math.round(r.med)).padStart(5) + rng(Math.round(r.p10), Math.round(r.p90)).padStart(8) + pct(r.ivHold).padStart(6) + pct(r.dashLate).padStart(9)
     + pct(r.ovHit).padStart(6) + pct(r.matchHit).padStart(6)
-    + r.ninety.toFixed(1).padStart(8) + r.spent.toFixed(2).padStart(8) + pct(r.term).padStart(6));
+    + r.ninety.toFixed(1).padStart(8) + r.spent.toFixed(2).padStart(8) + pct(r.term).padStart(6) + pct(r.broke).padStart(6));
 }
 
 const vals = Object.values(rows);
@@ -181,11 +184,14 @@ for (const [name, h] of Object.entries(deskHold)) {
 }
 const RECORD_TOOLS = ['Records, all 40', 'Records, like my plan', 'Analytics'];
 const INSIDE_TOOLS = ['Status Report', 'Sprint Burndown', 'Schedule', 'Risk Simulator'];
+const winners = vals.filter((r) => r.onTime >= 0.4);
 checks.push(
   ['9. Desk: record-based tools hold >= 80%', RECORD_TOOLS.every((k) => deskMean[k] >= 0.8), RECORD_TOOLS.map((k) => `${k} ${pct(deskMean[k])}`).join('  ')],
   ['10. Desk: inside-view tools hold <= 10%', INSIDE_TOOLS.every((k) => deskMean[k] <= 0.1), INSIDE_TOOLS.map((k) => `${k} ${pct(deskMean[k])}`).join('  ')],
   ['11. Desk: the AI Assistant holds exactly as often as the Status Report', JSON.stringify(deskHold['AI Assistant']) === JSON.stringify(deskHold['Status Report']),
     `AI ${pct(deskMean['AI Assistant'])}, Status Report ${pct(deskMean['Status Report'])}`],
+  ['12. No plan on time >= 40% goes bankrupt more than 5% of the time', winners.every((r) => r.broke <= 0.05),
+    Object.entries(rows).filter(([, r]) => r.onTime >= 0.4).map(([k, r]) => `${k.trim()} ${pct(r.broke)}`).join('  ') + ` · most: ${Object.entries(rows).sort((a, b) => b[1].broke - a[1].broke)[0][0].trim()} ${pct(Math.max(...vals.map((r) => r.broke)))}`],
 );
 
 console.log('\n=== TARGETS ===');

@@ -21,16 +21,14 @@ const planFromUrl = () => decodePlan(param('plan'));
 export default function PlanApp() {
   const [phase, setPhase] = useState('brief'); // brief | play | stop | reveal
   const [project, setProject] = useState(null);
-  const [name, setName] = useState('');
   const [, setTick] = useState(0);
   const [lastSeed, setLastSeed] = useState(seedFromUrl);
   const [first, setFirst] = useState(true);
 
-  const commit = (forecast, seed, who) => {
+  const commit = (forecast, seed) => {
     const p = new Project(seed || null);
     p.commit(forecast);
     setProject(p);
-    setName(who);
     setLastSeed(seed);
     setFirst(false);
     setPhase('play');
@@ -63,5 +61,5 @@ export default function PlanApp() {
       </div>
     );
   }
-  return <Reveal project={project} name={name} onReplay={() => { setPhase('brief'); setProject(null); }} />;
+  return <Reveal project={project} onReplay={() => { setPhase('brief'); setProject(null); }} />;
 }

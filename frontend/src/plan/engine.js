@@ -20,6 +20,7 @@ export const CONFIG = {
   horizon: 22,               // the customer terminates the contract after this week
   crews: 4,
   budget: 5_000_000,
+  creditLine: 500_000,       // overspend allowed on credit; past it, payroll fails and the company goes bankrupt
 
   // Production
   unitsPerCrew: 4.6,         // units BUILT per crew-week; what the dashboard counts
@@ -131,7 +132,7 @@ export class Project {
     this.backlog = cfg.scope;  // known work left to build, including known rework
     this.hidden = 0;           // built, counted complete, actually defective — not shown
     this.done = false;
-    this.result = 'PLAYING';   // PLAYING | DELIVERED | TERMINATED
+    this.result = 'PLAYING';   // PLAYING | DELIVERED | TERMINATED | BANKRUPT
     this.finishWeek = null;
     this.forecast = null;      // committed before week 1
     this.plan = null;          // the plan stated before week 1
@@ -191,6 +192,20 @@ export class Project {
     // Staffing
     hire = Math.max(-(this.crews - 1), Math.min(c.maxHirePerWeek, Math.round(hire), c.maxCrews - this.crews));
     const cost = this.weekCost({ hire, shift });
+    if (this.budget - cost < -c.creditLine) {
+      // The week's payroll would go past the credit line. Nothing is built; the contract ends.
+      this.done = true;
+      this.result = 'BANKRUPT';
+      const row = {
+        week: this.week, crews: this.crews, shift: false, inspect: 0, built: 0, found: 0, rejected: 0, shock: 0, cost: 0,
+        budget: this.budget, backlog: +this.backlog.toFixed(1), reported: +this.reportedPct().toFixed(4), true: +this.truePct().toFixed(4), defectRate: 0,
+        bankrupt: true,
+        events: [`Week ${this.week}'s payroll (${Math.round(cost / 1000)}k) would take the company past its ${Math.round(c.creditLine / 1000)}k credit line. It can't pay its crews: the company is bankrupt and the contract ends.`],
+      };
+      if (forecast !== null && forecast !== undefined && Number.isFinite(+forecast)) this.forecastLog.push({ week: this.week, forecast: +forecast });
+      this.history.push(row);
+      return row;
+    }
     if (hire > 0) {
       this.crews += hire;
       this.onboarding = c.onboardingWeeks;
@@ -304,7 +319,7 @@ export class Project {
     const outcome = this.outcomeWeek();
     const late = Math.max(0, outcome - c.deadline);
     const over = Math.max(0, this.spent - c.budget);
-    const delivery = this.result === 'TERMINATED'
+    const delivery = this.result === 'TERMINATED' || this.result === 'BANKRUPT'
       ? 0
       : Math.max(0, Math.round(100 - late * c.latePenaltyPerWeek - (over / 50_000) * c.overspendPenaltyPer50k));
 
@@ -319,76 +334,15 @@ export class Project {
     return { delivery, forecast: forecastScore, outcome, held, missBy, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
   }
 
-  /**
-   * Compact code a student reads out or pastes for the Room page.
-   *   BLP3|seed|week|low|high|chance|outcome|D/T|ninety|spentK|plan|desk|name
-   * `plan` is the stated plan in three characters (crews added, inspection in tens of
-   * percent, shift n/l/e: "31n" is +3 crews, 10%, no shift), followed by the plan
-   * actually played only if that differs: "01n31n". `desk` is how the briefing's tabs
-   * were used (see encodeDesk): "o7m6e".
-   */
-  resultCode(name = '') {
-    const f = this.forecast || {};
-    const s = this.scores();
-    const stated = this.plan ? encodePlan(this.plan) : '';
-    const played = encodePlan(playedPlan(this));
-    const fields = [
-      'BLP3',
-      this.seed.toString(36),
-      f.week, f.low, f.high, f.onTimeChance,
-      s.outcome,
-      this.result === 'DELIVERED' ? 'D' : 'T',
-      this.ninetyWeek() ?? '',
-      Math.round(this.spent / 1000),
-      stated === played ? stated : stated + played,
-      this.desk ? encodeDesk(this.desk) : '',
-      String(name).replace(/[^A-Za-z0-9 .'-]/g, '').slice(0, 24),
-    ];
-    return fields.join('|');
-  }
-}
-
-/** Reads BLP3 codes and the older BLP2 (no desk) and BLP1 (no plan) codes. */
-export function parseResultCode(code) {
-  const parts = String(code).trim().split('|');
-  const version = { BLP1: 1, BLP2: 2, BLP3: 3 }[parts[0]?.toUpperCase()];
-  if (parts.length < 10 || !version) return null;
-  const [, seed36, week, low, high, conf, outcome, res, ninety, spentK] = parts;
-  const planField = version >= 2 ? (parts[10] ?? '').trim().toLowerCase() : '';
-  const name = parts[version === 1 ? 10 : version === 2 ? 11 : 12] ?? '';
-  const n = (x) => (x === '' ? null : Number(x));
-  const r = {
-    version,
-    seed: parseInt(seed36, 36), week: n(week), low: n(low), high: n(high), onTimeChance: n(conf),
-    outcome: n(outcome), delivered: res?.toUpperCase() === 'D', ninetyWeek: n(ninety), spentK: n(spentK), name,
-    plan: null, played: null, desk: version === 3 ? decodeDesk(parts[11] ?? '') : null,
-  };
-  if (![r.week, r.low, r.high, r.onTimeChance, r.outcome].every(Number.isFinite)) return null;
-  if (planField) {
-    const stated = decodePlan(planField.slice(0, 3));
-    const played = planField.length > 3 ? decodePlan(planField.slice(3, 6)) : stated;
-    if (stated && played) { r.plan = stated; r.played = played; }
-  }
-  return r;
 }
 
 // ── The Decision Desk, as recorded ───────────────────────────────────────────
 // What the student looked at before committing: the tool whose numbers they used (a
 // tab letter, or none), how many tool tabs they opened, minutes on the briefing, and
 // whether they changed the numbers they were given (the tool's, or the defaults).
-// The order the tabs were opened in stays on the device; it is too long to read aloud.
 export function normalizeDesk(d) {
   const tool = /^[a-z]$/.test(d.tool || '') ? d.tool : '';
   return { tool, tabs: Math.max(0, Math.min(99, Math.round(+d.tabs || 0))), minutes: Math.max(0, Math.min(99, Math.round(+d.minutes || 0))), edited: !!d.edited, order: Array.isArray(d.order) ? d.order.map(String) : [] };
-}
-
-/** "o7m6e": used tab o, opened 7 tabs, 6 minutes, edited. "x0m2": no tool, no tabs, 2 minutes, numbers as given. */
-export const encodeDesk = (d) => { const n = normalizeDesk(d); return `${n.tool || 'x'}${n.tabs}m${n.minutes}${n.edited ? 'e' : ''}`; };
-
-export function decodeDesk(s) {
-  const m = /^([a-z])(\d{1,2})m(\d{1,2})(e?)$/.exec(String(s).trim().toLowerCase());
-  if (!m) return null;
-  return { tool: m[1] === 'x' ? '' : m[1], tabs: +m[2], minutes: +m[3], edited: m[4] === 'e' };
 }
 
 // ── Plans ────────────────────────────────────────────────────────────────────
@@ -556,6 +510,8 @@ function contractRow(p, id) {
     rejected: Math.round(h.reduce((a, x) => a + x.rejected, 0)),
     accepted: outcome,
     delivered: p.result === 'DELIVERED',
+    bankrupt: p.result === 'BANKRUPT',
+    endedWeek: p.result === 'DELIVERED' ? null : p.week,
     onTime: p.result === 'DELIVERED' && outcome <= c.deadline,
   };
 }
@@ -571,8 +527,15 @@ function modeInspect(h) {
 const rank = (sorted, q) => sorted[Math.max(0, Math.ceil(q * sorted.length) - 1)];
 
 /** Count, median, 10-90 range, full range and on-time share for any set of contracts. */
+/**
+ * The week a past contract counts as finishing, for the record's statistics. A contract
+ * that was never accepted (bankrupt or terminated) counts as later than any delivered
+ * one: the week after the customer's deadline for termination.
+ */
+export const recordWeek = (r, cfg = CONFIG) => (r.delivered === false ? cfg.horizon + 1 : r.accepted);
+
 export function summarizeContracts(rows, cfg = CONFIG) {
-  const sorted = rows.map((r) => r.accepted).sort((a, b) => a - b);
+  const sorted = rows.map((r) => recordWeek(r, cfg)).sort((a, b) => a - b);
   if (!sorted.length) return { n: 0, median: null, p10: null, p90: null, min: null, max: null, onTimeShare: null };
   return {
     n: sorted.length,
@@ -590,7 +553,7 @@ export function pastContracts(cfg = CONFIG) {
   if (_past && cfg === CONFIG) return _past;
   const contracts = pastManagers(cfg.pastContracts)
     .map((m, i) => ({ ...contractRow(playManager(new Project(`past-${i}`, cfg), m), i + 1), habit: m.arch }));
-  const res = { contracts, weeks: contracts.map((r) => r.accepted), ...summarizeContracts(contracts, cfg) };
+  const res = { contracts, weeks: contracts.map((r) => recordWeek(r, cfg)), ...summarizeContracts(contracts, cfg) };
   if (cfg === CONFIG) _past = res;
   return res;
 }

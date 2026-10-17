@@ -81,7 +81,6 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const [startedAt] = useState(() => Date.now());
   const [loaded, setLoaded] = useState(null);
   const [seed, setSeed] = useState(initialSeed);
-  const [name, setName] = useState('');
   // The plan comes first: crews added at the start, inspection share, second shift.
   const [plan, setPlan] = useState(initialPlan || { crews: null, inspect: null, shift: null });
   const planReady = plan.crews !== null && plan.inspect !== null && plan.shift !== null;
@@ -111,7 +110,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
     const given = loaded ? loaded.numbers : DEFAULTS;
     const edited = given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
     const desk = { tool: loaded ? tabById(loaded.id).letter : '', tabs: opened.length, minutes: (Date.now() - startedAt) / 60000, edited, order: opened };
-    onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim(), name.trim());
+    onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim());
   };
   const deskPlan = planReady ? plan : { crews: 0, inspect: 0, shift: 'none' };
 
@@ -153,7 +152,11 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
           of week {c.horizon}, the customer terminates the contract.
         </p>
         <p className="text-xs text-slate-400 mt-2">
-          Customers on this line add to the requirement partway through: every past contract below had a scope change.
+          Your company can overspend the budget by up to {money(c.creditLine)} on credit. Past that, it can't make payroll:
+          the company goes bankrupt and the contract ends.
+        </p>
+        <p className="text-xs text-slate-400 mt-2">
+          Customers on this line add to the requirement partway through: every past contract on record had a scope change.
           Nobody knows in advance which week it comes or how many units it adds.
         </p>
         <p className="text-xs text-slate-400 mt-2">
@@ -203,7 +206,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
         <p className="text-xs text-slate-500 mt-3">
           Each crew costs {money(c.crewWeek)} a week. Two scores, kept apart: <strong className="text-emerald-300">Forecast</strong> (how
           right you were about your own project) and <strong className="text-slate-300">Delivery</strong> (on time, on budget:
-          −{c.latePenaltyPerWeek} a week late, −{c.overspendPenaltyPer50k} per $50k over budget, 0 if the contract is terminated).
+          −{c.latePenaltyPerWeek} a week late, −{c.overspendPenaltyPer50k} per $50k over budget, 0 if the contract is terminated or the company goes bankrupt).
         </p>
       </Card>
 
@@ -238,12 +241,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
             label={`Chance you deliver by week ${c.deadline}`} value={chance} min={0} max={100} step={5}
             onChange={setChance} format={(v) => `${v}%`}
           />
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block text-sm">
-              <span className="text-slate-300">Your name <span className="text-slate-500">(for the room chart)</span></span>
-              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24}
-                className="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white" />
-            </label>
+          <div>
             <label className="block text-sm">
               <span className="text-slate-300">Scenario code <span className="text-slate-500">(from your instructor)</span></span>
               <input value={seed} onChange={(e) => setSeed(e.target.value)} maxLength={24}

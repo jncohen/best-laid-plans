@@ -10,10 +10,10 @@
  * The tools compute honestly. The inside-view ones are early because they cannot see
  * defects or the scope change, and each one says so on its face.
  */
-import { CONFIG, lastContract, pastContracts, matchContracts, summarizeContracts, normalizePlan } from './engine.js';
+import { CONFIG, lastContract, pastContracts, matchContracts, summarizeContracts, normalizePlan, recordWeek } from './engine.js';
 
 // ── What the screen shows ────────────────────────────────────────────────────
-const DISCLOSED = ['scope', 'deadline', 'horizon', 'crews', 'budget', 'maxCrews', 'maxHirePerWeek', 'coordinationLoss', 'crewWeek', 'hireFee',
+const DISCLOSED = ['scope', 'deadline', 'horizon', 'crews', 'budget', 'creditLine', 'maxCrews', 'maxHirePerWeek', 'coordinationLoss', 'crewWeek', 'hireFee',
   'releaseFee', 'shiftPremiumPerCrew', 'onboardingWeeks', 'onboardingFactor', 'shiftBoost', 'inspectionOptions', 'lateFixMultiplier'];
 
 /** Everything the desk may use. The rules are only those the briefing states. */
@@ -88,19 +88,34 @@ export function sprintBurndown(S) {
   };
 }
 
-/** Budget Tracker: dollars for the stated plan over the Schedule's weeks. Money only. */
-export function budgetTracker(S, plan) {
+/**
+ * Cost Management: the stated plan's spend, week by week, against the budget and the
+ * credit line. Earned-value terms: BAC is the budget, EAC the plan's cost at the
+ * Schedule's finish, CPI = BAC / EAC. Money only: it cannot see defects, so the
+ * schedule it implies is the Schedule's.
+ */
+export function costManagement(S, plan) {
   const R = S.rules, p = asPlan(plan);
-  const weeks = planModel(S, p);
+  const sc = schedule(S, p).forecast;
   const crews = R.crews + p.crews;
-  const shiftWeeks = Array.from({ length: weeks }, (_, i) => shiftIn(p, i + 1)).filter(Boolean).length;
+  const weekCost = (w) => crews * R.crewWeek + (shiftIn(p, w) ? crews * R.shiftPremiumPerCrew : 0) + (w === 1 ? p.crews * R.hireFee : 0);
+  const burn = [];
+  let total = 0;
+  for (let w = 1; w <= R.horizon; w++) { total += weekCost(w); burn.push({ week: w, spent: total }); }
+  const limit = R.budget + R.creditLine;
+  const broke = burn.find((b) => b.spent > limit);
+  const eac = burn[Math.min(sc.week, R.horizon) - 1].spent;
   const lines = [
-    { label: 'Crews', amount: crews * R.crewWeek * weeks },
+    { label: 'Crews', amount: crews * R.crewWeek * sc.week },
     { label: 'Hiring fees', amount: p.crews * R.hireFee },
-    { label: 'Second-shift premium', amount: shiftWeeks * crews * R.shiftPremiumPerCrew },
+    { label: 'Second-shift premium', amount: eac - crews * R.crewWeek * sc.week - p.crews * R.hireFee },
   ];
-  const total = lines.reduce((a, l) => a + l.amount, 0);
-  return { forecast: null, weeks, lines, total, budget: R.budget, onTrack: total <= R.budget, perWeek: crews * R.crewWeek };
+  const steady = weekCost(Math.max(2, sc.week));
+  return {
+    forecast: sc, cost: { eac, bac: R.budget, vac: R.budget - eac, cpi: +(R.budget / eac).toFixed(2) },
+    burn, lines, budget: R.budget, creditLine: R.creditLine, limit, onBudget: eac <= R.budget,
+    brokeWeek: broke ? broke.week : null, runwayWeeks: +((limit - weekCost(1)) / steady + 1).toFixed(1), perWeek: steady,
+  };
 }
 
 /** Schedule: the plan, week by week. No defects, no scope change. */
@@ -191,7 +206,7 @@ export function riskRegister(S, plan) {
         `Each crew beyond ${R.crews} costs every crew ${Math.round(R.coordinationLoss * 100)}%.`, p.crews > 0),
       risk('fatigue', 'Tired crews make more defects', p.shift === 'none' ? 0 : 1, p.shift === 'every' ? 3 : p.shift === 'late' ? 1 : 0,
         'From the second straight week of a second shift, more defects.', p.shift !== 'none'),
-      risk('late', 'Finishing after week 12', late / c.length, Math.max(0, q(c.map((r) => r.accepted), 0.5) - R.deadline),
+      risk('late', 'Finishing after week 12', late / c.length, Math.max(0, q(c.map((r) => recordWeek(r)), 0.5) - R.deadline),
         `${late} of ${c.length} past contracts missed week ${R.deadline}.`),
       risk('termination', 'Contract terminated', term / c.length, R.horizon - R.deadline,
         `After week ${R.horizon}. ${term} of ${c.length} past contracts were terminated.`),
@@ -219,7 +234,7 @@ export function analytics(S, plan) {
   const R = S.rules, p = asPlan(plan), rows = S.contracts;
   const xOf = (crews, insp, shift) => [1, crews, insp > 0 ? 1 : 0, insp, shift ? 1 : 0];
   const X = rows.map((r) => xOf(r.crewsAdded, r.inspect, r.shiftWeeks > 0));
-  const y = rows.map((r) => r.accepted);
+  const y = rows.map((r) => recordWeek(r));
   const k = X[0].length, n = X.length;
   const XtXi = invert(Array.from({ length: k }, (_, i) => Array.from({ length: k }, (_, j) => X.reduce((a, r) => a + r[i] * r[j], 0))));
   const Xty = Array.from({ length: k }, (_, i) => X.reduce((a, r, m) => a + r[i] * y[m], 0));
@@ -237,7 +252,7 @@ export function analytics(S, plan) {
   return {
     forecast: { week: Math.round(yhat), low: Math.round(yhat - t * se), high: Math.round(yhat + t * se), chance: Math.round(100 * Phi((R.deadline + 0.5 - yhat) / se)) },
     coef: { intercept: b[0], crews: b[1], inspectAny: b[2], inspectShare: b[3], shift: b[4] }, predicted: +yhat.toFixed(1), se: +se.toFixed(2), r2: +r2.toFixed(2), n,
-    points: rows.map((r) => ({ crews: r.crewsAdded, accepted: r.accepted, inspect: r.inspect, shift: r.shiftWeeks > 0, fitted: fit(xOf(r.crewsAdded, r.inspect, r.shiftWeeks > 0)) })),
+    points: rows.map((r) => ({ crews: r.crewsAdded, accepted: recordWeek(r), inspect: r.inspect, shift: r.shiftWeeks > 0, fitted: fit(xOf(r.crewsAdded, r.inspect, r.shiftWeeks > 0)) })),
     line: [0, 1, 2, 3].map((c) => ({ crews: c, week: fit(xOf(c, p.inspect, p.shift !== 'none')) })),
   };
 }
@@ -358,7 +373,7 @@ export const TABS = [
   { id: 'commit', letter: '', group: null, name: 'Your Plan and Prediction · Commit Before Week 1', short: 'Your Plan & Prediction', tone: 'front' },
   { id: 'status', letter: 'a', group: "The mind's own frames", name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Units built each week', cant: 'Defects or scope changes' },
   { id: 'burndown', letter: 'b', group: "The mind's own frames", name: 'Sprint Burndown', tone: 'inside', forecasts: true, sees: 'Velocity over the last six weeks', cant: 'The same blind spots, in agile clothes' },
-  { id: 'budget', letter: 'c', group: "The mind's own frames", name: 'Budget Tracker', tone: 'inside', forecasts: false, sees: 'Dollars for your plan', cant: 'The schedule at all' },
+  { id: 'cost', letter: 'c', group: "The mind's own frames", name: 'Cost Management', tone: 'inside', forecasts: true, sees: 'Money: spend, burn rate, the credit line', cant: 'Defects, so you can watch every dollar and still be late' },
   { id: 'schedule', letter: 'd', group: "The mind's own frames", name: 'Schedule', tone: 'inside', forecasts: true, sees: 'Your plan, week by week, under the stated rules', cant: 'Defects or scope changes' },
   { id: 'lessons', letter: 'e', group: "The mind's own frames", name: 'Lessons Learned', tone: 'record', forecasts: true, sees: 'One real outcome', cant: "Whether you'll play like it" },
   { id: 'chat', letter: 'f', group: 'Other people', name: 'Team Chat', tone: 'people', forecasts: true, sees: 'Five colleagues, each from one frame', cant: 'Which one to believe' },
@@ -382,6 +397,7 @@ export const tabByLetter = (l) => TABS.find((t) => t.letter && t.letter === l);
 export const FORECASTERS = {
   status: (S) => statusReport(S).forecast,
   burndown: (S) => sprintBurndown(S).forecast,
+  cost: (S, p) => costManagement(S, p).forecast,
   schedule: (S, p) => schedule(S, p).forecast,
   lessons: (S) => lessonsLearned(S).forecast,
   panel: (S, p) => expertPanel(S, p).forecast,
@@ -395,7 +411,7 @@ export const FORECASTERS = {
   simulator: (S, p) => riskSimulator(S, p).forecast,
 };
 export const FORECASTER_NAMES = {
-  status: 'Status Report', burndown: 'Sprint Burndown', schedule: 'Schedule', lessons: 'Lessons Learned', panel: 'Expert Panel', market: 'Prediction Market',
+  status: 'Status Report', burndown: 'Sprint Burndown', cost: 'Cost Management', schedule: 'Schedule', lessons: 'Lessons Learned', panel: 'Expert Panel', market: 'Prediction Market',
   ai: 'AI Assistant', 'records-all': 'Records, all 40', 'records-plan': 'Records, like my plan', benchmark: 'Industry Benchmark', scenarios: 'Scenarios',
   analytics: 'Analytics', simulator: 'Risk Simulator',
 };

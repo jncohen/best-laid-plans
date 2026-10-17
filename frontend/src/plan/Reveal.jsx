@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, planKept } from './engine';
 import { screenData, allForecasts, tabById, tabByLetter } from './desk.js';
 import { addToTrack } from './track';
@@ -42,7 +42,7 @@ function Row({ label, children, verdict, good }) {
   );
 }
 
-export default function Reveal({ project, name, onReplay }) {
+export default function Reveal({ project, onReplay }) {
   const c = CONFIG;
   const p = project;
   const past = pastContracts();
@@ -51,7 +51,6 @@ export default function Reveal({ project, name, onReplay }) {
   const outcome = s.outcome;
   const ninety = p.ninetyWeek();
   const outsideHeld = outcome >= past.p10 && outcome <= past.p90;
-  const code = p.resultCode(name);
   // How every tool on the desk would have done, for the plan the student stated.
   const tools = allForecasts(screenData(), p.plan || playedPlan(p)).map((t) => ({
     ...t, verdict: outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
@@ -64,7 +63,6 @@ export default function Reveal({ project, name, onReplay }) {
     p.tracked = true;
     addToTrack({ seed: p.seedInput || p.seed.toString(36), week: f.week, low: f.low, high: f.high, outcome, held: outcome >= f.low && outcome <= f.high });
   }, [p, f, outcome]);
-  const [copied, setCopied] = useState(false);
   const delivered = p.result === 'DELIVERED';
   const played = playedPlan(p);
   const j = judgeForecast({ forecast: f, outcome, stated: p.plan, played });
@@ -76,14 +74,6 @@ export default function Reveal({ project, name, onReplay }) {
   const end = Math.ceil(Math.max(outcome, c.deadline, past.p90)) + 1;
   const missText = s.held ? 'inside your 80% range' : s.missBy > 0 ? `${s.missBy} weeks past your 80% range` : `${-s.missBy} weeks before your 80% range`;
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
@@ -92,12 +82,33 @@ export default function Reveal({ project, name, onReplay }) {
         <h1 className="text-3xl font-bold text-white mt-1 leading-tight">
           You said <span className="text-emerald-300">week {f.week}</span>.{' '}
           {delivered ? 'It was accepted in' : 'It would have taken until'} <span className="text-amber-300">week {outcome}</span>.
+          {p.result === 'BANKRUPT' && <span className="block text-xl text-rose-300 mt-1">The company went bankrupt in week {p.week}.</span>}
         </h1>
         <p className="text-sm text-slate-400 mt-2">
           That is {missText}.
           {ninety && <> Your dashboard said 90% done in week {ninety}.</>}
         </p>
       </header>
+
+      <Card title="Your numbers" tone="emerald">
+        <p className="text-xs text-slate-400 mb-3">Keep this screen open: your instructor will ask the room for a show of hands.</p>
+        <dl className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {[
+            ['Your 80% range', s.held ? 'Held' : 'Missed', `weeks ${f.low}–${f.high}`],
+            ['Late or early', s.held ? 'Neither' : s.missBy > 0 ? 'Late' : 'Early', s.held ? 'inside your range' : `by ${Math.abs(s.missBy)} wk`],
+            ['Outcome', `week ${outcome}`, delivered ? 'accepted' : p.result === 'BANKRUPT' ? 'bankrupt: projected' : 'terminated: projected'],
+            [`Your chance of week ${c.deadline}`, `${f.onTimeChance}%`, s.onTime ? 'you made it' : 'you missed it'],
+            ['Verdict', vTitle || '—', vTitle ? 'plan and range' : 'no plan stated'],
+            ['Tool used', usedTool ? usedTool.name : 'None', p.desk ? `${p.desk.tabs} tab${p.desk.tabs === 1 ? '' : 's'} opened` : ''],
+          ].map(([k, v, sub]) => (
+            <div key={k} className="bg-slate-950 rounded-lg p-3">
+              <dt className="text-[10px] uppercase tracking-wider text-slate-500">{k}</dt>
+              <dd className="text-xl font-bold text-white">{v}</dd>
+              <dd className="text-[11px] text-slate-500">{sub}</dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
 
       <Card>
         <ForecastChart
@@ -208,14 +219,7 @@ export default function Reveal({ project, name, onReplay }) {
         </p>
       </Card>
 
-      <Card title="Your result code" tone="emerald">
-        <p className="text-xs text-slate-400 mb-2">Send this to your instructor for the room chart.</p>
-        <div className="font-mono text-xs bg-slate-950 border border-slate-800 rounded-lg p-3 break-all text-slate-200 select-all">{code}</div>
-        <div className="flex gap-2 mt-3">
-          <button type="button" onClick={copy} className="flex-1 py-2 rounded-lg bg-slate-800 text-white text-sm">{copied ? 'Copied' : 'Copy code'}</button>
-          <button type="button" onClick={onReplay} className="flex-1 py-2 rounded-lg bg-slate-800 text-white text-sm">Play again</button>
-        </div>
-      </Card>
+      <button type="button" onClick={onReplay} className="w-full py-3 rounded-xl bg-slate-800 text-white text-sm">Play again</button>
     </div>
   );
 }
