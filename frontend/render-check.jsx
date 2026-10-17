@@ -34,6 +34,11 @@ ok('Tab strip: with 3 views used, unviewed tool tabs are locked and say so', () 
         const h = renderToString(<DeskTab id={t.id} S={S} plan={p.plan} planReady onUse={() => {}} live={liveScreen(p)} />);
         if (t.id === 'ai' && !h.includes(`STATUS AFTER WEEK ${w}`)) throw new Error('prompt lacks the current status');
         if (t.id === 'chat' && !h.includes(`after week ${w}`)) throw new Error('chat not updated for the week');
+        // The inspectors' sample is a plain observation on the Status Report, in Priya's line and in the prompt.
+        const a = h.replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+        if (t.id === 'status' && !/Inspectors' sample: <span[^>]*>\d+\.\d%/.test(a)) throw new Error('status lacks the inspectors sample');
+        if (t.id === 'chat' && !p.history.some((r) => r.rejected > 0) && !a.includes("The inspectors' sample had")) throw new Error('Priya lacks the inspectors sample');
+        if (t.id === 'ai' && !h.includes('inspection_sample_defective_pct')) throw new Error('prompt lacks the sample column');
         return h;
       });
     }
@@ -53,6 +58,15 @@ ok('Tab strip: with 3 views used, unviewed tool tabs are locked and say so', () 
   t.commit({ week: 12, low: 11, high: 13, onTimeChance: 50 });
   while (!t.done) t.play({ hire: -3, inspect: 0.3 });
   ok('Reveal, terminated or very late', () => renderToString(<Reveal project={t} onReplay={() => {}} />));
+  // A bankrupt contract misses every range, whatever the projection.
+  const b = new Project('render-broke');
+  b.commit({ week: 30, low: 6, high: 40, onTimeChance: 50 });
+  while (!b.done) b.play({ hire: 3, shift: true });
+  ok('Reveal, bankrupt: a miss for every range', () => {
+    const h = renderToString(<Reveal project={b} onReplay={() => {}} />);
+    if (b.result !== 'BANKRUPT' || !h.includes('Missed: bankrupt') || !h.includes('a miss for every range') || h.includes('>held<')) throw new Error('bankrupt outcome not a miss');
+    return h;
+  });
 }
 {
   // Four ledger cases: each reveal states whether the range held and whether the plan was kept.
@@ -110,6 +124,13 @@ ok('Tab strip: with 3 views used, unviewed tool tabs are locked and say so', () 
     const h = strip(before('records'));
     for (const s of ['All 40 contracts', 'median week 14', 'percentile weeks 11–19', 'of the 32 delivered', '20% made week 12', '8 of 40 never delivered (8 bankrupt)', 'counts as not on time']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     if ((before('records').match(/rounded-full/g) || []).length < 32) throw new Error('dot strip missing (one dot per delivered contract)');
+    if (!h.includes('✕✕✕✕✕✕✕✕') || !h.includes('never delivered: 8 bankrupt')) throw new Error('failures not beside the dot strip');
+    return h;
+  });
+  ok('Ranges from the record carry their failures (Records like my plan, Analytics, Simulator, Mabel)', () => {
+    const C3I = { crews: 3, inspect: 0.1, shift: 'none' };
+    const h = [before('analytics', C3I), before('simulator', C3I), before('chat', C3I)].map(strip).join(' ').replace(/&#x27;/g, "'");
+    for (const s of ['1 of 7 run like yours never delivered (1 bankrupt)', "aren't in the fit", 'counts the rest as not on time', '1 of 11 inspected (like your plan) never delivered', 'one of the seven run like yours never got delivered']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     return h;
   });
   const C3 = { crews: 3, inspect: 0.1, shift: 'none' };

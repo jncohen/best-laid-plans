@@ -11,7 +11,7 @@
  * The tools compute honestly. The inside-view ones are early because they cannot see
  * defects or the scope change, and each one says so on its face.
  */
-import { CONFIG, lastContract, pastContracts, matchContracts, summarizeContracts, normalizePlan } from './engine.js';
+import { CONFIG, lastContract, pastContracts, matchContracts, summarizeContracts, normalizePlan, failuresLine } from './engine.js';
 
 // ── What the screen shows ────────────────────────────────────────────────────
 const DISCLOSED = ['scope', 'deadline', 'horizon', 'crews', 'budget', 'creditLine', 'maxCrews', 'maxHirePerWeek', 'coordinationLoss', 'crewWeek', 'hireFee',
@@ -47,7 +47,7 @@ const asPlan = (plan) => normalizePlan(plan || HANDS_OFF);
  * left, crews, budget), each week's decisions and its event lines. Copied field by
  * field so nothing else on a project can reach a tool.
  */
-const LIVE_ROW = ['week', 'crews', 'shift', 'inspect', 'built', 'found', 'rejected', 'shock', 'cost', 'budget', 'backlog', 'reported', 'events'];
+const LIVE_ROW = ['week', 'crews', 'shift', 'inspect', 'built', 'found', 'sampled', 'rejected', 'shock', 'cost', 'budget', 'backlog', 'reported', 'events'];
 export function liveScreen(p) {
   if (!p || !p.history || p.history.length === 0) return null;
   const rows = p.history.map((h) => Object.freeze(Object.fromEntries(LIVE_ROW.map((k) => [k, k === 'events' ? [...h.events] : h[k]]))));
@@ -76,6 +76,11 @@ function observedPerCrew(S, L) {
 }
 
 const scopeSeen = (L) => !!L && L.rows.some((r) => r.shock > 0);
+/** The inspectors' samples so far: the share of each inspected week's units found defective. */
+function samples(L) {
+  const s = L ? L.rows.filter((r) => r.sampled !== null && r.sampled !== undefined) : [];
+  return s.length ? { weeks: s.length, last: s[s.length - 1].sampled, lastWeek: s[s.length - 1].week, mean: mean(s.map((r) => r.sampled)) } : null;
+}
 const rejectedSoFar = (L) => (L ? L.rows.reduce((a, r) => a + r.rejected, 0) : 0);
 const foundSoFar = (L) => (L ? L.rows.reduce((a, r) => a + r.found, 0) : 0);
 
@@ -132,6 +137,7 @@ export function statusReport(S, L = null, plan = null) {
     forecast: clampF({ week: Math.round(eac), low: Math.floor(Math.min(...eacs)), high: Math.ceil(Math.max(...eacs)), chance: eac <= R.deadline - 0.5 ? 90 : eac <= R.deadline ? 60 : 20 }),
     live: !!L, pace: +pace(S).toFixed(1), weeksAtPace: +(R.scope / pace(S)).toFixed(1), eacWeeks: +eac.toFixed(1), weekly,
     earnedPct, plannedPct, weeksShown: wk, built: earnedPct * R.scope, planned: plannedPct * R.scope,
+    sample: samples(L), found: foundSoFar(L), rejectedLast: S.last.rejected,
     spi: +last.spi.toFixed(2), cpi: +(ev / ac).toFixed(2), bac, light: ev >= pv ? 'green' : ev >= 0.9 * pv ? 'amber' : 'red',
   };
 }
@@ -199,19 +205,21 @@ export function lastFive(S) {
   const R = S.rules, rows = S.contracts.slice(-5);
   const sum = summarizeContracts(rows);
   return {
-    forecast: { week: sum.median, low: sum.min, high: sum.max, chance: Math.round(100 * sum.onTimeShare) },
+    forecast: { week: sum.median, low: sum.min, high: sum.max, chance: Math.round(100 * sum.onTimeShare), fail: failuresLine(sum) },
     rows, summary: sum, newest: { ...rows[rows.length - 1], ...S.last, pace: +pace(S).toFixed(1) }, n: rows.length, deadline: R.deadline,
   };
 }
 
 // ── Records and structured judgment ──────────────────────────────────────────
-const fromSummary = (s) => ({ week: s.median, low: s.p10, high: s.p90, chance: Math.round(100 * s.onTimeShare) });
+// A range from the record carries its failures: the count beside it, and in the chance (a failure is not on time).
+const fromSummary = (s, what = '') => ({ week: s.median, low: s.p10, high: s.p90, chance: Math.round(100 * s.onTimeShare), fail: failuresLine(s, what), failed: s.failed.total, n: s.n });
 
 /** Records: all 40, or the contracts run like the plan. */
 export function records(S, plan = null) {
   const all = summarizeContracts(S.contracts);
   const m = plan ? matchContracts(plan) : null;
-  return { forecast: fromSummary(m || all), all: fromSummary(all), matched: m ? { ...fromSummary(m), n: m.n, rule: m.rule } : null };
+  const matched = m ? { ...fromSummary(m, 'run like yours'), rule: m.rule } : null;
+  return { forecast: matched || fromSummary(all), all: fromSummary(all), matched };
 }
 
 /** Scenarios: the plan model under four named futures, with rework like the last contract. */
@@ -295,6 +303,7 @@ function invert(M) {
 /** Analytics: OLS of week accepted on the plan's terms across the delivered past contracts, with an 80% prediction interval. */
 export function analytics(S, plan) {
   const R = S.rules, p = asPlan(plan), rows = S.contracts.filter((r) => r.delivered);
+  const like = summarizeContracts(matchContracts(p).contracts);
   const xOf = (crews, insp, shift) => [1, crews, insp > 0 ? 1 : 0, insp, shift ? 1 : 0];
   const X = rows.map((r) => xOf(r.crewsAdded, r.inspect, r.shiftWeeks > 0));
   const y = rows.map((r) => r.accepted);
@@ -313,7 +322,9 @@ export function analytics(S, plan) {
   const Phi = (z) => 0.5 * (1 + Math.tanh(0.7978845608 * (z + 0.044715 * z ** 3)));
   const r2 = 1 - res.reduce((a, r) => a + r * r, 0) / y.reduce((a, v) => a + (v - mean(y)) ** 2, 0);
   return {
-    forecast: { week: Math.round(yhat), low: Math.round(yhat - t * se), high: Math.round(yhat + t * se), chance: Math.round(100 * Phi((R.deadline + 0.5 - yhat) / se)) },
+    // Fit on delivered contracts; the chance of week 12 also counts those run like the plan that never delivered.
+    forecast: { week: Math.round(yhat), low: Math.round(yhat - t * se), high: Math.round(yhat + t * se), chance: Math.round(100 * (1 - like.failed.total / Math.max(1, like.n)) * Phi((R.deadline + 0.5 - yhat) / se)), fail: failuresLine(like, 'run like yours') },
+    left: S.contracts.length - rows.length,
     coef: { intercept: b[0], crews: b[1], inspectAny: b[2], inspectShare: b[3], shift: b[4] }, predicted: +yhat.toFixed(1), se: +se.toFixed(2), r2: +r2.toFixed(2), n,
     points: rows.map((r) => ({ crews: r.crewsAdded, accepted: r.accepted, inspect: r.inspect, shift: r.shiftWeeks > 0, fitted: fit(xOf(r.crewsAdded, r.inspect, r.shiftWeeks > 0)) })),
     line: [0, 1, 2, 3].map((c) => ({ crews: c, week: fit(xOf(c, p.inspect, p.shift !== 'none')) })),
@@ -330,11 +341,15 @@ export function analytics(S, plan) {
  * current reported state; a scope change already seen is not drawn again, and once
  * the acceptance test has run, its rework is in the units left and no slip is added.
  */
+/** The past contracts the slips come from: those inspected the way the plan is (if five of them delivered), else all. */
+function slipPool(S, p) {
+  const like = S.contracts.filter((c) => (c.inspect > 0) === (p.inspect > 0));
+  return like.filter((c) => c.delivered).length >= 5 ? like : S.contracts;
+}
+
 export function historicalSlips(S, plan) {
   const p = asPlan(plan);
-  const ok = S.contracts.filter((c) => c.delivered);
-  const like = ok.filter((c) => (c.inspect > 0) === (p.inspect > 0));
-  return (like.length >= 5 ? like : ok).map((c) => {
+  return slipPool(S, p).filter((c) => c.delivered).map((c) => {
     const own = { crews: c.crewsAdded, inspect: c.inspect, shift: c.shiftWeeks > 0 ? 'late' : 'none' };
     return c.accepted - planModel(S, own, { scope: { week: c.scopeWeek, units: c.scopeUnits } });
   });
@@ -354,8 +369,13 @@ export function riskSimulator(S, plan, { rework = true, runs = 1000, live = null
   });
   const hist = {};
   for (const w of sims) hist[w] = (hist[w] || 0) + 1;
+  // The slips come from delivered contracts. With rework on, the chance also counts the pool's contracts that never delivered.
+  const pool = summarizeContracts(slipPool(S, p));
+  const failShare = rework && !tested ? pool.failed.total / Math.max(1, pool.n) : 0;
+  const what = pool.n === S.contracts.length ? '' : p.inspect > 0 ? 'inspected (like your plan)' : 'not inspected (like your plan)';
   return {
-    forecast: { week: q(sims, 0.5), low: q(sims, 0.1), high: q(sims, 0.9), chance: Math.round((100 * sims.filter((x) => x <= R.deadline).length) / sims.length) },
+    forecast: { week: q(sims, 0.5), low: q(sims, 0.1), high: q(sims, 0.9), chance: Math.round((1 - failShare) * (100 * sims.filter((x) => x <= R.deadline).length) / sims.length), fail: failShare > 0 ? failuresLine(pool, what) : null },
+    pool: { n: pool.n, delivered: pool.delivered, failed: pool.failed.total },
     runs, hist, rework, live: !!live, tested, slips: { n: slips.length, median: q(slips, 0.5), low: q(slips, 0.1), high: q(slips, 0.9) }, p: { 10: q(sims, 0.1), 50: q(sims, 0.5), 80: q(sims, 0.8), 90: q(sims, 0.9) },
   };
 }
@@ -381,9 +401,10 @@ export function teamChat(S, plan, L = null) {
   const left = L ? L.backlog : R.scope;
   const atPace = now + Math.max(1, Math.ceil(left / Math.max(1, v)));
   const gap = S.last.deliveredWeek - S.last.dashboardFullWeek;
-  const rejected = Math.round(rejectedSoFar(L)), found = Math.round(foundSoFar(L));
+  const rejected = Math.round(rejectedSoFar(L)), found = Math.round(foundSoFar(L)), smp = samples(L);
   const spread = Math.round((all.high - all.low) / 2);
-  const yours = m.week !== all.week ? ` The ones run like yours came in around week ${m.week}.` : '';
+  const yours = (m.week !== all.week ? ` The ones run like yours came in around week ${m.week}.` : '')
+    + (m.failed ? ` And ${word(m.failed)} of the ${word(m.n)} run like yours never got delivered.` : '');
   const lastRow = L ? L.rows[L.rows.length - 1] : null;
   const scopeNews = lastRow && lastRow.shock > 0 ? ` The customer just added ${lastRow.shock} units.` : '';
 
@@ -396,7 +417,7 @@ export function teamChat(S, plan, L = null) {
   } else {
     const rw = p.inspect > 0 ? Math.max(1, Math.round(gap / 2)) : gap;
     priya = { forecast: clampF({ week: sc.week + rw, low: sc.week + rw - 1, high: sc.week + rw + 2, chance: sc.week + rw <= R.deadline ? 50 : 15 }),
-      says: `${found > 0 ? `${lastRow && lastRow.inspect > 0 ? `Inspection found ${Math.round(lastRow.found)} last week, ${Math.round((100 * lastRow.found) / Math.max(1, lastRow.built))}% of what we built. ` : ''}We've caught ${found} bad unit${found === 1 ? '' : 's'} so far. ` : ''}Last time ${S.last.rejected} units bounced at acceptance, and it took ${word(gap)} more weeks after the dashboard said done. Budget ${gap > 1 ? `${word(gap - 1)} or ${word(gap)}` : word(gap)} weeks for rework${p.inspect > 0 ? ', maybe half that if you keep inspecting' : ''}.`,
+      says: `${smp ? `The inspectors' sample had ${(100 * smp.last).toFixed(1)}% of week ${smp.lastWeek}'s units bad${smp.weeks > 1 ? `, ${(100 * smp.mean).toFixed(1)}% on average over ${word(smp.weeks)} weeks` : ''}. ` : ''}${found > 0 ? `We've caught ${found} bad unit${found === 1 ? '' : 's'} so far. ` : ''}Last time ${S.last.rejected} units bounced at acceptance, and it took ${word(gap)} more weeks after the dashboard said done. Budget ${gap > 1 ? `${word(gap - 1)} or ${word(gap)}` : word(gap)} weeks for rework${p.inspect > 0 ? ', maybe half that if you keep inspecting' : ''}.`,
       reasoning: `The plan from here (week ${sc.week}) plus the rework the last contract needed after its dashboard read 100% (${gap} weeks${p.inspect > 0 ? ', halved for inspection' : ''}).` };
   }
   return [
@@ -411,9 +432,9 @@ export function teamChat(S, plan, L = null) {
     { key: 'sales', name: 'Kim', role: 'Sales lead', frame: 'The promise', confidence: 60, forecast: { week: Math.max(R.deadline, now + 1), low: Math.max(R.deadline - 1, now + 1), high: Math.max(R.deadline + 1, now + 2), chance: now < R.deadline ? 70 : 0 },
       says: now >= R.deadline ? `We're past week ${R.deadline}. The customer calls every day.` : L ? `We promised week ${R.deadline}. The customer asked how it's going.` : `We promised week ${R.deadline}.`,
       reasoning: 'What the customer was told.' },
-    { key: 'veteran', name: 'Mabel', role: 'Veteran on the line', frame: 'The record', confidence: 80, forecast: { week: Math.max(m.week, now + 1), low: Math.max(m.low, now + 1), high: Math.max(m.high, now + 1), chance: m.chance },
+    { key: 'veteran', name: 'Mabel', role: 'Veteran on the line', frame: 'The record', confidence: 80, forecast: { week: Math.max(m.week, now + 1), low: Math.max(m.low, now + 1), high: Math.max(m.high, now + 1), chance: m.chance, fail: m.fail },
       says: `Twenty-odd years on this line. These take about ${word(all.week)} weeks, give or take ${spread <= 2 ? 'a couple' : word(spread)}. I've seen maybe ${inWords(all.chance / 100)} make ${word(R.deadline)}.${yours}`,
-      reasoning: `The record of ${S.contracts.length} contracts: median week ${all.week}, most between ${all.low} and ${all.high}, ${all.chance}% on time. For your plan, the ${m.n} run like it: week ${m.week} (${m.low}–${m.high}).` },
+      reasoning: `The record of ${S.contracts.length} contracts: median week ${all.week}, most between ${all.low} and ${all.high} among those delivered, ${all.chance}% on time${all.fail ? `; ${all.fail}` : ''}. For your plan, the ${m.n} run like it: delivered week ${m.week} (${m.low}–${m.high})${m.fail ? `; ${m.fail}` : ''}.` },
     { key: 'quality', name: 'Priya', role: 'Quality lead', frame: rejected > 0 ? 'The acceptance test' : 'Rework, from the last contract', confidence: 70, ...priya },
   ];
 }
@@ -479,8 +500,8 @@ export function aiPrompt(S, plan, L = null, opened = null) {
     const lastRow = L.rows[L.rows.length - 1];
     lines.push('', `STATUS AFTER WEEK ${L.week}`,
       `- Dashboard: ${pct(lastRow.reported)} reported complete; ${Math.round(L.backlog)} units left of ${L.totalScope}; ${L.crews} crews${L.onboarding ? ' (new crews still onboarding)' : ''}; spent ${k$(L.spent)}, budget left ${k$(L.budget)}.`,
-      'week,units_built,crews,inspection_pct,second_shift,defects_found,units_rejected_at_acceptance,scope_added,crew_out,parts_delay,reported_complete_pct',
-      ...L.rows.map((r) => [r.week, Math.round(r.built), r.crews, Math.round(r.inspect * 100), r.shift ? 'yes' : 'no', Math.round(r.found), Math.round(r.rejected), r.shock,
+      'week,units_built,crews,inspection_pct,second_shift,defects_found,inspection_sample_defective_pct,units_rejected_at_acceptance,scope_added,crew_out,parts_delay,reported_complete_pct',
+      ...L.rows.map((r) => [r.week, Math.round(r.built), r.crews, Math.round(r.inspect * 100), r.shift ? 'yes' : 'no', Math.round(r.found), r.sampled === null || r.sampled === undefined ? '' : (100 * r.sampled).toFixed(1), Math.round(r.rejected), r.shock,
         r.events.some((e) => /crew is out/.test(e)) ? 'yes' : 'no', r.events.some((e) => /parts delay/.test(e)) ? 'yes' : 'no', Math.round(r.reported * 100)].join(',')));
   }
   lines.push('', `Please give a forecast of the week the customer accepts the contract, an 80% range, and the chance of making week ${R.deadline}, with your reasoning.`);
@@ -536,7 +557,8 @@ export function consensus(S, plan, keys, L = null) {
   const fs = keys.map((k) => FORECASTERS[k]?.(S, plan, L)).filter(Boolean);
   if (!fs.length) return { forecast: null, used: [] };
   const avg = (k) => Math.round(mean(fs.map((f) => f[k])));
-  return { forecast: clampF({ week: avg('week'), low: avg('low'), high: avg('high'), chance: avg('chance') }), used: keys };
+  const fails = [...new Set(fs.map((f) => f.fail).filter(Boolean))];
+  return { forecast: { ...clampF({ week: avg('week'), low: avg('low'), high: avg('high'), chance: avg('chance') }), fail: fails.length ? fails.join('; ') : null }, used: keys };
 }
 
 /** Every forecaster's numbers for a plan, for the reveal's "how each tool would have done". */

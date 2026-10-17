@@ -254,7 +254,7 @@ console.log('The Decision Desk sees only the screen');
   const code = src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
   t('desk.js never builds a Project or reads a scenario code', !/\bProject\b|seedFromString|playPolicy|shockWeek|shockSize|productivity|defectProne|_noise|hidden/.test(code));
   const imports = [...code.matchAll(/import\s*\{([^}]*)\}\s*from\s*'\.\/engine\.js'/g)].flatMap((m) => m[1].split(',').map((x) => x.trim()));
-  t('desk.js takes from the engine only the record, the last contract and the stated rules', imports.every((x) => ['CONFIG', 'lastContract', 'pastContracts', 'matchContracts', 'summarizeContracts', 'normalizePlan'].includes(x)));
+  t('desk.js takes from the engine only the record, the last contract and the stated rules', imports.every((x) => ['CONFIG', 'lastContract', 'pastContracts', 'matchContracts', 'summarizeContracts', 'normalizePlan', 'failuresLine'].includes(x)));
   const S = screenData();
   t('the screen holds only what the briefing shows', JSON.stringify(Object.keys(S)) === JSON.stringify(['history', 'last', 'contracts', 'rules'])
     && !('baseDefectRate' in S.rules) && !('shockWeeks' in S.rules) && !('productivityRange' in S.rules) && !('defectProneRange' in S.rules));
@@ -325,7 +325,17 @@ console.log('Desk numbers on ledger (work order, Oct 17)');
   // On the seeded-manager record (Oct 17 lists had 17 (15-20) 0 / 13 (11-14) 43 and 17 (15-19) 0 / 13 (11-14) 45).
   t('Records like my plan: hands-off 16 (14-19) 0, +3/10% 13 (11-13) 29', f(records(S, HO).matched) === '16 (14-19) 0' && f(records(S, C3I).matched) === '13 (11-13) 29');
   // Fitted on delivered contracts only, so it shares their survivorship: the +3/10% runs that went bankrupt are not in it.
-  t('Analytics: hands-off 17 (14-20) 1, +3/10% 11 (9-14) 68', f(analytics(S, HO).forecast) === '17 (14-20) 1' && f(analytics(S, C3I).forecast) === '11 (9-14) 68');
+  // Its chance also counts the contracts run like the plan that never delivered (1 of 7 for +3/10%: 68% x 6/7).
+  t('Analytics: hands-off 17 (14-20) 1, +3/10% 11 (9-14) 58', f(analytics(S, HO).forecast) === '17 (14-20) 1' && f(analytics(S, C3I).forecast) === '11 (9-14) 58');
+  // Every range from the record carries its failures beside it.
+  t('failures beside the ranges: all 40, like my plan, Last 5, Analytics, Simulator, Mabel, Consensus', records(S).all.fail === '8 of 40 never delivered (8 bankrupt)'
+    && records(S, C3I).matched.fail === '1 of 7 run like yours never delivered (1 bankrupt)' && records(S, HO).matched.fail === null
+    && lastFive(S).forecast.fail === '1 of 5 never delivered (1 bankrupt)' && analytics(S, C3I).forecast.fail === records(S, C3I).matched.fail && analytics(S, C3I).left === 8
+    && riskSimulator(S, C3I).forecast.fail === '1 of 11 inspected (like your plan) never delivered (1 bankrupt)' && riskSimulator(S, HO).forecast.fail === '7 of 29 not inspected (like your plan) never delivered (7 bankrupt)'
+    && riskSimulator(S, C3I, { rework: false }).forecast.fail === null
+    && teamChat(S, C3I).find((c) => c.key === 'veteran').says.includes('one of the seven run like yours never got delivered')
+    && consensus(S, C3I, ['records-plan', 'analytics']).forecast.fail === records(S, C3I).matched.fail);
+  t("Risk Simulator chance counts the pool's failures: +3/10% 51, hands-off 0", riskSimulator(S, C3I).forecast.chance === 51 && riskSimulator(S, HO).forecast.chance === 0);
   t('Risk Simulator, rework on: hands-off 16 (14-20), +3/10% 12 (11-17); off: 11 (11-11) 95 and 8 (8-9) 100', f(riskSimulator(S, HO).forecast).startsWith('16 (14-20)') && f(riskSimulator(S, C3I).forecast).startsWith('12 (11-17)')
     && f(riskSimulator(S, HO, { rework: false }).forecast) === '11 (11-11) 95' && f(riskSimulator(S, C3I, { rework: false }).forecast) === '8 (8-9) 100');
   t('Scenarios: hands-off 10/11/14/16, +3/10% 8/9/10/11', scenarios(S, HO).rows.map((r) => r.week).join('/') === '10/11/14/16' && scenarios(S, C3I).rows.map((r) => r.week).join('/') === '8/9/10/11');
@@ -438,6 +448,23 @@ console.log('Attention: at most 3 views a week, no charge');
   t('views never cost output or change an outcome', JSON.stringify(many.history.map((h) => h.built)) === JSON.stringify(none.history.map((h) => h.built)));
   t('a week counts distinct tool tabs; The Contract and Ask an AI do not count', many.checksFor(2) === 4 && play((p) => ['status', 'status', 'contract', 'ai'].forEach((t) => p.noteDesk(2, t))).checksFor(2) === 1);
   t('the limit is 3 a week and 3 before week 1, stated in the briefing', CONFIG.viewsPerWeek === 3 && CONFIG.viewsBeforeWeek1 === 3 && /at most 3 tool tabs each week \(3 before week 1\)/.test(attentionRule()));
+}
+
+console.log("Inspectors' sample: a plain observation, drawn before play, never changing an outcome");
+{
+  const run = (cfg) => { const p = new Project('ledger', cfg); while (!p.done) p.play({ hire: p.week === 0 ? 3 : 0, inspect: p.week < 6 ? 0.1 : 0 }); return p; };
+  const a = run(CONFIG), b = run({ ...CONFIG, sampleError: 0 });
+  const bare = (p) => JSON.stringify(p.history.map(({ sampled, events, ...r }) => r));
+  t('the sample changes what the screen says, never what happens', bare(a) === bare(b) && a.outcomeWeek() === b.outcomeWeek());
+  t("reported only in inspected weeks, as a share of that week's units", a.history.every((r) => (r.inspect > 0 && r.built > 0) === (r.sampled !== null))
+    && a.history.filter((r) => r.sampled !== null).every((r) => r.events.some((e) => e.startsWith("Inspectors' sample: ") && e.includes(`${(100 * r.sampled).toFixed(1)}%`))));
+  t('it reads the true defect rate within its stated error', b.history.filter((r) => r.sampled !== null).every((r) => Math.abs(r.sampled - r.defectRate) < 0.001)
+    && a.history.filter((r) => r.sampled !== null).every((r) => Math.abs(r.sampled / r.defectRate - 1) <= 3 * CONFIG.sampleError + 0.01));
+  t('the screen carries it', LIVE_ROW_FIELDS.includes('sampled'));
+  // The sweep's careful forecaster takes the screen (screenData, liveScreen) and the week's decision, nothing from a Project.
+  const src = readFileSync(new URL('./adaptive-policy.mjs', import.meta.url), 'utf8');
+  const fc = src.slice(src.indexOf('export function screenForecast')).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+  t("the reference forecaster reads only the screen and the week's decision", /screenForecast\(S, L, d/.test(fc) && !/\bp\.|Project|productivity|defectProne|_noise|_sample|shockWeek|cfg\b/.test(fc));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

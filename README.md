@@ -104,7 +104,11 @@ for projecting a tab in class.
   nobody knows in advance.
 - The customer terminates the contract if it is not accepted by the end of week 22.
 - **Contracts differ.** Some lines build faster or slower and turn out more or fewer
-  defects; each week's output and inspection finds show how this one runs.
+  defects; each week's output and inspection finds show how this one runs. In any
+  week the line inspects, the inspectors also report the share of that week's units
+  their sample found defective. The sample reads the true defect rate with about 8%
+  relative error, drawn from the scenario code before play; it changes what the screen
+  says, never what happens. A careful reader can narrow the forecast from week 2.
 - **Events.** About half of contracts lose a crew for 2 weeks (still paid), somewhere
   in weeks 3–9. About 40% hit a parts delay that idles half the line for a week, in
   weeks 4–10. Both are drawn from the scenario code before play.
@@ -123,7 +127,7 @@ for projecting a tab in class.
   falls outside it: narrow ranges that hold score best. **Delivery** = 100 − 12 per week late − 1 per
   $50k over budget, or 0 if the contract was terminated or the company went bankrupt.
   A terminated or bankrupt contract's outcome is the week it would have taken at the
-  final pace.
+  final pace, and it misses every range, on the reveal and in the Forecast score.
 
 ## The Decision Desk
 
@@ -142,8 +146,8 @@ product. Every one is computed in `frontend/src/plan/desk.js` from the screen al
 - the 40 past contracts;
 - the stated rules;
 - during play, the dashboard: each week's units built, crews, inspection, shift,
-  defects found, units rejected, scope added and reported percentage, plus spend and
-  budget.
+  defects found, the inspectors' sample, units rejected, scope added and reported
+  percentage, plus spend and budget.
 
 No tool reads the scenario's hidden draws. The tests check this, including by changing
 every hidden draw mid-game and confirming that no weekly tool's output moves.
@@ -159,11 +163,11 @@ Colours:
 | **The Brief** | | |
 | The Contract | contract summary card: the terms (200 units, week 12, 4 crews, $5.00M), every disclosure (acceptance test, termination after week 22, credit line and bankruptcy, scope changes, defects), what you decide each week with its costs, and both scores. No forecast | The contract, every rule and both scores · how long it will take |
 | **Dashboards** | | |
-| Status Report | earned-value status report: red/amber/green light, SPI, CPI (against the cost baseline: the last contract's crews over 12 weeks, or during play the student's plan), schedule estimate at completion (planned duration ÷ SPI), burn-up chart | Earned value: units reported complete against plan · whether those units will pass acceptance |
+| Status Report | earned-value status report: red/amber/green light, SPI, CPI (against the cost baseline: the last contract's crews over 12 weeks, or during play the student's plan), schedule estimate at completion (planned duration ÷ SPI), burn-up chart; during play, units built per crew, the inspectors' sample and defects found so far | Earned value: units reported complete against plan · whether those units will pass acceptance |
 | Cost Management | project cost-control dashboard: the plan's cost baseline (BAC), CPI = EV ÷ AC, EAC = BAC ÷ CPI, cash runway, the headroom to the budget and to the credit line, and cumulative spend against the budget and the bankruptcy line | Money: spend, burn rate, the credit line · defects, so you can watch every dollar and still be late |
 | Schedule | Gantt chart: task bars, milestones, finish diamond | Your plan, week by week, under the stated rules · defects or scope changes |
 | **People** | | |
-| Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap), updated each week. In order: Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan re-planned from now; Kim (sales) from the promise; Mabel, a veteran on the line, from the record; Priya (quality) from rework, the last contract's or this one's | Five colleagues, each from where they sit · which view to weigh most |
+| Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap), updated each week. In order: Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan re-planned from now; Kim (sales) from the promise; Mabel, a veteran on the line, from the record; Priya (quality) from rework, the last contract's or this one's, quoting the inspectors' sample | Five colleagues, each from where they sit · which view to weigh most |
 | Ask an AI | a plain-text prompt to copy into any AI assistant. It always holds the contract and its rules, the stated plan and, during play, the dashboard week by week. It adds only the tool tabs the student has opened (this week, or before commit): their content, such as the last six weeks, the last 5 contracts or all 40 contracts. The tab lists what's included: "Your AI knows only what you've looked at."  It asks for a forecast, an 80% range and the chance of week 12 with reasoning, and says nothing about which information matters (about 3,000 characters before week 1, 3,500 during play). The tab gives no forecast of its own, and whether the prompt was copied is recorded | Whatever you paste in · anything not on screen |
 | **History** | | |
 | Last 5 Contracts | the last contract's first six weeks and its pace (19.1 a week, 10.5 weeks to 200 units), an after-action review of it, and a list of the five newest contracts. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |
@@ -219,6 +223,15 @@ Every median, range and percentile on the desk is computed from delivered
 contracts only. This covers the Records summary, the dot strip, Last 5, Mabel,
 Analytics, the matching and the simulator's historical slip. On-time shares are out
 of all contracts, with a failure counting as not on time. The screen says so.
+
+Delivered-only ranges flatter risky plans, so every range from the record shows its
+failures beside it, for example "Contracts run like yours: delivered weeks 11–13; 1 of
+7 run like yours never delivered (1 bankrupt)". This holds on the Records summary and
+filters, the dot strip (an ✕ per failure), Last 5, Mabel's line, Analytics, the Risk
+Simulator's slip pool, Consensus and the reveal. "Use this" carries the failures into
+the week-12 chance (a failure is not on time) and into a note on the front tab.
+Analytics and the Risk Simulator scale their chance by the failure share of the
+contracts they draw on.
 
 The last contract (#40) read 100% in week 12 and was accepted in week 16, with 20
 units rejected. Its first six weeks averaged 20.6 a week. Live 1.1.0 and Monday's

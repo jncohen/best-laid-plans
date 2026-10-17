@@ -55,3 +55,75 @@ export function adaptive(p, w, k = {}) {
   // The projected acceptance week, for a forecaster who uses the same reading of the screen.
   return { hire, inspect, shift, projected: finish(p.crews + hire, inspect, Math.max(0, hire)).at };
 }
+
+/**
+ * A careful forecaster's weekly forecast, from the screen only (desk.js liveScreen and
+ * screenData): this contract's build rate from clean weeks, its defect rate from the
+ * inspectors' samples, the defects still hidden (sampled defects built, less those found
+ * and rejected), how much of the hidden stock inspection finds each week, and the record
+ * for what is still to come (scope change, crew out, parts delay). It plays the week's
+ * decision forward, then the line as it stands, through the acceptance test, over
+ * scenarios drawn from the record, and reports the median and 10th-90th percentile.
+ */
+export function screenForecast(S, L, d, k = {}) {
+  const R = S.rules, rows = L.rows, w = L.week + 1;
+  const K = { runs: 60, prior: 0.12, pad: 0.5, ...k };
+  // Build rate per crew-week, from weeks without onboarding, a crew out or a parts delay.
+  let built = 0, effort = 0;
+  rows.forEach((r, i) => {
+    const prev = i ? rows[i - 1].crews : R.crews, prev2 = i > 1 ? rows[i - 2].crews : R.crews;
+    const onboarding = r.crews > prev || (i > 0 && prev > prev2);
+    const disturbed = r.events.some((e) => /crew is out|parts delay/.test(e)) || (i > 0 && rows[i - 1].events.some((e) => /crew is out/.test(e)));
+    if (r.built <= 0 || r.backlog < 0.5 || onboarding || disturbed) return;
+    built += r.built;
+    effort += r.crews * (1 - r.inspect) * (r.shift ? R.shiftBoost : 1) * (1 - R.coordinationLoss * Math.max(0, r.crews - R.crews));
+  });
+  const perCrew = effort > 0 ? built / effort : S.history.reduce((a, b) => a + b, 0) / S.history.length / R.crews;
+  const samples = rows.filter((r) => r.sampled !== null && r.sampled !== undefined);
+  const rate = samples.length ? samples.reduce((a, r) => a + r.sampled, 0) / samples.length : K.prior;
+  // Hidden defects: what the sampled rate says was built bad, less what was found or rejected.
+  let hidden = 0, findBase = 0, findHit = 0;
+  for (const r of rows) {
+    const bad = r.built * (r.sampled ?? rate);
+    if (r.inspect > 0 && r.rejected === 0) { findBase += hidden + bad; findHit += r.found; }
+    hidden = Math.max(0, hidden + bad - r.found - r.rejected);
+  }
+  const findShare = findBase > 1 ? Math.min(0.9, findHit / findBase) : 0.35;
+  const trickle = 0.05;
+  const scopeSeen = rows.some((r) => r.shock > 0);
+  const outSeen = rows.some((r) => r.events.some((e) => /crew is out/.test(e)));
+  const delaySeen = rows.some((r) => r.events.some((e) => /parts delay/.test(e)));
+  const future = S.contracts.filter((c) => c.scopeWeek >= w);
+  let seed = 7 + w;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const sims = [];
+  for (let i = 0; i < K.runs; i++) {
+    const sc = !scopeSeen && future.length ? future[Math.floor(rnd() * future.length)] : null;
+    const outAt = !outSeen && rnd() < R.crewOutChance ? Math.max(w, R.crewOutWeekRange[0] + Math.floor(rnd() * (R.crewOutWeekRange[1] - R.crewOutWeekRange[0] + 1))) : null;
+    const delayAt = !delaySeen && rnd() < R.delayChance ? R.delayWeekRange[0] + Math.floor(rnd() * (R.delayWeekRange[1] - R.delayWeekRange[0] + 1)) : null;
+    let left = L.backlog, H = hidden, crews = Math.max(1, L.crews + (d.hire || 0)), onboard = (d.hire || 0) > 0 ? R.onboardingWeeks : L.onboarding ? 1 : 0, adding = Math.max(0, d.hire || 0), wk = w - 1;
+    while (wk < 40) {
+      wk++;
+      const insp = wk === w ? d.inspect || 0 : wk <= 9 ? d.inspect || 0 : 0;
+      const shift = wk === w && d.shift;
+      const out = outAt !== null && wk >= outAt && wk < outAt + R.crewOutWeeks ? 1 : 0;
+      const atWork = (onboard > 0 ? crews - adding * (1 - R.onboardingFactor) : crews) - out;
+      const cap = atWork * perCrew * (1 - R.coordinationLoss * Math.max(0, crews - R.crews)) * (wk === delayAt ? 1 - R.delayShare : 1) * (shift ? R.shiftBoost : 1);
+      const b = Math.min(left, cap * (1 - insp));
+      left -= b; H += b * rate;
+      if (sc && wk === sc.scopeWeek) left += sc.scopeUnits;
+      if (onboard > 0) onboard--;
+      if (left < 0.5) {
+        if (H < 0.5) break;
+        left = H * R.lateFixMultiplier; H = 0;
+      } else {
+        const f = H * (insp > 0 ? findShare : trickle); H -= f; left += f;
+      }
+    }
+    sims.push(wk);
+  }
+  sims.sort((a, b) => a - b);
+  const at = (q) => sims[Math.max(0, Math.ceil(q * sims.length) - 1)];
+  const week = at(0.5);
+  return { week, low: Math.max(w, Math.floor(at(0.1) - K.pad)), high: Math.ceil(at(0.9) + K.pad), chance: Math.round((100 * sims.filter((x) => x <= R.deadline).length) / sims.length), rate, hidden, findShare, perCrew };
+}

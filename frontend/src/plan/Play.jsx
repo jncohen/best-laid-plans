@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CONFIG, pastContracts, describePlan, onboardingRule, isCheck } from './engine';
+import { CONFIG, pastContracts, describePlan, onboardingRule, isCheck, failuresLine } from './engine';
 import { TABS, screenData, liveScreen } from './desk.js';
 import DeskTab from './DeskTabs';
 import TabStrip from './DeskStrip';
@@ -29,6 +29,7 @@ export default function Play({ project, onPlay }) {
   const [seenTabs, setSeenTabs] = useState([]);
   // For "How you played": did the student move the running forecast this week, and how long did the week take.
   const [touched, setTouched] = useState(false);
+  const [useNote, setUseNote] = useState(null); // the failures behind numbers taken from the record
   const [weekStart, setWeekStart] = useState(() => Date.now());
   const moveForecast = (v) => { setForecast(v); setTouched(true); };
   const moveRange = (f) => { setRange((r) => (typeof f === 'function' ? f(r) : f)); setTouched(true); };
@@ -60,6 +61,7 @@ export default function Play({ project, onPlay }) {
     window.scrollTo(0, 0);
   };
   const useTool = (id, f) => {
+    setUseNote(f.fail ? `${f.fail}: the range is from the delivered ones, and the chance counts the rest as not on time.` : null);
     moveForecast(Math.max(nextWeek, f.week));
     moveRange({ low: f.low, high: f.high, chance: Math.round(f.chance / 5) * 5 });
     p.noteDesk(nextWeek, `use:${id}`);
@@ -102,7 +104,8 @@ export default function Play({ project, onPlay }) {
         />
         <Slider label="Move it if the evidence says so" value={shownForecast} min={nextWeek} max={24} onChange={moveForecast}
           format={(v) => `week ${v}`}
-          hint={`Committed before week 1 (the forecast that is scored): week ${p.forecast.week}, 80% sure of ${p.forecast.low}–${p.forecast.high}. Amber band: past contracts.`} />
+          hint={`Committed before week 1 (the forecast that is scored): week ${p.forecast.week}, 80% sure of ${p.forecast.low}–${p.forecast.high}. Amber band: past contracts delivered${past.failed.total ? ` (${failuresLine(past)})` : ''}.`} />
+        {useNote && <p className="text-xs text-rose-300 mt-1">{useNote}</p>}
         <details className="mt-2 text-sm">
           <summary className="text-slate-300 cursor-pointer">Now: 80% range weeks {shownRange.low}–{shownRange.high}, {shownRange.chance}% for week {c.deadline}</summary>
           <div className="grid grid-cols-2 gap-3 mt-2">

@@ -81,7 +81,8 @@ export default function Reveal({ project, onReplay }) {
   // How every tool on the desk would have done, for the plan the student stated.
   const tools = allForecasts(screenData(), p.plan || playedPlan(p)).map((t) => ({
     about: aboutTool(t.key),
-    ...t, result: outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
+    // Never delivered is a miss for every range.
+    ...t, result: s.failed ? s.failed : outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
   }));
   const usedTool = p.desk?.tool ? tabByLetter(p.desk.tool) : null;
   // The running forecast: when did it first come within a week of the outcome?
@@ -91,11 +92,11 @@ export default function Reveal({ project, onReplay }) {
   useEffect(() => {
     if (p.tracked) return;
     p.tracked = true;
-    addToTrack({ seed: p.seedInput || p.seed.toString(36), week: f.week, low: f.low, high: f.high, outcome, held: outcome >= f.low && outcome <= f.high });
-  }, [p, f, outcome]);
+    addToTrack({ seed: p.seedInput || p.seed.toString(36), week: f.week, low: f.low, high: f.high, outcome, held: s.held });
+  }, [p, f, outcome, s.held]);
   const delivered = p.result === 'DELIVERED';
   const played = playedPlan(p);
-  const j = judgeForecast({ forecast: f, outcome, stated: p.plan, played });
+  const j = judgeForecast({ forecast: f, outcome, stated: p.plan, played, failed: s.failed });
 
   const end = Math.ceil(Math.max(outcome, c.deadline, past.p90)) + 1;
 
@@ -116,7 +117,7 @@ export default function Reveal({ project, onReplay }) {
         <p className="text-xs text-slate-400 mb-3">Keep this screen open: your instructor will ask the room for a show of hands.</p>
         <dl className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {[
-            ['Your 80% range', s.held ? 'Held' : `Missed, ${Math.abs(s.missBy)} wk ${s.missBy > 0 ? 'late' : 'early'}`, `weeks ${f.low}–${f.high}`],
+            ['Your 80% range', s.held ? 'Held' : s.failed ? `Missed: ${s.failed}` : `Missed, ${Math.abs(s.missBy)} wk ${s.missBy > 0 ? 'late' : 'early'}`, `weeks ${f.low}–${f.high}`],
             ['Outcome', `week ${outcome}`, delivered ? 'accepted' : p.result === 'BANKRUPT' ? 'bankrupt: projected' : 'terminated: projected'],
             [`Your chance of week ${c.deadline}`, `${f.onTimeChance}%`, s.onTime ? 'you made it' : 'you missed it'],
             ['Your plan', j.kept === null ? '—' : j.kept ? 'Kept' : 'Changed', j.kept === null ? 'no plan stated' : j.kept ? 'played as stated' : 'played differently'],
@@ -198,14 +199,17 @@ export default function Reveal({ project, onReplay }) {
                 <span className="text-slate-200 min-w-0">{t.name}</span>
                 <span className="font-mono text-xs text-slate-400 whitespace-nowrap">wk {t.week} ({t.low}–{t.high})</span>
                 <span className={`text-xs font-semibold w-20 text-right ${t.result === 'held' ? 'text-slate-100' : 'text-rose-300'}`}>
-                  {t.result === 'held' ? 'held' : `missed ${t.result}`}
+                  {t.result === 'held' ? 'held' : `missed${s.failed ? ':' : ''} ${t.result}`}
                 </span>
               </div>
+              {t.fail && <div className="text-[11px] text-rose-300">{t.fail}</div>}
               {t.about && <div className="text-[11px] text-slate-500">{t.about}</div>}
             </li>
           ))}
         </ul>
-        <p className="text-[11px] text-slate-500 mt-2">Each tool's 80% range for the plan you stated, against week {outcome}. The tools never knew this scenario.</p>
+        <p className="text-[11px] text-slate-500 mt-2">
+          Each tool's 80% range for the plan you stated, against {s.failed ? `a contract that was never delivered (${s.failed}): a miss for every range` : `week ${outcome}`}. Ranges from the record are from delivered contracts; the line under one counts those that weren't. The tools never knew this scenario.
+        </p>
       </Card>
 
       <Card title="Why: what your dashboard told you">

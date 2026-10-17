@@ -54,7 +54,7 @@ export function Slider({ label, value, min, max, step = 1, onChange, format = (v
  * `active` (one flag per week) dims the contracts a filter leaves out; `band` shades
  * the 10th–90th percentile of the ones left in.
  */
-export function DotStrip({ weeks, deadline, min = 8, max = 22, highlight = [], active = null, band = null }) {
+export function DotStrip({ weeks, deadline, min = 8, max = 22, highlight = [], active = null, band = null, failed = [] }) {
   const span = max - min;
   const x = (w) => `${((Math.min(max, Math.max(min, w)) - min) / span) * 100}%`;
   // Stack dots that share a week so every contract is visible.
@@ -91,6 +91,13 @@ export function DotStrip({ weeks, deadline, min = 8, max = 22, highlight = [], a
           <span key={w} className="absolute -translate-x-1/2" style={{ left: x(w) }}>{w}</span>
         ))}
       </div>
+      {failed.length > 0 && (
+        // Contracts never delivered have no week, so they sit beside the strip, not on it.
+        <div className="text-[11px] text-rose-300 mt-1" aria-label={`${failed.length} never delivered`}>
+          <span className="font-mono tracking-widest" aria-hidden="true">{'✕'.repeat(failed.length)}</span>{' '}
+          never delivered: {['bankrupt', 'terminated'].map((k) => [k, failed.filter((f) => f === k).length]).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ')}
+        </div>
+      )}
     </div>
   );
 }

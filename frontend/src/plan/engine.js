@@ -75,6 +75,10 @@ export const CONFIG = {
   delayShare: 0.5,
   delayWeekRange: [4, 10],
 
+  // Inspection's sample: each inspected week, the inspectors report the share of that week's
+  // units they found defective. It reads the true defect rate with this relative error.
+  sampleError: 0.08,
+
   // Attention: at most this many tool tabs can be viewed each week (and before week 1).
   // The front tab, The Contract and Ask an AI don't count; re-opening a tab that week is free.
   viewsPerWeek: 3,
@@ -144,6 +148,9 @@ export class Project {
     const delay = r() < cfg.delayChance, delayAt = cfg.delayWeekRange[0] + Math.floor(r() * (cfg.delayWeekRange[1] - cfg.delayWeekRange[0] + 1));
     this.crewOutWeek = crewOut ? crewOutAt : null;
     this.delayWeek = delay ? delayAt : null;
+    // The inspectors' sampling error, one per week, drawn last so every earlier draw keeps its value.
+    // It changes what the screen reports, never what happens.
+    this._sample = Array.from({ length: cfg.horizon + 1 }, () => (r() + r() + r() - 1.5) * 2);
 
     this.week = 0;
     this.crews = cfg.crews;
@@ -237,7 +244,7 @@ export class Project {
       this.done = true;
       this.result = 'BANKRUPT';
       const row = {
-        week: this.week, crews: this.crews, shift: false, inspect: 0, built: 0, found: 0, rejected: 0, shock: 0, cost: 0,
+        week: this.week, crews: this.crews, shift: false, inspect: 0, built: 0, found: 0, sampled: null, rejected: 0, shock: 0, cost: 0,
         budget: this.budget, backlog: +this.backlog.toFixed(1), reported: +this.reportedPct().toFixed(4), true: +this.truePct().toFixed(4), defectRate: 0,
         bankrupt: true,
         events: [`Week ${this.week}'s payroll (${Math.round(cost / 1000)}k) would take the company past its ${Math.round(c.creditLine / 1000)}k credit line. It can't pay its crews: the company is bankrupt and the contract ends.`],
@@ -276,6 +283,8 @@ export class Project {
     const built = Math.min(this.backlog, capacity * (1 - inspect));
     const rate = this.defectRate(shift);
     const bad = built * rate;
+    // What the inspectors' sample says about this week's units (only when some of the line inspects).
+    const sampled = inspect > 0 && built > 0 ? +Math.max(0, rate * (1 + c.sampleError * this._sample[this.week])).toFixed(3) : null;
     this.backlog -= built;
     this.hidden += bad;
     this.shiftStreak = shift ? this.shiftStreak + 1 : Math.max(0, this.shiftStreak - 1);
@@ -315,6 +324,7 @@ export class Project {
         events.push(inspect > 0 ? `Inspection found ${units}; back in the queue.` : `${units[0].toUpperCase()}${units.slice(1)} turned up in the work; back in the queue.`);
       }
     }
+    if (sampled !== null) events.push(`Inspectors' sample: ${(sampled * 100).toFixed(1)}% of this week's units were defective.`);
 
     if (forecast !== null && forecast !== undefined && Number.isFinite(+forecast)) {
       this.forecastLog.push({ week: this.week, forecast: +forecast, ...(range || {}) });
@@ -338,6 +348,7 @@ export class Project {
       inspect,
       built: +built.toFixed(1),
       found: +found.toFixed(1),
+      sampled,
       rejected: +rejected.toFixed(1),
       shock,
       cost,
@@ -377,14 +388,16 @@ export class Project {
       : Math.max(0, Math.round(100 - late * c.latePenaltyPerWeek - (over / 50_000) * c.overspendPenaltyPer50k));
 
     const f = this.forecast || { week: c.deadline, low: c.deadline, high: c.deadline, onTimeChance: 50 };
-    const held = outcome >= f.low && outcome <= f.high;
-    const missBy = held ? 0 : +(outcome > f.high ? outcome - f.high : outcome - f.low).toFixed(1);
+    // A contract never delivered misses every range: its outcome week is only a projection.
+    const failed = this.result === 'BANKRUPT' ? 'bankrupt' : this.result === 'TERMINATED' ? 'terminated' : null;
+    const held = !failed && outcome >= f.low && outcome <= f.high;
+    const missBy = held ? 0 : failed ? null : +(outcome > f.high ? outcome - f.high : outcome - f.low).toFixed(1);
     const onTime = this.result === 'DELIVERED' && this.finishWeek <= c.deadline;
     const p = Math.max(0, Math.min(1, f.onTimeChance / 100));
     const brier = (p - (onTime ? 1 : 0)) ** 2;
     const forecastScore = Math.max(0, Math.round(100 - 8 * Math.abs(outcome - f.week) - (held ? 0 : 20) - 40 * brier));
 
-    return { delivery, forecast: forecastScore, updating: updatingScore(this.forecastLog, outcome, onTime, c), outcome, held, missBy, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
+    return { delivery, forecast: forecastScore, updating: updatingScore(this.forecastLog, outcome, onTime, c), outcome, held, missBy, failed, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
   }
 
 }
@@ -487,12 +500,15 @@ export const eventRules = (c = CONFIG) => [
   c.delayChance > 0 && `About ${Math.round(c.delayChance * 100)}% of contracts hit a parts delay that idles ${Math.round(c.delayShare * 100)}% of the line for one week, somewhere in weeks ${c.delayWeekRange[0]}–${c.delayWeekRange[1]}.`,
 ].filter(Boolean);
 
-/** "3 of 40 never delivered (2 bankrupt, 1 terminated)", or null when all were delivered. */
-export function failuresLine(sum) {
+/**
+ * "3 of 40 never delivered (2 bankrupt, 1 terminated)", or null when all were delivered.
+ * `what` names the contracts: failuresLine(sum, 'run like yours') gives "1 of 7 run like yours never delivered (1 bankrupt)".
+ */
+export function failuresLine(sum, what = '') {
   const f = sum.failed;
   if (!f || !f.total) return null;
   const parts = [f.bankrupt && `${f.bankrupt} bankrupt`, f.terminated && `${f.terminated} terminated`].filter(Boolean).join(', ');
-  return `${f.total} of ${sum.n} never delivered (${parts})`;
+  return `${f.total} of ${sum.n}${what ? ` ${what}` : ''} never delivered (${parts})`;
 }
 
 // ── The Decision Desk, as recorded ───────────────────────────────────────────
@@ -556,13 +572,14 @@ export const isHandsOff = (plan) => { const p = normalizePlan(plan); return p.cr
 /**
  * The two facts the reveal states, and the record for the plan played. Information
  * only: nothing here changes a score.
- *   held, missBy   did the 80% range hold; if not, by how many weeks (+ late, − early)
+ *   held, missBy   did the 80% range hold; if not, by how many weeks (+ late, − early).
+ *                  A contract never delivered (`failed`: 'bankrupt' or 'terminated') misses any range; missBy is null.
  *   kept           was the plan played the plan stated (null with no stated plan)
  * Hands-off play also returns the record of the past managers who coasted.
  */
-export function judgeForecast({ forecast: f, outcome, stated, played }, cfg = CONFIG) {
-  const held = outcome >= f.low && outcome <= f.high;
-  const missBy = held ? 0 : +(outcome > f.high ? outcome - f.high : outcome - f.low).toFixed(1);
+export function judgeForecast({ forecast: f, outcome, stated, played, failed = null }, cfg = CONFIG) {
+  const held = !failed && outcome >= f.low && outcome <= f.high;
+  const missBy = held ? 0 : failed ? null : +(outcome > f.high ? outcome - f.high : outcome - f.low).toFixed(1);
   const matched = matchContracts(played, { cfg });
   const kept = stated ? planKept(stated, played) : null;
   let coaster = null;

@@ -33,6 +33,7 @@ export function ForecastTile({ f, tone, onUse, label = 'This tool says' }) {
         <div className="text-sm text-slate-200">80% range <span className="font-mono">{f.low}–{f.high}</span></div>
         <div className="text-sm text-slate-200">week 12: <span className="font-mono">{f.chance}%</span></div>
       </div>
+      {f.fail && <p className="text-xs text-rose-300 mt-1">{f.fail}. The range is from delivered contracts; the week-12 chance counts the rest as not on time.</p>}
       {onUse && (
         <button type="button" onClick={onUse} className="mt-2 w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">
           Use this on my prediction
@@ -78,7 +79,7 @@ function ContractTab() {
         <p>Your company can overspend the budget by up to {money(c.creditLine)} on credit. Past that, it can't make payroll: the company goes bankrupt and the contract ends.</p>
         <p>Customers on this line add to the requirement partway through: every past contract on record had a scope change. Nobody knows in advance which week it comes or how many units it adds.</p>
         <p>Some built units turn out defective. The dashboard counts them complete until inspection or the customer's acceptance test finds them.</p>
-        <p>Contracts differ: some lines build faster or slower than others, and some turn out more defects. Each week's output and inspection finds show how this one runs.</p>
+        <p>Contracts differ: some lines build faster or slower than others, and some turn out more defects. Each week's output and inspection finds show how this one runs. In any week you inspect, the inspectors also report the share of that week's units their sample found defective.</p>
         {eventRules(c).map((e) => <p key={e}>{e}</p>)}
         <p>{attentionRule(c)}</p>
       </div>
@@ -141,6 +142,14 @@ function StatusTab({ S, plan, onUse, live }) {
           ({(r.built / Math.max(1, r.crews * (1 - r.inspect))).toFixed(1)} a crew building; the last contract: {(S.history.reduce((a, b) => a + b, 0) / S.history.length / S.rules.crews).toFixed(1)}).
           {r.found > 0.5 ? ` Defects found: ${Math.round(r.found)}.` : ''}</p>
       ); })()}
+      {live && (
+        <p className="text-sm text-slate-300 mt-1">
+          {st.sample
+            ? <>Inspectors' sample: <span className="font-mono">{(100 * st.sample.last).toFixed(1)}%</span> of week {st.sample.lastWeek}'s units defective{st.sample.weeks > 1 ? <> (<span className="font-mono">{(100 * st.sample.mean).toFixed(1)}%</span> on average over {st.sample.weeks} inspected weeks)</> : ''}.</>
+            : "No inspectors' sample: no week has been inspected."}
+          {' '}Defects found so far: <span className="font-mono">{Math.round(st.found)}</span>. The last contract had {st.rejectedLast} of {R.scope} units rejected at acceptance.
+        </p>
+      )}
       <p className="text-[11px] text-slate-500">
         Standard earned-value forecasting: estimate at completion = planned duration ÷ SPI. The range is that estimate as of each week shown
         (weeks {st.forecast.low}–{st.forecast.high}). Earned value counts units reported complete.
@@ -428,7 +437,7 @@ function AnalyticsTab({ S, plan, onUse, planNote }) {
         <circle cx={x(plan.crews)} cy={y(a.predicted)} r="7" fill="none" stroke="#fff" strokeWidth="2" />
         {[0, 1, 2, 3].map((c) => <text key={c} x={x(c)} y={h - 6} textAnchor="middle" {...svgText}>+{c} crews</text>)}
       </svg>
-      <p className="text-[11px] text-slate-500">OLS: week accepted on crews added, inspection (any, and share) and second shift, across the {a.n} delivered past contracts. Line: fitted for your inspection and shift. 80% prediction interval ±{(1.306 * a.se).toFixed(1)} weeks.</p>
+      <p className="text-[11px] text-slate-500">OLS: week accepted on crews added, inspection (any, and share) and second shift, across the {a.n} delivered past contracts; the {a.left} never delivered have no week, so they aren't in the fit. Line: fitted for your inspection and shift. 80% prediction interval ±{(1.306 * a.se).toFixed(1)} weeks.</p>
     </Frame>
   );
 }
@@ -466,7 +475,7 @@ function SimulatorTab({ S, plan, onUse, planNote, live }) {
         {m.runs.toLocaleString()} iterations of the Schedule, with the pace's week-to-week wobble and a scope change drawn from the record.
         {live ? ` Starts from week ${live.week}'s reported state.` : ''}
         {m.rework && m.tested ? ' The acceptance test has already run, so its rework is in the units left.' : m.rework
-          ? ` Each run also adds a historical slip: how much later one of ${m.slips.n} past contracts inspected like your plan was accepted than this model predicted for it (median +${m.slips.median} weeks, mostly rework).`
+          ? ` Each run also adds a historical slip: how much later one of ${m.slips.n} delivered past contracts inspected like your plan was accepted than this model predicted for it (median +${m.slips.median} weeks, mostly rework).${m.pool.failed ? ` ${m.pool.failed} more of them never delivered and have no slip.` : ''}`
           : ' Rework is switched off: the model sees only the plan, so it finishes when the dashboard would read 100%.'}
       </p>
     </Frame>

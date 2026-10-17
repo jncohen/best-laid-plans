@@ -54,13 +54,14 @@ export default function Records({ past, plan = null, onUse = null }) {
       <DotStrip
         weeks={past.contracts.filter((r) => r.delivered).map((r) => r.accepted)} active={past.contracts.filter((r) => r.delivered).map((r) => ids.has(r.id))}
         band={sum.delivered ? [sum.p10, sum.p90] : null} deadline={c.deadline}
+        failed={rows.filter((r) => r.delivered === false).map((r) => (r.bankrupt ? 'bankrupt' : 'terminated'))}
       />
 
       <p className="text-sm text-slate-300" aria-live="polite">
-        {all ? `All ${sum.n} contracts` : `${sum.n} of ${past.contracts.length} contracts`}
+        {match ? `Contracts run like yours (${sum.n})` : all ? `All ${sum.n} contracts` : `${sum.n} of ${past.contracts.length} contracts`}
         {sum.delivered > 0 && <>: median <strong className="text-amber-300">week {sum.median}</strong>, 10th–90th percentile weeks{' '}
           <strong className="text-amber-300">{sum.p10}–{sum.p90}</strong>{sum.failed.total ? ` (of the ${sum.delivered} delivered)` : ''}, {Math.round(sum.onTimeShare * 100)}% made week {c.deadline}.</>}
-        {failuresLine(sum) && <> <span className="text-rose-300">{failuresLine(sum)}.</span></>}
+        {failuresLine(sum) && <> <span className="text-rose-300">{failuresLine(sum, match ? 'run like yours' : '')}.</span></>}
       </p>
       {sum.failed.total > 0 && <p className="text-[11px] text-slate-500 -mt-2">Weeks are from delivered contracts only. The on-time share is out of all {sum.n}; a contract never delivered counts as not on time.</p>}
       {sum.n > 0 && sum.delivered < 5 && (
@@ -93,9 +94,9 @@ export default function Records({ past, plan = null, onUse = null }) {
         </button>
       </div>
       {onUse && sum.delivered > 0 && (
-        <button type="button" onClick={() => onUse({ week: sum.median, low: sum.p10, high: sum.p90, chance: Math.round(100 * sum.onTimeShare) }, match ? 'contracts run like my plan' : all ? 'all 40' : 'filtered')}
+        <button type="button" onClick={() => onUse({ week: sum.median, low: sum.p10, high: sum.p90, chance: Math.round(100 * sum.onTimeShare), fail: failuresLine(sum, match ? 'run like yours' : '') }, match ? 'contracts run like my plan' : all ? 'all 40' : 'filtered')}
           className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">
-          Use these {sum.n} contracts on my prediction (week {sum.median}, {sum.p10}–{sum.p90}, {Math.round(100 * sum.onTimeShare)}%)
+          Use these {sum.n} contracts on my prediction (week {sum.median}, {sum.p10}–{sum.p90}, {Math.round(100 * sum.onTimeShare)}%{sum.failed.total ? `; ${sum.failed.total} never delivered` : ''})
         </button>
       )}
       {!plan && <p className="text-[11px] text-slate-500 -mt-1">Choose your plan at the bottom of the page to find contracts run like it.</p>}

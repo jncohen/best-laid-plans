@@ -64,7 +64,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
     n.low = Math.max(6, Math.min(n.week, f.low));
     n.high = Math.min(24, Math.max(n.week, f.high));
     setWeek(n.week); setLow(n.low); setHigh(n.high); setChance(n.chance);
-    setLoaded({ id, label, numbers: n });
+    setLoaded({ id, label, numbers: n, fail: f.fail || null });
     open('commit');
   };
   const commit = () => {
@@ -112,7 +112,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
           {loaded && (
             <p className="text-xs text-slate-300 bg-slate-950 rounded-lg px-3 py-2 -mt-2">
               Loaded from <strong className="text-white">{tabById(loaded.id).name}{loaded.label ? ` (${loaded.label})` : ''}</strong>: week {loaded.numbers.week},{' '}
-              {loaded.numbers.low}–{loaded.numbers.high}, {loaded.numbers.chance}%. You can still change them.
+              {loaded.numbers.low}–{loaded.numbers.high}, {loaded.numbers.chance}%.
+              {loaded.fail && <span className="text-rose-300"> {loaded.fail}: the range is from the delivered ones, and the chance counts the rest as not on time.</span>} You can still change them.
             </p>
           )}
           <Slider label="Week the customer accepts it" value={week} min={8} max={22} onChange={setPoint} format={(v) => `week ${v}`} />
