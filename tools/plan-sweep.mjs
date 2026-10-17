@@ -19,9 +19,12 @@
  *   8. Matching is as reliable as the whole record and sharper where the plan is far
  *      from typical: for hands-off and +3 crews with 10% inspection, the matched
  *      contracts' p10-p90 holds within 3 points as often as all 40, and is narrower.
- *   9-11. The Decision Desk (frontend/src/plan/desk.js): record-based tools hold
- *      >= 80%, inside-view tools <= 10%, and the AI Assistant exactly as often as
- *      the Status Report it is given. Every tool, colleague included, is reported.
+ *   9-11. The Decision Desk (frontend/src/plan/desk.js): the tools that use the
+ *      record (Records, Analytics, the AI Assistant, Mabel) hold >= 80%; the plan and
+ *      the pace on paper (Status Report, Schedule, Cost Management, Sam, the
+ *      Risk Simulator with rework off) hold <= 10%; the Risk Simulator with its
+ *      historical rework on holds >= 80%. Every tool and colleague is reported, with
+ *      the share of the desk that is calibrated (holds >= 75%).
  *   12. Bankruptcy (past the credit line) never hits a plan that wins: no strategy
  *      on time >= 40% of the time goes bankrupt in more than 5% of runs.
  */
@@ -185,14 +188,18 @@ for (const [name, h] of Object.entries(deskHold)) {
   deskMean[name] = mean(Object.values(h));
   console.log(name.padEnd(42) + COMMON_PLANS.map((cp) => pct(h[cp.key]).padStart(10)).join('') + pct(deskMean[name]).padStart(7) + mean(deskBrier[name]).toFixed(2).padStart(7));
 }
-const RECORD_TOOLS = ['Records, all 40', 'Records, like my plan', 'Analytics'];
-const INSIDE_TOOLS = ['Status Report', 'Sprint Burndown', 'Schedule', 'Risk Simulator'];
+const RECORD_TOOLS = ['Records, all 40', 'Records, like my plan', 'Analytics', 'AI Assistant', 'Team Chat: Mabel, veteran on the line'];
+const INSIDE_TOOLS = ['Status Report', 'Schedule', 'Cost Management', 'Risk Simulator (rework off)', 'Team Chat: Sam, planner'];
+const deskNames = Object.keys(deskMean).filter((k) => k !== 'Risk Simulator (rework off)');
+const calibrated = deskNames.filter((k) => deskMean[k] >= 0.75);
+console.log(`
+Calibrated (holds >= 75%): ${calibrated.length} of ${deskNames.length} desk forecasts (simulator counted as shipped, rework on): ${calibrated.join(', ')}`);
 const winners = vals.filter((r) => r.onTime >= 0.4);
 checks.push(
-  ['9. Desk: record-based tools hold >= 80%', RECORD_TOOLS.every((k) => deskMean[k] >= 0.8), RECORD_TOOLS.map((k) => `${k} ${pct(deskMean[k])}`).join('  ')],
-  ['10. Desk: inside-view tools hold <= 10%', INSIDE_TOOLS.every((k) => deskMean[k] <= 0.1), INSIDE_TOOLS.map((k) => `${k} ${pct(deskMean[k])}`).join('  ')],
-  ['11. Desk: the AI Assistant holds exactly as often as the Status Report', JSON.stringify(deskHold['AI Assistant']) === JSON.stringify(deskHold['Status Report']),
-    `AI ${pct(deskMean['AI Assistant'])}, Status Report ${pct(deskMean['Status Report'])}`],
+  ['9. Desk: tools that use the record hold >= 80%', RECORD_TOOLS.every((k) => deskMean[k] >= 0.8), RECORD_TOOLS.map((k) => `${k} ${pct(deskMean[k])}`).join('  ')],
+  ['10. Desk: the pace and the plan on paper hold <= 10%', INSIDE_TOOLS.every((k) => deskMean[k] <= 0.1), INSIDE_TOOLS.map((k) => `${k} ${pct(deskMean[k])}`).join('  ')],
+  ['11. Desk: the Risk Simulator with historical rework holds >= 80%', deskMean['Risk Simulator (with rework)'] >= 0.8,
+    `with rework ${pct(deskMean['Risk Simulator (with rework)'])}, off ${pct(deskMean['Risk Simulator (rework off)'])}`],
   ['12. No plan on time >= 40% goes bankrupt more than 5% of the time', winners.every((r) => r.broke <= 0.05),
     Object.entries(rows).filter(([, r]) => r.onTime >= 0.4).map(([k, r]) => `${k.trim()} ${pct(r.broke)}`).join('  ') + ` · most: ${Object.entries(rows).sort((a, b) => b[1].broke - a[1].broke)[0][0].trim()} ${pct(Math.max(...vals.map((r) => r.broke)))}`],
 );

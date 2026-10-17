@@ -2,8 +2,8 @@
 // only by desk.js, which sees only what the briefing shows.
 import { useState } from 'react';
 import {
-  statusReport, sprintBurndown, costManagement, schedule, lessonsLearned, teamChat, expertPanel, predictionMarket, aiAssistant,
-  industryBenchmark, scenarios, riskRegister, analytics, riskSimulator, consensus, FORECASTERS, FORECASTER_NAMES, tabById,
+  statusReport, costManagement, schedule, lastFive, teamChat, aiAssistant,
+  scenarios, riskRegister, analytics, riskSimulator, consensus, FORECASTERS, FORECASTER_NAMES, tabById,
 } from './desk.js';
 import { pastContracts, describePlan } from './engine';
 import { Card } from './ui';
@@ -20,7 +20,6 @@ const TONE = {
 const toneOf = (id) => TONE[tabById(id)?.tone || 'front'];
 
 const W = 600;
-const FRAME_NAMES = { pace: 'the pace', deadline: 'the deadline', blend: 'a blend of pace and record', record: 'the record' };
 const svgText = { fontSize: 11, fill: '#94a3b8' };
 
 /** Sees · can't see, the tab's honest label. */
@@ -79,65 +78,40 @@ function StatusTab({ S, onUse }) {
   const st = statusReport(S);
   const R = S.rules;
   const light = { green: 'bg-emerald-400', amber: 'bg-amber-400', red: 'bg-rose-500' }[st.light];
-  // Burn-up: cumulative reported units for the weeks shown, then the projection at the same pace.
+  // Burn-up: cumulative earned units for the weeks shown, then the EVM projection to completion.
   const cum = S.history.reduce((a, v) => [...a, a[a.length - 1] + v], [0]);
-  const end = Math.max(R.deadline, Math.ceil(st.weeksAtPace)) + 1, h = 170;
+  const end = Math.max(R.deadline, Math.ceil(st.eacWeeks)) + 1, h = 170;
   const x = (w) => 36 + (w / end) * (W - 48), y = (u) => 14 + (1 - u / (R.scope * 1.05)) * (h - 38);
   return (
-    <Frame id="status" kind="executive dashboard" f={st.forecast} onUse={onUse}>
+    <Frame id="status" kind="earned-value status report" f={st.forecast} onUse={onUse}>
       <div className="flex items-center gap-3 mb-3">
         <span className={`w-10 h-10 rounded-full ${light} shadow-lg shrink-0`} aria-label={`status ${st.light}`} />
         <div>
-          <div className="text-lg font-bold text-white uppercase">{st.light}: on schedule</div>
-          <div className="text-xs text-slate-400">Week {st.weeksShown} of the last contract's line · reported complete {Math.round((100 * st.built) / R.scope)}% vs plan {Math.round((100 * st.planned) / R.scope)}%</div>
+          <div className="text-lg font-bold text-white uppercase">{st.light}: ahead of schedule</div>
+          <div className="text-xs text-slate-400">Week {st.weeksShown} of the last contract · earned {Math.round((100 * st.built) / R.scope)}% vs planned {Math.round((100 * st.planned) / R.scope)}%</div>
         </div>
       </div>
       <div className="grid grid-cols-4 gap-2">
-        <Tile label="% complete" value={`${Math.round((100 * st.built) / R.scope)}%`} tone="text-sky-300" />
-        <Tile label="SPI" value={st.spi} sub="schedule" tone="text-sky-300" />
-        <Tile label="CPI" value={st.cpi} sub="cost" tone="text-sky-300" />
-        <Tile label="Pace" value={st.pace} sub="units/wk" tone="text-sky-300" />
+        <Tile label="Earned" value={`${Math.round((100 * st.built) / R.scope)}%`} tone="text-sky-300" />
+        <Tile label="SPI" value={st.spi} sub="EV ÷ PV" tone="text-sky-300" />
+        <Tile label="CPI" value={st.cpi} sub="EV ÷ AC" tone="text-sky-300" />
+        <Tile label="EAC (time)" value={`wk ${st.eacWeeks}`} sub={`${R.deadline} wk ÷ SPI`} tone="text-sky-300" />
       </div>
       <svg viewBox={`0 0 ${W} ${h}`} width="100%" className="mt-3" role="img" aria-label="Burn-up chart">
         <line x1={x(0)} y1={y(R.scope)} x2={x(end)} y2={y(R.scope)} stroke="#475569" strokeDasharray="3 3" />
         <text x={x(0) + 4} y={y(R.scope) - 4} {...svgText}>scope {R.scope}</text>
         <line x1={x(0)} y1={y(0)} x2={x(R.deadline)} y2={y(R.scope)} stroke="#64748b" strokeWidth="1.5" />
-        <text x={x(R.deadline) - 4} y={y(R.scope) + 14} textAnchor="end" {...svgText}>plan</text>
+        <text x={x(R.deadline) - 4} y={y(R.scope) + 14} textAnchor="end" {...svgText}>planned value</text>
         <line x1={x(R.deadline)} x2={x(R.deadline)} y1={10} y2={h - 22} stroke="#fb7185" strokeDasharray="4 3" />
-        <line x1={x(st.weeksShown)} y1={y(st.built)} x2={x(st.weeksAtPace)} y2={y(R.scope)} stroke="#38bdf8" strokeDasharray="5 4" strokeWidth="2" />
+        <line x1={x(st.weeksShown)} y1={y(st.built)} x2={x(st.eacWeeks)} y2={y(R.scope)} stroke="#38bdf8" strokeDasharray="5 4" strokeWidth="2" />
         <polyline points={cum.map((u, w) => `${x(w)},${y(u)}`).join(' ')} fill="none" stroke="#38bdf8" strokeWidth="3" />
-        <text x={x(st.weeksAtPace) + 4} y={y(R.scope) + 14} fill="#7dd3fc" fontSize="11">done wk {st.weeksAtPace}</text>
+        <text x={x(st.eacWeeks) + 4} y={y(R.scope) + 14} fill="#7dd3fc" fontSize="11">forecast wk {st.eacWeeks}</text>
         {Array.from({ length: Math.floor(end / 2) + 1 }, (_, i) => i * 2).map((w) => <text key={w} x={x(w)} y={h - 6} textAnchor="middle" {...svgText}>{w}</text>)}
       </svg>
-      <p className="text-[11px] text-slate-500">Earned value counts units reported complete. Green means reported progress is ahead of plan.</p>
-    </Frame>
-  );
-}
-
-function BurndownTab({ S, onUse }) {
-  const b = sprintBurndown(S);
-  const R = S.rules;
-  const left = S.history.reduce((a, v) => [...a, a[a.length - 1] - v], [R.scope]);
-  const end = Math.max(R.deadline, b.forecast.week) + 1, h = 170;
-  const x = (w) => 36 + (w / end) * (W - 48), y = (u) => 14 + (1 - u / R.scope) * (h - 38);
-  const proj = (R.scope - (R.scope - left[left.length - 1])) / b.velocity + S.history.length;
-  return (
-    <Frame id="burndown" kind="agile burndown" f={b.forecast} onUse={onUse}>
-      <div className="grid grid-cols-3 gap-2">
-        <Tile label="Velocity" value={b.velocity} sub="points/sprint" tone="text-sky-300" />
-        <Tile label="Remaining" value={Math.round(left[left.length - 1])} sub={`after sprint ${S.history.length}`} />
-        <Tile label="Projected done" value={`sprint ${b.forecast.week}`} tone="text-sky-300" />
-      </div>
-      <svg viewBox={`0 0 ${W} ${h}`} width="100%" className="mt-3" role="img" aria-label="Burndown chart">
-        <line x1={x(0)} y1={y(R.scope)} x2={x(R.deadline)} y2={y(0)} stroke="#64748b" strokeDasharray="3 3" />
-        <text x={x(R.deadline)} y={y(0) - 6} textAnchor="end" {...svgText}>ideal</text>
-        <line x1={x(R.deadline)} x2={x(R.deadline)} y1={10} y2={h - 22} stroke="#fb7185" strokeDasharray="4 3" />
-        <polyline points={left.map((u, w) => `${x(w)},${y(u)}`).join(' ')} fill="none" stroke="#38bdf8" strokeWidth="3" />
-        <line x1={x(S.history.length)} y1={y(left[left.length - 1])} x2={x(proj)} y2={y(0)} stroke="#38bdf8" strokeDasharray="5 4" strokeWidth="2" />
-        {S.history.map((v, i) => <rect key={i} x={x(i + 1) - 6} y={y(0) - (v / R.scope) * (h - 38)} width="12" height={(v / R.scope) * (h - 38)} fill="#38bdf8" fillOpacity="0.25" />)}
-        {Array.from({ length: Math.floor(end / 2) + 1 }, (_, i) => i * 2).map((w) => <text key={w} x={x(w)} y={h - 6} textAnchor="middle" {...svgText}>{w}</text>)}
-      </svg>
-      <p className="text-[11px] text-slate-500">One sprint = one week; one point = one unit built. Bars: velocity per sprint, fastest {b.fast.toFixed(1)}, slowest {b.slow.toFixed(1)}.</p>
+      <p className="text-[11px] text-slate-500">
+        Standard earned-value forecasting: estimate at completion = planned duration ÷ SPI. The range is that estimate as of each week shown
+        (weeks {st.forecast.low}–{st.forecast.high}). Earned value counts units reported complete.
+      </p>
     </Frame>
   );
 }
@@ -216,18 +190,30 @@ function ScheduleTab({ S, plan, onUse, planNote }) {
   );
 }
 
-function LessonsTab({ S, onUse }) {
-  const L = lessonsLearned(S);
+function Last5Tab({ S, onUse }) {
+  const L = lastFive(S);
+  const N = L.newest;
+  const plan = (r) => [r.crewsAdded ? `+${r.crewsAdded} crews (wk ${r.hires.map((h) => h.week).join(', ')})` : 'no crews added',
+    r.inspect ? `${Math.round(r.inspect * 100)}% inspection` : 'no inspection', r.shiftWeeks ? `${r.shiftWeeks} second-shift weeks` : 'no second shift'].join(', ');
   return (
-    <Frame id="lessons" kind="after-action review" f={L.forecast} onUse={onUse}>
-      <div className="space-y-3 text-sm text-slate-300">
-        <div><div className="text-xs font-bold uppercase tracking-wider text-amber-300">What happened</div>
-          <p>Same line, same {S.rules.crews} crews, built flat out with no inspection. The dashboard showed {L.pace} units a week and read 100% in week {L.dashboardFullWeek}.</p></div>
-        <div><div className="text-xs font-bold uppercase tracking-wider text-amber-300">What went wrong</div>
-          <p>The customer's acceptance test rejected <span className="text-rose-300 font-semibold">{L.rejected} units</span>. Fixing them that late took twice the work. The contract was accepted in week {L.deliveredWeek}, {L.deliveredWeek - L.dashboardFullWeek} weeks after the dashboard said done.</p></div>
-        <div><div className="text-xs font-bold uppercase tracking-wider text-amber-300">Lessons</div>
-          <ul className="list-disc pl-5 space-y-1"><li>100% on the dashboard is not accepted.</li><li>Defects found at the end cost double.</li><li>Expect something like week {L.deliveredWeek} if you run it the same way.</li></ul></div>
+    <Frame id="last5" kind="recent projects and after-action review" f={L.forecast} onUse={onUse}>
+      <div className="text-xs font-bold uppercase tracking-wider text-amber-300">After-action review · contract #{N.id}, the line's last</div>
+      <div className="space-y-2 text-sm text-slate-300 mt-2">
+        <p><span className="text-slate-500">What happened.</span> Same line, same {S.rules.crews} crews, {plan(N)}. The dashboard showed {N.pace} units a week and read 100% in week {N.dashboardFullWeek}. The customer added {N.scopeUnits} units in week {N.scopeWeek}.</p>
+        <p><span className="text-slate-500">What went wrong.</span> The acceptance test rejected <span className="text-rose-300 font-semibold">{N.rejected} units</span>, and fixing them that late took twice the work. Accepted in week {N.deliveredWeek}, {N.deliveredWeek - N.dashboardFullWeek} weeks after the dashboard said done.</p>
+        <p><span className="text-slate-500">Lessons.</span> 100% on the dashboard is not accepted. Defects found at the end cost double.</p>
       </div>
+      <div className="text-xs font-bold uppercase tracking-wider text-amber-300 mt-4">The five newest contracts</div>
+      <ul className="mt-2 divide-y divide-slate-800">
+        {[...L.rows].reverse().map((r) => (
+          <li key={r.id} className="py-2 text-sm">
+            <div className="flex justify-between gap-2"><span className="text-white font-semibold">#{r.id}</span>
+              <span className="font-mono text-amber-300">{r.delivered ? `accepted wk ${r.accepted}` : r.bankrupt ? `bankrupt wk ${r.endedWeek}` : `terminated wk ${r.endedWeek}`}{r.onTime ? ' · on time' : ''}</span></div>
+            <div className="text-xs text-slate-400">{plan(r)} · scope +{r.scopeUnits} in wk {r.scopeWeek} · dashboard 100% wk {r.dashboardFullWeek} · <span className="text-rose-300">{r.rejected} rejected</span></div>
+          </li>
+        ))}
+      </ul>
+      <p className="text-[11px] text-slate-500 mt-2">These are records #{L.rows[0].id}–#{N.id}, the newest in the Records tab. "Use this" takes their median, with the earliest and latest of the five as the range.</p>
     </Frame>
   );
 }
@@ -245,12 +231,12 @@ function ChatTab({ S, plan, onUse, planNote }) {
             <div className="w-8 h-8 rounded-full bg-violet-500/30 text-violet-200 text-sm font-bold flex items-center justify-center shrink-0">{p.name[0]}</div>
             <div className="min-w-0 flex-1">
               <div className="text-xs"><span className="font-semibold text-white">{p.name}</span> <span className="text-slate-500">{p.role}</span></div>
-              <div className="text-sm text-slate-200">{p.says} <span className="text-violet-300">({p.confidence}% sure)</span></div>
+              <div className="text-sm text-slate-200">{p.says}</div>
               <div className="flex gap-3 mt-1 text-xs">
                 <button type="button" className="text-violet-300 underline" onClick={() => setOpen(open === p.key ? null : p.key)}>{open === p.key ? 'Hide reasoning' : 'Why?'}</button>
                 <button type="button" className="text-slate-300 underline" onClick={() => onUse('chat', p.forecast, p.name)}>Use {p.name}'s numbers</button>
               </div>
-              {open === p.key && <div className="text-xs text-slate-400 mt-1 border-l-2 border-violet-500/50 pl-2">Frame: {p.frame}. {p.reasoning} Says week {p.forecast.week}, range {p.forecast.low}–{p.forecast.high}, {p.forecast.chance}% for week 12.</div>}
+              {open === p.key && <div className="text-xs text-slate-400 mt-1 border-l-2 border-violet-500/50 pl-2">From: {p.frame}. {p.reasoning} In numbers: week {p.forecast.week}, range {p.forecast.low}–{p.forecast.high}, {p.forecast.chance}% for week 12; {p.confidence}% sure.</div>}
             </div>
           </div>
         ))}
@@ -259,63 +245,15 @@ function ChatTab({ S, plan, onUse, planNote }) {
   );
 }
 
-function PanelTab({ S, plan, onUse, planNote }) {
-  const p = expertPanel(S, plan);
-  return (
-    <Frame id="panel" kind="Delphi worksheet" f={p.forecast} onUse={onUse} planNote={planNote}>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm font-mono">
-          <thead className="text-xs text-slate-400 font-sans"><tr><th className="text-left py-1">Panelist</th><th>Round 1</th><th>Round 2</th></tr></thead>
-          <tbody>
-            {p.panel.map((x, i) => (
-              <tr key={x.key} className="border-t border-slate-800 text-slate-200">
-                <td className="py-1.5 font-sans">Expert {String.fromCharCode(65 + i)}</td>
-                <td className="text-center">{x.forecast.week} <span className="text-slate-500">({x.forecast.low}–{x.forecast.high})</span></td>
-                <td className="text-center text-violet-200">{x.round2.week} <span className="text-slate-500">({x.round2.low}–{x.round2.high})</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="text-[11px] text-slate-500 mt-2">Anonymous feedback between rounds: the round-1 median was week {p.round1Median}. In round 2 each panelist moved halfway toward it. The panelists are the five colleagues from Team Chat.</p>
-    </Frame>
-  );
-}
-
-function MarketTab({ S, onUse }) {
-  const m = predictionMarket(S);
-  const h = 130, x = (i) => 30 + (i / (m.chart.length - 1)) * (W - 42), y = (v) => 10 + (1 - v) * (h - 30);
-  return (
-    <Frame id="market" kind="prediction market" f={m.forecast} onUse={onUse}>
-      <div className="flex items-baseline justify-between">
-        <div className="text-sm text-slate-300">DELIVERED BY WEEK {S.rules.deadline} · pays $1</div>
-        <div className="text-3xl font-bold font-mono text-violet-300">${m.price.toFixed(2)}</div>
-      </div>
-      <div className="text-xs text-slate-500">Volume {m.volume} contracts · {m.traders} simulated traders</div>
-      <svg viewBox={`0 0 ${W} ${h}`} width="100%" className="mt-2" role="img" aria-label="Price chart">
-        {[0, 0.5, 1].map((v) => <g key={v}><line x1={30} x2={W - 12} y1={y(v)} y2={y(v)} stroke="#1e293b" /><text x={26} y={y(v) + 4} textAnchor="end" {...svgText}>${v.toFixed(1)}</text></g>)}
-        <polyline points={m.chart.map((v, i) => `${x(i)},${y(v)}`).join(' ')} fill="none" stroke="#a78bfa" strokeWidth="2" />
-      </svg>
-      <p className="text-[11px] text-slate-500">
-        The traders are simulated, not real people: {m.byFrame.map((b) => `${b.n} use ${FRAME_NAMES[b.frame]}`).join(', ')}.
-        Each buys if their own forecast is week {S.rules.deadline} or sooner. The price is the share who buy. Nobody in the market knows this scenario.
-      </p>
-    </Frame>
-  );
-}
-
 function AiTab({ S, plan, onUse, planNote }) {
   const a = aiAssistant(S, plan);
   const [asked, setAsked] = useState(false);
+  const [showContext, setShowContext] = useState(false);
   const bold = (s) => s.split('**').map((t, i) => (i % 2 ? <strong key={i} className="text-white">{t}</strong> : t));
   return (
     <Frame id="ai" kind="chat assistant" f={a.forecast} onUse={onUse} planNote={planNote}>
-      <div className="text-[11px] text-slate-500 mb-2 bg-slate-950 rounded-lg p-2">
-        <div className="uppercase tracking-wider mb-1">Context given to the assistant</div>
-        {a.context.map((c) => <div key={c} className="font-mono">· {c}</div>)}
-      </div>
       <div className="space-y-2 text-sm">
-        <div className="ml-8 bg-slate-800 rounded-xl px-3 py-2 text-slate-100">When will this contract be accepted?</div>
+        <div className="ml-8 bg-slate-800 rounded-xl px-3 py-2 text-slate-100">[briefing pasted] When will this contract be accepted?</div>
         <div className="mr-8 bg-violet-500/10 border border-violet-500/30 rounded-xl px-3 py-2 text-slate-200">{bold(a.answer)}</div>
         {asked ? (
           <>
@@ -326,6 +264,14 @@ function AiTab({ S, plan, onUse, planNote }) {
           <button type="button" onClick={() => setAsked(true)} className="ml-8 text-xs text-violet-300 underline">Ask: "What are you basing that on?"</button>
         )}
       </div>
+      <button type="button" onClick={() => setShowContext((v) => !v)} className="mt-3 text-xs text-slate-400 underline">
+        {showContext ? 'Hide what was pasted in' : 'Show what was pasted in'}
+      </button>
+      {showContext && (
+        <div className="text-[11px] text-slate-400 mt-2 bg-slate-950 rounded-lg p-2">
+          {a.context.map((c) => <div key={c}>· {c}</div>)}
+        </div>
+      )}
     </Frame>
   );
 }
@@ -338,24 +284,6 @@ function RecordsTab({ plan, planReady, onUse }) {
       <Label tab={tabById('records')} />
       <Records past={past} plan={planReady ? plan : null} onUse={(f, label) => onUse('records', f, label)} />
     </Card>
-  );
-}
-
-function BenchmarkTab({ S, onUse }) {
-  const b = industryBenchmark(S);
-  return (
-    <Frame id="benchmark" kind="industry survey" f={b.forecast} onUse={onUse}>
-      <div className="text-xs font-bold uppercase tracking-wider text-amber-300">Sector Delivery Survey · {b.projects.toLocaleString()} projects</div>
-      <div className="grid grid-cols-3 gap-2 mt-2">
-        <Tile label="On time" value={`${Math.round(b.onTimeShare * 100)}%`} tone="text-amber-300" />
-        <Tile label="Over schedule" value={`${Math.round(b.overrunShare * 100)}%`} tone="text-amber-300" />
-        <Tile label="Median finish" value={`${b.medianRatio}×`} sub="planned duration" tone="text-amber-300" />
-      </div>
-      <p className="text-sm text-slate-300 mt-3">"Most projects run {Math.round((b.medianRatio - 1) * 100)}% over their planned duration; 80% finish between {b.p10Ratio}× and {b.p90Ratio}× of plan." Applied to a {S.rules.deadline}-week plan.</p>
-      <p className="text-[11px] text-amber-200/80 mt-2 border border-amber-500/30 rounded-lg p-2">
-        A different population: all projects in the sector, all sizes, all lines. Not this line's contracts. These figures are invented for the game.
-      </p>
-    </Frame>
   );
 }
 
@@ -407,21 +335,23 @@ function RisksTab({ S, plan, planNote }) {
         ))}
       </ul>
       <p className="text-sm text-violet-200 mt-3">No forecast here. If several of these can happen at once, does your range leave room for them? Most ranges that miss, miss late.</p>
+      <Premortem />
     </Frame>
   );
 }
 
-function PremortemTab() {
+function Premortem() {
   const key = 'blp-premortem';
   const [text, setText] = useState(() => { try { return localStorage.getItem(key) || ''; } catch { return ''; } });
   const save = (v) => { setText(v); try { localStorage.setItem(key, v); } catch { /* storage unavailable */ } };
   return (
-    <Frame id="premortem" kind="premortem card">
-      <p className="text-lg text-white leading-snug">It's week 17 and the customer has rejected the delivery. Why?</p>
-      <textarea value={text} onChange={(e) => save(e.target.value)} rows={5} maxLength={1000} placeholder="Write the story of how it went wrong…"
-        className="mt-3 w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-slate-200" />
-      <p className="text-[11px] text-slate-500 mt-1">Nothing is computed from this. It stays on this device and is not in your result code.</p>
-    </Frame>
+    <div className="mt-4 pt-3 border-t border-slate-800">
+      <div className="text-xs font-bold uppercase tracking-wider text-violet-300">Premortem</div>
+      <p className="text-sm text-white mt-1">It's week 17 and the customer has rejected the delivery. Why?</p>
+      <textarea value={text} onChange={(e) => save(e.target.value)} rows={4} maxLength={1000} placeholder="Write the story of how it went wrong…"
+        className="mt-2 w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-slate-200" />
+      <p className="text-[11px] text-slate-500 mt-1">Nothing is computed from this. It stays on this device.</p>
+    </div>
   );
 }
 
@@ -453,7 +383,8 @@ function AnalyticsTab({ S, plan, onUse, planNote }) {
 }
 
 function SimulatorTab({ S, plan, onUse, planNote }) {
-  const m = riskSimulator(S, plan);
+  const [rework, setRework] = useState(true);
+  const m = riskSimulator(S, plan, { rework });
   const weeks = Object.keys(m.hist).map(Number).sort((a, b) => a - b);
   const lo = Math.min(weeks[0], S.rules.deadline) - 1, hi = Math.max(weeks[weeks.length - 1], S.rules.deadline) + 1;
   const h = 190, x = (w) => 36 + ((w - lo) / (hi - lo)) * (W - 48), bw = (W - 48) / (hi - lo) - 4;
@@ -464,19 +395,28 @@ function SimulatorTab({ S, plan, onUse, planNote }) {
   const yc = (v) => h - 24 - v * (h - 50);
   return (
     <Frame id="simulator" kind="Monte Carlo schedule risk" f={m.forecast} onUse={onUse} planNote={planNote}>
+      <label className="flex items-center gap-3 mb-3 text-sm text-slate-200 cursor-pointer">
+        <input type="checkbox" checked={rework} onChange={(e) => setRework(e.target.checked)} className="accent-violet-400 w-4 h-4" />
+        Include rework like the last contracts (historical slip)
+      </label>
       <div className="grid grid-cols-4 gap-2">
-        {[10, 50, 80, 90].map((k) => <Tile key={k} label={`P${k}`} value={`wk ${m.p[k]}`} tone="text-sky-300" />)}
+        {[10, 50, 80, 90].map((k) => <Tile key={k} label={`P${k}`} value={`wk ${m.p[k]}`} tone="text-violet-300" />)}
       </div>
       <svg viewBox={`0 0 ${W} ${h}`} width="100%" className="mt-3" role="img" aria-label="Histogram and S-curve of simulated finish weeks">
-        {weeks.map((w) => <rect key={w} x={x(w) - bw / 2} y={y(m.hist[w])} width={bw} height={h - 24 - y(m.hist[w])} fill="#38bdf8" fillOpacity="0.5" />)}
-        <polyline points={curve.map(([w, v]) => `${x(w)},${yc(v)}`).join(' ')} fill="none" stroke="#e0f2fe" strokeWidth="2" />
+        {weeks.map((w) => <rect key={w} x={x(w) - bw / 2} y={y(m.hist[w])} width={bw} height={h - 24 - y(m.hist[w])} fill="#a78bfa" fillOpacity="0.5" />)}
+        <polyline points={curve.map(([w, v]) => `${x(w)},${yc(v)}`).join(' ')} fill="none" stroke="#ede9fe" strokeWidth="2" />
         <line x1={x(S.rules.deadline)} x2={x(S.rules.deadline)} y1={20} y2={h - 24} stroke="#fb7185" strokeDasharray="4 3" />
         {[...new Set([10, 50, 90].map((k) => m.p[k]))].map((w) => (
-          <text key={w} x={x(w)} y={16} textAnchor="middle" fontSize="11" fill="#7dd3fc">{[10, 50, 90].filter((k) => m.p[k] === w).map((k) => `P${k}`).join('/')}</text>
+          <text key={w} x={x(w)} y={16} textAnchor="middle" fontSize="11" fill="#c4b5fd">{[10, 50, 90].filter((k) => m.p[k] === w).map((k) => `P${k}`).join('/')}</text>
         ))}
         {Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).map((w) => <text key={w} x={x(w)} y={h - 6} textAnchor="middle" {...svgText}>{w}</text>)}
       </svg>
-      <p className="text-[11px] text-slate-500">{m.runs.toLocaleString()} iterations of the Schedule, with the pace's week-to-week wobble and a scope change drawn from the record. Bars: frequency. Line: cumulative probability. Defects are not in the model.</p>
+      <p className="text-[11px] text-slate-500">
+        {m.runs.toLocaleString()} iterations of the Schedule, with the pace's week-to-week wobble and a scope change drawn from the record.
+        {m.rework
+          ? ` Each run also adds a historical slip: how much later one of ${m.slips.n} past contracts inspected like your plan was accepted than this model predicted for it (median +${m.slips.median} weeks, mostly rework).`
+          : ' Rework is switched off: the model sees only the plan, so it finishes when the dashboard would read 100%.'}
+      </p>
     </Frame>
   );
 }
@@ -539,19 +479,14 @@ export default function DeskTab({ id, S, plan, planReady, onUse }) {
   const props = { S, plan, onUse, planNote };
   switch (id) {
     case 'status': return <StatusTab {...props} />;
-    case 'burndown': return <BurndownTab {...props} />;
     case 'cost': return <CostTab {...props} />;
     case 'schedule': return <ScheduleTab {...props} />;
-    case 'lessons': return <LessonsTab {...props} />;
+    case 'last5': return <Last5Tab {...props} />;
     case 'chat': return <ChatTab {...props} />;
-    case 'panel': return <PanelTab {...props} />;
-    case 'market': return <MarketTab {...props} />;
     case 'ai': return <AiTab {...props} />;
     case 'records': return <RecordsTab plan={plan} planReady={planReady} onUse={onUse} />;
-    case 'benchmark': return <BenchmarkTab {...props} />;
     case 'scenarios': return <ScenariosTab {...props} />;
     case 'risks': return <RisksTab {...props} />;
-    case 'premortem': return <PremortemTab />;
     case 'analytics': return <AnalyticsTab {...props} />;
     case 'simulator': return <SimulatorTab {...props} />;
     case 'consensus': return <ConsensusTab {...props} />;

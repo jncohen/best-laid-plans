@@ -24,11 +24,11 @@ favour of a show of hands. It is not live until it is merged into
    faces the same contract and the same scope change. A link with `?seed=ledger`
    fills it in.
 2. Each student opens the briefing. Its front tab, **Your Plan and Prediction ·
-   Commit Before Week 1**, has the contract, the rules, the last contract's pace and
-   the past contracts' range. They state a plan (crews added at the start,
-   inspection, second shift), then a forecast: the acceptance week, an 80% range and
-   the chance of week 12.
-3. Before committing they may open any of the 18 tool tabs (below), or none. Each
+   Commit Before Week 1**, starts with the decision: the plan (crews added at the
+   start, inspection, second shift), then the forecast (the acceptance week, an 80%
+   range and the chance of week 12). Below that are the contract, the last contract's
+   pace and story, the past contracts' range and the rules.
+3. Before committing they may open any of the 13 tool tabs (below), or none. Each
    tool computes a forecast from what the briefing shows and nothing else, and says
    what it can and can't see. "Use this on my prediction" copies a tool's numbers
    into the front tab, where they can still be edited.
@@ -78,6 +78,14 @@ for projecting a tab in class.
 
 ## The Decision Desk
 
+The desk is a realistic project office. Every tool behaves the way its real-world
+counterpart does and gives the answer a real one would give with this information.
+Good information appears in several forms: the record, the last five contracts, a
+veteran's memory, an assistant that reads the whole briefing, a simulator with
+historical risk factors. Misleading information appears only where it naturally
+occurs: the dashboard's pace, the plan on paper and sales pressure. The skill being
+tested is what the student weighs, not finding one honest tab.
+
 The tool tabs are generic replicas of decision-support dashboard genres, never of any
 product. Every one is computed in `frontend/src/plan/desk.js` from the screen alone:
 - the line's last six weeks;
@@ -96,47 +104,50 @@ Colours:
 | Tab | Clones | Sees · can't see |
 |---|---|---|
 | **The mind's own frames** | | |
-| Status Report | executive red/amber/green dashboard: earned-value tiles (SPI, CPI) and a burn-up chart | Units built each week · defects or scope changes |
-| Sprint Burndown | agile burndown: velocity and projected sprint | Velocity over the last six weeks · the same blind spots, in agile clothes |
+| Status Report | earned-value status report: red/amber/green light, SPI, CPI, schedule estimate at completion (planned duration ÷ SPI), burn-up chart | Earned value: units reported complete against plan · whether those units will pass acceptance |
 | Cost Management | project cost-control dashboard: BAC, EAC, CPI, cash runway, cumulative spend against the budget and the bankruptcy line | Money: spend, burn rate, the credit line · defects, so you can watch every dollar and still be late |
 | Schedule | Gantt chart: task bars, milestones, finish diamond | Your plan, week by week, under the stated rules · defects or scope changes |
-| Lessons Learned | after-action review: what happened, what went wrong, lessons | One real outcome · whether you'll play like it |
 | **Other people** | | |
-| Team Chat | workplace chat: five colleagues answer "When will we be done?", each from one named frame, with reasoning on tap | Five colleagues, each from one frame · which one to believe |
-| Expert Panel | Delphi worksheet: round 1, anonymous feedback, round 2 | The same five after a second round · whether the group shares a bias |
-| Prediction Market | market ticker for "delivered by week 12", with price chart; 200 simulated traders, labelled as such | 200 simulated traders' average · what the crowd doesn't know |
-| AI Assistant | chat assistant answering in fluent prose, with its context shown | What it was given (the Status Report and your plan) · what it wasn't given |
+| Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap). Mabel, a veteran on the line, speaks from the record; Priya (quality) from the last contract's rework; Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan on paper; Kim (sales) from the promise | Five colleagues, each from where they sit · which view to weigh most |
+| AI Assistant | chat assistant given the whole briefing, as if pasted in. It notes the pace, the record, rework and the scope change, and plans on the contracts run like the stated plan. Its context is shown on request | The whole briefing · this contract's own defects and scope change |
 | **Records and structured judgment** | | |
+| Last 5 Contracts | recent-projects list plus an after-action review of the newest. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |
 | Records | historical-project database: the 40 past contracts, sortable and filterable, with "Contracts run like my plan" | What actually happened, defects and scope changes included · plans no past manager tried |
-| Industry Benchmark | glossy sector survey; its figures are invented for the game and labelled as a different population | A big sample · this line: it is a different population |
 | Scenarios | best / base / base + rework / worst-seen matrix with assumptions | A wider range, on purpose · anything but your plan as the starting point |
-| Risk Register | probability × impact heat map with risk cards; no forecast | Each risk, one at a time · their sum |
-| Premortem | "It's week 17 and the customer has rejected the delivery. Why?"; the text stays on the device | Your imagination · anything else |
+| Risk Register | probability × impact heat map with risk cards, and a premortem box ("It's week 17 and the customer has rejected the delivery. Why?"). No forecast | Each risk, one at a time, and your own premortem · their sum |
 | **Models** | | |
 | Analytics | BI dashboard: KPI tiles, scatter of past contracts, fitted OLS line, 80% prediction interval | The record's patterns · plans the record does not contain |
-| Risk Simulator | Monte Carlo schedule-risk tool: histogram, S-curve, P10/P50/P80/P90 | Variability and scope changes · defects, so it is precise and early |
+| Risk Simulator | Monte Carlo schedule-risk tool: histogram, S-curve, P10/P50/P80/P90, with a switch for historical rework (on by default). With it on, each run adds a slip drawn from past contracts; with it off, the tool sees only the plan | Variability, scope changes and, if switched on, rework from the record · anything its switches leave out |
 | Consensus | forecast-combination panel: tick the tools to average | The tabs you tick · anything you leave out |
 | **Your own record** | | |
 | Your Track Record | personal stats from earlier plays on this device | Your past forecasts on this device · anything, if you haven't kept score |
 
 `npm run plan` pins the desk's hold rates across 1,000 codes:
-- record-based tools hold at least 80% of the time;
-- inside-view tools hold at most 10%;
-- the AI Assistant holds exactly as often as the Status Report it is given.
+- the tools that use the record (Records, Analytics, the AI Assistant, Mabel) hold at
+  least 80% of the time;
+- the pace and the plan on paper (Status Report, Schedule, Cost Management, Sam, the
+  Risk Simulator with rework off) hold at most 10%;
+- the Risk Simulator with historical rework holds at least 80%.
 
 ## The past record
 
-The 40 past contracts are run by managers with habits of their own: eight
-archetypes (coaster, early hirer, reactive hirer, staged hirer, inspector, shift
-runner, hire + shift, quality-first). Each manager's parameters are drawn from a fixed
-seed (659), so the record is the same for everyone and on every scenario code. Each
-manager plays the same engine week by week and reacts only to what their screen
-shows: the reported backlog, crews and week.
+The record is chronological. Contract #40, the newest, is the line's last contract:
+the one the briefing describes and the Last 5 Contracts tab reviews. It was run
+hands-off.
 
-On this seed the record has a median of week 14, a 10th–90th percentile range of
-weeks 12–17 and 6 of 40 on time, the same figures as the fixed record in 1.1.0. It
-has 24 distinct plans, and no past manager went bankrupt. A contract that was never
-accepted would count as later than any delivered one.
+Contracts #1–39 are run by managers with habits of their own: eight archetypes
+(coaster, early hirer, reactive hirer, staged hirer, inspector, shift runner, hire +
+shift, quality-first). Each manager's parameters are drawn from a fixed seed (659), so
+the record is the same for everyone and on every scenario code. Each manager plays the
+same engine week by week and reacts only to what their screen shows: the reported
+backlog, crews and week.
+
+The record has:
+- a median of week 14, a 10th–90th percentile range of weeks 12–17, and 6 of 40 on
+  time, the same figures as the fixed record in 1.1.0;
+- 24 distinct plans;
+- no manager who went bankrupt. A contract that was never accepted would count as
+  later than any delivered one.
 
 The Records table shows, for each contract:
 - what the manager did: crews added and when, inspection, second-shift weeks;

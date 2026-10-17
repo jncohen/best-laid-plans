@@ -63,28 +63,28 @@ export function planModel(S, plan, { noise = () => 1, scope = null, trace = fals
 }
 
 // ── The mind's own frames ────────────────────────────────────────────────────
-/** Status Report: 200 ÷ the pace, with a range from the pace's own wobble. */
+/**
+ * Status Report: an earned-value report on the line's last six weeks. Earned value is
+ * units reported complete; the schedule forecast is the EVM estimate at completion,
+ * planned duration ÷ SPI, with a range from the SPI of each week to date. It runs
+ * early only because "earned" counts units built, not units that will pass.
+ */
 export function statusReport(S) {
-  const R = S.rules, v = pace(S), s = sd(S.history);
-  const w = R.scope / v;
-  const built = S.history.reduce((a, b) => a + b, 0);
-  const wk = S.history.length;
-  const planned = (R.scope * wk) / R.deadline;
-  const ev = (built / R.scope) * R.budget, pv = (planned / R.scope) * R.budget, ac = wk * R.crews * R.crewWeek;
-  return {
-    forecast: { week: Math.round(w), low: Math.floor(R.scope / (v + 1.28 * s)), high: Math.ceil(R.scope / (v - 1.28 * s)), chance: w <= R.deadline ? 95 : 5 },
-    pace: +v.toFixed(1), weeksAtPace: +w.toFixed(1), built, planned, weeksShown: wk,
-    spi: +(ev / pv).toFixed(2), cpi: +(ev / ac).toFixed(2), light: ev >= pv ? 'green' : ev >= 0.9 * pv ? 'amber' : 'red',
-  };
-}
-
-/** Sprint Burndown: the same velocity, in sprints. Done in the sprint the work runs out. */
-export function sprintBurndown(S) {
   const R = S.rules, v = pace(S);
-  const fast = Math.max(...S.history), slow = Math.min(...S.history);
+  let cum = 0;
+  const weekly = S.history.map((b, i) => {
+    cum += b;
+    const spi = (cum / R.scope) / ((i + 1) / R.deadline);
+    return { week: i + 1, spi, eac: R.deadline / spi };
+  });
+  const last = weekly[weekly.length - 1];
+  const built = cum, wk = S.history.length, planned = (R.scope * wk) / R.deadline;
+  const ev = (built / R.scope) * R.budget, pv = (planned / R.scope) * R.budget, ac = wk * R.crews * R.crewWeek;
+  const eacs = weekly.map((x) => x.eac);
   return {
-    forecast: { week: Math.ceil(R.scope / v), low: Math.floor(R.scope / fast), high: Math.ceil(R.scope / slow), chance: Math.ceil(R.scope / v) <= R.deadline ? 90 : 10 },
-    velocity: +v.toFixed(1), fast, slow,
+    forecast: clampF({ week: Math.round(last.eac), low: Math.floor(Math.min(...eacs)), high: Math.ceil(Math.max(...eacs)), chance: last.eac <= R.deadline - 0.5 ? 90 : last.eac <= R.deadline ? 60 : 20 }),
+    pace: +v.toFixed(1), weeksAtPace: +(R.scope / v).toFixed(1), eacWeeks: +last.eac.toFixed(1), weekly, built, planned, weeksShown: wk,
+    spi: +last.spi.toFixed(2), cpi: +(ev / ac).toFixed(2), light: ev >= pv ? 'green' : ev >= 0.9 * pv ? 'amber' : 'red',
   };
 }
 
@@ -125,10 +125,17 @@ export function schedule(S, plan) {
   return { forecast: { week: m.week, low: m.week - 1, high: m.week + 1, chance: m.week <= R.deadline - 1 ? 90 : m.week <= R.deadline ? 70 : 20 }, weeks: m.weeks };
 }
 
-/** Lessons Learned: the last contract, as the forecast. */
-export function lessonsLearned(S) {
-  const L = S.last, R = S.rules;
-  return { forecast: { week: L.deliveredWeek, low: L.deliveredWeek - 1, high: L.deliveredWeek + 1, chance: L.deliveredWeek <= R.deadline ? 80 : 10 }, ...L, pace: +pace(S).toFixed(1) };
+/**
+ * Last 5 Contracts: the newest five rows of the record (it is chronological), with
+ * the newest, the line's last contract, told as an after-action review.
+ */
+export function lastFive(S) {
+  const R = S.rules, rows = S.contracts.slice(-5);
+  const sum = summarizeContracts(rows);
+  return {
+    forecast: { week: sum.median, low: sum.min, high: sum.max, chance: Math.round(100 * sum.onTimeShare) },
+    rows, newest: { ...rows[rows.length - 1], ...S.last, pace: +pace(S).toFixed(1) }, n: rows.length, deadline: R.deadline,
+  };
 }
 
 // ── Records and structured judgment ──────────────────────────────────────────
@@ -139,16 +146,6 @@ export function records(S, plan = null) {
   const all = summarizeContracts(S.contracts);
   const m = plan ? matchContracts(plan) : null;
   return { forecast: fromSummary(m || all), all: fromSummary(all), matched: m ? { ...fromSummary(m), n: m.n, rule: m.rule } : null };
-}
-
-/**
- * Industry Benchmark: a survey of a different population. The figures are invented
- * for the game and labelled as such on screen: all sectors, all sizes, not this line.
- */
-export const BENCHMARK = { projects: 1200, onTimeShare: 0.31, medianRatio: 1.1, p10Ratio: 0.95, p90Ratio: 1.35, overrunShare: 0.69 };
-export function industryBenchmark(S) {
-  const d = S.rules.deadline, B = BENCHMARK;
-  return { forecast: { week: Math.round(d * B.medianRatio), low: Math.round(d * B.p10Ratio), high: Math.round(d * B.p90Ratio), chance: Math.round(100 * B.onTimeShare) }, ...B };
 }
 
 /** Scenarios: the plan model under four named futures, with rework like the last contract. */
@@ -257,110 +254,97 @@ export function analytics(S, plan) {
   };
 }
 
-/** Risk Simulator: the Schedule 1,000 times, with the pace's wobble and a scope change drawn from the record. Still no defects. */
-export function riskSimulator(S, plan, runs = 1000) {
-  const R = S.rules, r = mulberry32(42);
+/**
+ * Risk Simulator: the Schedule 1,000 times, with the pace's wobble and a scope change
+ * drawn from the record. With `rework` on (the default: real schedule-risk tools carry
+ * historical risk factors), each run also adds a slip drawn from past contracts
+ * inspected the way the plan is: how much later each was accepted than the same
+ * model predicted for its own plan and scope change. That slip is mostly rework.
+ * Off, it is the plan alone: precise and early.
+ */
+export function historicalSlips(S, plan) {
+  const p = asPlan(plan);
+  const like = S.contracts.filter((c) => (c.inspect > 0) === (p.inspect > 0));
+  return (like.length >= 5 ? like : S.contracts).map((c) => {
+    const own = { crews: c.crewsAdded, inspect: c.inspect, shift: c.shiftWeeks > 0 ? 'late' : 'none' };
+    return recordWeek(c) - planModel(S, own, { scope: { week: c.scopeWeek, units: c.scopeUnits } });
+  });
+}
+
+export function riskSimulator(S, plan, { rework = true, runs = 1000 } = {}) {
+  const R = S.rules, r = mulberry32(42), p = asPlan(plan);
   const scopes = S.contracts.map((c) => ({ week: c.scopeWeek, units: c.scopeUnits }));
+  const slips = historicalSlips(S, p);
   const relSd = sd(S.history) / pace(S);
-  const sims = Array.from({ length: runs }, () => planModel(S, plan, { noise: () => 1 + relSd * (r() + r() + r() - 1.5) * 2, scope: scopes[Math.floor(r() * scopes.length)] }));
+  const sims = Array.from({ length: runs }, () => {
+    const w = planModel(S, p, { noise: () => 1 + relSd * (r() + r() + r() - 1.5) * 2, scope: scopes[Math.floor(r() * scopes.length)] });
+    return rework ? Math.max(w, Math.round(w + slips[Math.floor(r() * slips.length)])) : w;
+  });
   const hist = {};
   for (const w of sims) hist[w] = (hist[w] || 0) + 1;
   return {
     forecast: { week: q(sims, 0.5), low: q(sims, 0.1), high: q(sims, 0.9), chance: Math.round((100 * sims.filter((x) => x <= R.deadline).length) / sims.length) },
-    runs, hist, p: { 10: q(sims, 0.1), 50: q(sims, 0.5), 80: q(sims, 0.8), 90: q(sims, 0.9) },
+    runs, hist, rework, slips: { n: slips.length, median: q(slips, 0.5), low: q(slips, 0.1), high: q(slips, 0.9) }, p: { 10: q(sims, 0.1), 50: q(sims, 0.5), 80: q(sims, 0.8), 90: q(sims, 0.9) },
   };
 }
 
 // ── Other people ─────────────────────────────────────────────────────────────
+const ONE_IN = ['', 'every one', 'one in two', 'one in three', 'one in four', 'one in five', 'one in six', 'one in seven', 'one in eight', 'one in nine', 'one in ten'];
+const inWords = (share) => (share <= 0 ? 'none' : share < 0.08 ? 'hardly any' : ONE_IN[Math.min(10, Math.max(1, Math.round(1 / share)))]);
+const NUM = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+const word = (n) => NUM[n] ?? String(n);
+
 /**
- * Team Chat: five colleagues, each reasoning from one frame on this desk and saying
- * which. None of them knows the scenario. Confidence is how sure each one says they
- * are of their own range.
+ * Team Chat: five colleagues answering "When will we be done?" the way people in
+ * these jobs talk. Each speaks from what they would see; every number is computed
+ * from the briefing. Confidence is how sure each says they are.
  */
 export function teamChat(S, plan) {
   const R = S.rules, p = asPlan(plan);
-  const st = statusReport(S).forecast, sc = schedule(S, p).forecast, rec = records(S, p), scen = scenarios(S, p);
-  const rw = scen.rows.find((r) => r.key === 'rework').week;
-  const m = rec.matched;
+  const all = records(S).all, m = records(S, p).matched, sc = schedule(S, p).forecast;
+  const v = pace(S), atPace = Math.ceil(R.scope / v);
+  const gap = S.last.deliveredWeek - S.last.dashboardFullWeek;
+  const rw = p.inspect > 0 ? Math.max(1, Math.round(gap / 2)) : gap;
+  const spread = Math.round((all.high - all.low) / 2);
+  const yours = m.week !== all.week ? ` The ones run like yours came in around week ${m.week}.` : '';
   return [
-    { key: 'supervisor', name: 'Dana', role: 'Line supervisor', frame: 'Status Report', confidence: 95,
-      forecast: st, says: `We're doing ${pace(S).toFixed(1)} a week. ${R.scope} units is week ${st.week}, maybe ${st.high}. I'd bet on it.`,
-      reasoning: `Divides ${R.scope} units by the last six weeks' pace (${pace(S).toFixed(1)} a week). Counts units built, the way the dashboard does.` },
-    { key: 'planner', name: 'Sam', role: 'Planner', frame: 'Schedule', confidence: 90,
-      forecast: sc, says: `I've laid your plan out week by week. It finishes in week ${sc.week}.`,
-      reasoning: 'Runs your plan through the stated rules: onboarding drag, coordination loss, the shift, inspection. Leaves out defects and the scope change.' },
-    { key: 'veteran', name: 'Rui', role: 'Veteran project manager', frame: 'Records', confidence: 80,
-      forecast: m, says: `Contracts run like yours landed around week ${m.week}, anywhere from ${m.low} to ${m.high}. That's what I'd say.`,
-      reasoning: `Looks up the ${m.n} past contracts run like your plan (matched on ${m.rule}) and quotes their median and 10th–90th percentile.` },
-    { key: 'quality', name: 'Priya', role: 'Quality lead', frame: 'Scenarios (rework)', confidence: 70,
-      forecast: clampF({ week: rw, low: rw - 1, high: rw + 2, chance: rw <= R.deadline ? 50 : 15 }),
-      says: `Last time the acceptance test bounced ${S.last.rejected} units. Allow for that and it's week ${rw}, could slip to ${rw + 2}.`,
-      reasoning: `The Schedule plus a typical scope change, then rework like the last contract (${S.last.rejected} of ${R.scope} units rejected, double the work to fix late).` },
-    { key: 'sales', name: 'Kim', role: 'Sales lead', frame: 'The deadline', confidence: 85,
-      forecast: { week: R.deadline, low: R.deadline - 1, high: R.deadline + 1, chance: 70 }, says: `The customer needs it by week ${R.deadline}, and we told them we'd make it. Week ${R.deadline}.`,
-      reasoning: 'Starts from the date the customer wants and what was promised. No model of the work at all.' },
+    { key: 'veteran', name: 'Mabel', role: 'Veteran on the line', frame: 'The record', confidence: 80, forecast: { week: m.week, low: m.low, high: m.high, chance: m.chance },
+      says: `Twenty-odd years on this line. These take about ${word(all.week)} weeks, give or take ${spread <= 2 ? 'a couple' : word(spread)}. I've seen maybe ${inWords(all.chance / 100)} make ${word(R.deadline)}.${yours}`,
+      reasoning: `The record of ${S.contracts.length} contracts: median week ${all.week}, most between ${all.low} and ${all.high}, ${all.chance}% on time. For your plan, the ${m.n} run like it: week ${m.week} (${m.low}–${m.high}).` },
+    { key: 'quality', name: 'Priya', role: 'Quality lead', frame: 'Rework, from the last contract', confidence: 70,
+      forecast: clampF({ week: sc.week + rw, low: sc.week + rw - 1, high: sc.week + rw + 2, chance: sc.week + rw <= R.deadline ? 50 : 15 }),
+      says: `Last time ${S.last.rejected} units bounced at acceptance, and it took ${word(gap)} more weeks after the dashboard said done. Budget ${gap > 1 ? `${word(gap - 1)} or ${word(gap)}` : word(gap)} weeks for rework${p.inspect > 0 ? ', maybe half that if you keep inspecting' : ''}.`,
+      reasoning: `The plan on paper (week ${sc.week}) plus the rework the last contract needed after its dashboard read 100% (${gap} weeks${p.inspect > 0 ? ', halved for inspection' : ''}).` },
+    { key: 'supervisor', name: 'Dana', role: 'Line supervisor', frame: 'The pace', confidence: 65, forecast: { week: atPace, low: atPace - 1, high: atPace + 1, chance: atPace <= R.deadline ? 75 : 30 },
+      says: `At this pace, ${word(atPace)} weeks, if nothing goes wrong.`,
+      reasoning: `${R.scope} units at the last six weeks' ${v.toFixed(1)} a week is ${(R.scope / v).toFixed(1)} weeks of building.` },
+    { key: 'planner', name: 'Sam', role: 'Planner', frame: 'The plan on paper', confidence: 70, forecast: sc,
+      says: `On paper your plan finishes in week ${sc.week}. That's before any surprises.`,
+      reasoning: 'Your plan week by week under the stated rules: onboarding, coordination, shift, inspection. No defects or scope change.' },
+    { key: 'sales', name: 'Kim', role: 'Sales lead', frame: 'The promise', confidence: 60, forecast: { week: R.deadline, low: R.deadline - 1, high: R.deadline + 1, chance: 70 },
+      says: `We promised week ${R.deadline}.`, reasoning: 'What the customer was told.' },
   ];
 }
 
-/** Expert Panel: the same five, round 2, after seeing the round-1 median. Each moves halfway toward it. */
-export function expertPanel(S, plan) {
-  const r1 = teamChat(S, plan);
-  const med = (xs) => q(xs, 0.5);
-  const m = med(r1.map((x) => x.forecast.week));
-  const r2 = r1.map((x) => {
-    const shift = Math.round((m - x.forecast.week) / 2);
-    const f = x.forecast;
-    return { ...x, round2: clampF({ week: f.week + shift, low: f.low + shift, high: f.high + shift, chance: f.chance }) };
-  });
-  const forecast = clampF({ week: med(r2.map((x) => x.round2.week)), low: med(r2.map((x) => x.round2.low)), high: med(r2.map((x) => x.round2.high)), chance: med(r2.map((x) => x.round2.chance)) });
-  return { forecast, round1Median: m, panel: r2 };
-}
-
 /**
- * Prediction Market: 200 simulated traders, each forecasting from one frame in the
- * mix the room forecast assumes (pace 45%, deadline 25%, a blend 20%, the record 10%).
- * A trader buys "delivered by week 12" if their own forecast is week 12 or earlier.
- * The price is the share who buy. Not computed from the scenario.
- */
-export const MARKET_MIX = [['pace', 0.45], ['deadline', 0.25], ['blend', 0.2], ['record', 0.1]];
-export function predictionMarket(S, traders = 200) {
-  const R = S.rules, r = mulberry32(790);
-  const ri = (lo, hi) => lo + Math.floor(r() * (hi - lo + 1));
-  const st = statusReport(S).forecast, all = records(S).all;
-  const draw = {
-    pace: () => ri(st.week, st.high + 1),
-    deadline: () => R.deadline,
-    blend: () => ri(R.deadline, R.deadline + 1),
-    record: () => ri(all.week, all.week + 1),
-  };
-  const pool = MARKET_MIX.flatMap(([k, w]) => Array(Math.round(w * traders)).fill(k));
-  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  const points = pool.map((k) => ({ frame: k, week: draw[k]() }));
-  let buys = 0;
-  const chart = points.map((t, i) => { if (t.week <= R.deadline) buys++; return +(buys / (i + 1)).toFixed(3); });
-  const price = buys / points.length;
-  const weeks = points.map((t) => t.week);
-  return {
-    forecast: { week: q(weeks, 0.5), low: q(weeks, 0.1), high: q(weeks, 0.9), chance: Math.round(price * 100) },
-    price: +price.toFixed(2), traders: points.length, volume: points.length, chart,
-    byFrame: MARKET_MIX.map(([k]) => ({ frame: k, n: points.filter((t) => t.frame === k).length, buy: points.filter((t) => t.frame === k && t.week <= R.deadline).length })),
-  };
-}
-
-/**
- * AI Assistant: given the Status Report and the stated plan as its context, and
- * nothing else. Its numbers are the Status Report's; the plan only colours the prose.
+ * AI Assistant: given the whole briefing, as it would be if the student pasted it in.
+ * It answers as a careful assistant would: the pace is optimistic, the record is the
+ * base rate, rework and the scope change explain the gap, and it plans on the
+ * contracts run like the stated plan.
  */
 export function aiAssistant(S, plan) {
-  const R = S.rules, p = asPlan(plan), st = statusReport(S);
-  const f = st.forecast;
-  const planNote = p.crews > 0 ? ` Your plan adds ${p.crews} crew${p.crews > 1 ? 's' : ''}, which only adds capacity, so if anything there is room to spare.`
-    : p.shift !== 'none' ? ' Your plan adds a second shift, which only adds output.' : ' Your plan keeps the line as it is, which keeps the risk low.';
+  const R = S.rules, p = asPlan(plan), all = records(S).all, m = records(S, p).matched, v = pace(S);
+  const f = { week: m.week, low: m.low, high: m.high, chance: m.chance };
+  const parts = [p.crews ? `+${p.crews} crews` : '', p.inspect ? `${Math.round(p.inspect * 100)}% inspection` : '', p.shift !== 'none' ? `a ${p.shift === 'every' ? 'full-time' : 'late'} second shift` : ''].filter(Boolean);
+  const planText = parts.length ? `For your plan (${parts.join(', ')}), the ${m.n} past contracts run most like it` : `For a hands-off plan, the ${m.n} past contracts run most like it`;
   return {
     forecast: f,
-    context: [`Status Report: ${st.pace} units a week, ${st.weeksAtPace} weeks to ${R.scope} units, status ${st.light}, SPI ${st.spi}`, `Stated plan: crews +${p.crews}, inspection ${Math.round(p.inspect * 100)}%, second shift ${p.shift}`],
-    answer: `Based on the current status, the contract should be accepted in **week ${f.week}**, comfortably ahead of the week-${R.deadline} deadline. The line is producing ${st.pace} units a week against a plan of ${(R.scope / R.deadline).toFixed(1)}, a schedule performance index of ${st.spi}, so the project is green.${planNote} A reasonable range is weeks ${f.low}–${f.high}, and I'd put the chance of making week ${R.deadline} at about ${f.chance}%.`,
-    basis: `I'm basing that on the two things in my context: the Status Report (${st.pace} units a week, so ${st.weeksAtPace} weeks of work) and your stated plan. I haven't seen the past contracts, the last contract's acceptance test, or anything about defects or scope changes. If those matter, I can't account for them.`,
+    context: [
+      "The whole briefing: the contract, every stated rule, the last six weeks of output, the last contract's story, and all 40 past contracts with what each manager did",
+      `Your stated plan: crews +${p.crews}, inspection ${Math.round(p.inspect * 100)}%, second shift ${p.shift}`,
+    ],
+    answer: `The dashboard pace (${v.toFixed(1)} units a week) implies about ${(R.scope / v).toFixed(1)} weeks, but that counts units built, not units accepted. Your line's own history says otherwise: the last contract's dashboard read 100% in week ${S.last.dashboardFullWeek}, and it was accepted in week ${S.last.deliveredWeek} after ${S.last.rejected} units failed acceptance. Across all ${S.contracts.length} past contracts the median is **week ${all.week}**, most between weeks ${all.low} and ${all.high}, and only ${all.chance}% made week ${R.deadline}. Every one of them also absorbed a mid-contract scope change. ${planText} came in around **week ${m.week}** (${m.low}–${m.high}), ${m.chance}% on time. I'd plan on that range rather than the pace, and treat week ${R.deadline} as a stretch.`,
+    basis: `I used everything in the briefing you pasted: the rules, the last six weeks, the last contract's outcome, and the 40 past contracts, especially the ${m.n} run like your plan (matched on ${m.rule}). I can't see this contract's own defect rate or its scope change, so the record is my best guide.`,
   };
 }
 
@@ -371,22 +355,17 @@ export function aiAssistant(S, plan) {
  */
 export const TABS = [
   { id: 'commit', letter: '', group: null, name: 'Your Plan and Prediction · Commit Before Week 1', short: 'Your Plan & Prediction', tone: 'front' },
-  { id: 'status', letter: 'a', group: "The mind's own frames", name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Units built each week', cant: 'Defects or scope changes' },
-  { id: 'burndown', letter: 'b', group: "The mind's own frames", name: 'Sprint Burndown', tone: 'inside', forecasts: true, sees: 'Velocity over the last six weeks', cant: 'The same blind spots, in agile clothes' },
+  { id: 'status', letter: 'a', group: "The mind's own frames", name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Earned value: units reported complete against plan', cant: 'Whether those units will pass acceptance' },
   { id: 'cost', letter: 'c', group: "The mind's own frames", name: 'Cost Management', tone: 'inside', forecasts: true, sees: 'Money: spend, burn rate, the credit line', cant: 'Defects, so you can watch every dollar and still be late' },
   { id: 'schedule', letter: 'd', group: "The mind's own frames", name: 'Schedule', tone: 'inside', forecasts: true, sees: 'Your plan, week by week, under the stated rules', cant: 'Defects or scope changes' },
-  { id: 'lessons', letter: 'e', group: "The mind's own frames", name: 'Lessons Learned', tone: 'record', forecasts: true, sees: 'One real outcome', cant: "Whether you'll play like it" },
-  { id: 'chat', letter: 'f', group: 'Other people', name: 'Team Chat', tone: 'people', forecasts: true, sees: 'Five colleagues, each from one frame', cant: 'Which one to believe' },
-  { id: 'panel', letter: 'g', group: 'Other people', name: 'Expert Panel', tone: 'people', forecasts: true, sees: 'The same five after a second round', cant: 'Whether the group shares a bias' },
-  { id: 'market', letter: 'h', group: 'Other people', name: 'Prediction Market', tone: 'people', forecasts: true, sees: "200 simulated traders' average", cant: "What the crowd doesn't know" },
-  { id: 'ai', letter: 'i', group: 'Other people', name: 'AI Assistant', tone: 'people', forecasts: true, sees: 'What it was given: the Status Report and your plan', cant: "What it wasn't given" },
+  { id: 'chat', letter: 'f', group: 'Other people', name: 'Team Chat', tone: 'people', forecasts: true, sees: 'Five colleagues, each from where they sit', cant: 'Which view to weigh most' },
+  { id: 'ai', letter: 'i', group: 'Other people', name: 'AI Assistant', tone: 'people', forecasts: true, sees: 'The whole briefing, pasted in', cant: "This contract's own defects and scope change" },
+  { id: 'last5', letter: 'e', group: 'Records and structured judgment', name: 'Last 5 Contracts', tone: 'record', forecasts: true, sees: 'The five newest contracts, and the story of the last one', cant: 'Whether five is enough' },
   { id: 'records', letter: 'j', group: 'Records and structured judgment', name: 'Records', tone: 'record', forecasts: true, sees: 'What actually happened, defects and scope changes included', cant: 'Plans no past manager tried' },
-  { id: 'benchmark', letter: 'k', group: 'Records and structured judgment', name: 'Industry Benchmark', tone: 'record', forecasts: true, sees: 'A big sample', cant: 'This line: it is a different population' },
   { id: 'scenarios', letter: 'l', group: 'Records and structured judgment', name: 'Scenarios', tone: 'people', forecasts: true, sees: 'A wider range, on purpose', cant: 'Anything but your plan as the starting point' },
-  { id: 'risks', letter: 'm', group: 'Records and structured judgment', name: 'Risk Register', tone: 'people', forecasts: false, sees: 'Each risk, one at a time', cant: 'Their sum' },
-  { id: 'premortem', letter: 'n', group: 'Records and structured judgment', name: 'Premortem', tone: 'people', forecasts: false, sees: 'Your imagination', cant: 'Anything else' },
+  { id: 'risks', letter: 'm', group: 'Records and structured judgment', name: 'Risk Register', tone: 'people', forecasts: false, sees: 'Each risk, one at a time, and your own premortem', cant: 'Their sum' },
   { id: 'analytics', letter: 'o', group: 'Models', name: 'Analytics', tone: 'record', forecasts: true, sees: "The record's patterns", cant: 'Plans the record does not contain' },
-  { id: 'simulator', letter: 'p', group: 'Models', name: 'Risk Simulator', tone: 'inside', forecasts: true, sees: 'Variability and scope changes', cant: 'Defects, so it is precise and early' },
+  { id: 'simulator', letter: 'p', group: 'Models', name: 'Risk Simulator', tone: 'people', forecasts: true, sees: 'Variability, scope changes and, if switched on, rework from the record', cant: 'Anything its switches leave out' },
   { id: 'consensus', letter: 'q', group: 'Models', name: 'Consensus', tone: 'people', forecasts: true, sees: 'The tabs you tick', cant: 'Anything you leave out' },
   { id: 'track', letter: 'r', group: 'Your own record', name: 'Your Track Record', tone: 'record', forecasts: false, sees: 'Your past forecasts on this device', cant: "Anything, if you haven't kept score" },
 ];
@@ -396,24 +375,21 @@ export const tabByLetter = (l) => TABS.find((t) => t.letter && t.letter === l);
 /** The forecasts the Consensus tab can combine, and the sweep checks. Each is a function of (screen, plan). */
 export const FORECASTERS = {
   status: (S) => statusReport(S).forecast,
-  burndown: (S) => sprintBurndown(S).forecast,
   cost: (S, p) => costManagement(S, p).forecast,
   schedule: (S, p) => schedule(S, p).forecast,
-  lessons: (S) => lessonsLearned(S).forecast,
-  panel: (S, p) => expertPanel(S, p).forecast,
-  market: (S) => predictionMarket(S).forecast,
   ai: (S, p) => aiAssistant(S, p).forecast,
+  last5: (S) => lastFive(S).forecast,
   'records-all': (S) => records(S).all,
   'records-plan': (S, p) => records(S, p).matched,
-  benchmark: (S) => industryBenchmark(S).forecast,
   scenarios: (S, p) => scenarios(S, p).forecast,
   analytics: (S, p) => analytics(S, p).forecast,
   simulator: (S, p) => riskSimulator(S, p).forecast,
+  'simulator-blind': (S, p) => riskSimulator(S, p, { rework: false }).forecast,
 };
 export const FORECASTER_NAMES = {
-  status: 'Status Report', burndown: 'Sprint Burndown', cost: 'Cost Management', schedule: 'Schedule', lessons: 'Lessons Learned', panel: 'Expert Panel', market: 'Prediction Market',
-  ai: 'AI Assistant', 'records-all': 'Records, all 40', 'records-plan': 'Records, like my plan', benchmark: 'Industry Benchmark', scenarios: 'Scenarios',
-  analytics: 'Analytics', simulator: 'Risk Simulator',
+  status: 'Status Report', cost: 'Cost Management', schedule: 'Schedule', ai: 'AI Assistant', last5: 'Last 5 Contracts',
+  'records-all': 'Records, all 40', 'records-plan': 'Records, like my plan', scenarios: 'Scenarios', analytics: 'Analytics',
+  simulator: 'Risk Simulator (with rework)', 'simulator-blind': 'Risk Simulator (rework off)',
 };
 
 /** Consensus: the average of the ticked forecasters. */

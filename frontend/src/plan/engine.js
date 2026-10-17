@@ -467,10 +467,20 @@ export function playManager(p, m) {
   return p;
 }
 
+/**
+ * The record is chronological: contract n (the newest) is the line's last contract,
+ * the one the briefing tells the story of. Its manager ran it hands-off, on the
+ * contract seed 'last-contract'. Every other manager is drawn from PAST_SEED.
+ */
 export function pastManagers(n = CONFIG.pastContracts) {
   const r = mulberry32(PAST_SEED);
-  return Array.from({ length: n }, () => makeManager(r));
+  const ms = Array.from({ length: n }, () => makeManager(r));
+  ms[n - 1] = { arch: 'coaster', hire: 0, hireWeek: 1, react: false, stage: false, inspect: 0, inspectUntil: 99, shiftFrom: 99, shiftTo: 99, last: true };
+  return ms;
 }
+
+/** The scenario seed each past contract was played on. */
+export const contractSeed = (i, n = CONFIG.pastContracts) => (i === n - 1 ? 'last-contract' : `past-${i}`);
 
 // Six common plans, in the terms the commit screen asks for.
 export const COMMON_PLANS = [
@@ -552,7 +562,7 @@ let _past = null;
 export function pastContracts(cfg = CONFIG) {
   if (_past && cfg === CONFIG) return _past;
   const contracts = pastManagers(cfg.pastContracts)
-    .map((m, i) => ({ ...contractRow(playManager(new Project(`past-${i}`, cfg), m), i + 1), habit: m.arch }));
+    .map((m, i) => ({ ...contractRow(playManager(new Project(contractSeed(i, cfg.pastContracts), cfg), m), i + 1), habit: m.arch }));
   const res = { contracts, weeks: contracts.map((r) => recordWeek(r, cfg)), ...summarizeContracts(contracts, cfg) };
   if (cfg === CONFIG) _past = res;
   return res;
@@ -595,7 +605,7 @@ export function matchContracts(plan, { min = 5, cfg = CONFIG } = {}) {
   return null;
 }
 
-// ── The line's last contract ─────────────────────────────────────────────────
+// ── The line's last contract (record #40, the newest in the record) ─────────────
 // Same line, same four crews, built flat out with no inspection. The briefing shows
 // its first weeks of reported completions (the inside view) AND how it ended: the
 // week its dashboard first read 100%, and the week it was actually accepted.

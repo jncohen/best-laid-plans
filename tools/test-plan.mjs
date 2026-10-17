@@ -2,8 +2,8 @@
 import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean, playPolicy, matchContracts, planFromProject, summarizeContracts,
   encodePlan, decodePlan, normalizePlan, playedPlan, judgeForecast } from '../frontend/src/plan/engine.js';
 import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/plan/table.js';
-import { pastManagers, playManager, recordWeek } from '../frontend/src/plan/engine.js';
-import { screenData, allForecasts, statusReport, schedule, lessonsLearned, records, analytics, riskSimulator, scenarios, consensus, aiAssistant, teamChat, costManagement, TABS } from '../frontend/src/plan/desk.js';
+import { pastManagers, playManager, recordWeek, contractSeed } from '../frontend/src/plan/engine.js';
+import { screenData, allForecasts, statusReport, schedule, lastFive, records, analytics, riskSimulator, scenarios, consensus, aiAssistant, teamChat, costManagement, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -73,6 +73,13 @@ console.log('The briefing is the engine\'s own record');
   t('past contracts have the configured count', past.weeks.length === CONFIG.pastContracts);
   t('past contracts: p10 <= median <= p90', past.p10 <= past.median && past.median <= past.p90);
   t('the outside view is later than the inside view', past.median > CONFIG.scope / historyMean());
+}
+
+console.log('The record is chronological; #40 is the last contract');
+{
+  const r40 = pastContracts().contracts[CONFIG.pastContracts - 1], l = lastContract();
+  t('record #40 is the last contract: dashboard 100% wk 13, accepted wk 17, 19 rejected, run hands-off', r40.dashboardFullWeek === l.dashboardFullWeek && r40.accepted === l.deliveredWeek && r40.rejected === l.rejected
+    && r40.crewsAdded === 0 && r40.inspect === 0 && r40.shiftWeeks === 0);
 }
 
 console.log('The numbers the lecture quotes');
@@ -169,14 +176,14 @@ console.log('Fairness invariants');
   t('2. the forecast and the stated plan never change an outcome', sameOutcome);
   const past = pastContracts();
   const rebuilt = past.contracts.every((r, i) => {
-    const p = new Project(`past-${i}`);
+    const p = new Project(contractSeed(i));
     return p.shockWeek === r.scopeWeek && p.shockSize === r.scopeUnits;
   });
   t('3. the past contracts are drawn by the same engine (their scope changes are the engine\'s own draws)', rebuilt);
   t('3. past scope changes come from the same distributions as the student\'s', past.contracts.every((r) => r.scopeWeek >= CONFIG.shockWeeks[0] && r.scopeWeek <= CONFIG.shockWeeks[1]
     && ((r.scopeUnits >= CONFIG.shockUnits[0] && r.scopeUnits <= CONFIG.shockUnits[1]) || (r.scopeUnits >= CONFIG.shockTailUnits[0] && r.scopeUnits <= CONFIG.shockTailUnits[1]))));
   const managers = pastManagers();
-  t('3. every past contract replays to the same outcome in a fresh engine', managers.every((m, i) => playManager(new Project(`past-${i}`), m).outcomeWeek() === past.contracts[i].accepted));
+  t('3. every past contract replays to the same outcome in a fresh engine', managers.every((m, i) => playManager(new Project(contractSeed(i)), m).outcomeWeek() === past.contracts[i].accepted));
   t('3. the record’s managers are drawn from a fixed seed', JSON.stringify(pastManagers()) === JSON.stringify(managers) && new Set(managers.map((m) => m.arch)).size === 8);
   t('3. the record has variety: at least 20 distinct plans, hires in week 1 and later', new Set(past.contracts.map((r) => `${r.crewsAdded}|${r.hires.map((h) => h.week)}|${r.inspect}|${r.shiftWeeks}`)).size >= 20
     && past.contracts.some((r) => r.hires.some((h) => h.week >= 4)));
@@ -227,13 +234,13 @@ console.log('Verdicts on ledger');
   const b = judge({ week: mc.median, low: mc.p10, high: mc.p90, onTimeChance: Math.round(100 * mc.onTimeShare) }, C3I, { hire: 3, inspect: 0.1 });
   t(`matched record for +3/10% (${mc.median}, ${mc.p10}-${mc.p90}), stated and played: Reasoned`, b.j.held && b.j.verdict === 'reasoned' && b.j.matched.median === mc.median);
   const c = judge({ week: 14, low: 12, high: 17, onTimeChance: 15 }, HANDS_OFF, {});
-  // On seed 659 the hands-off match (crews within one) is 15 (14-18), close enough to all 40's 14 (12-17) to count as Reasoned.
-  t('all-40 record, stated and played hands-off: week 17, held, Reasoned, coaster line', c.p.scores().outcome === 17 && c.j.held && c.j.verdict === 'reasoned'
-    && c.j.coaster && c.j.coaster.n === 3 && c.j.coaster.late === 3 && c.j.coaster.median === 17);
+  // With record #40 the line's last contract (a coaster), the hands-off match is 17 (14-18): all 40's 14 sits off it.
+  t('all-40 record, stated and played hands-off: week 17, held, Lucky (off the hands-off record), coaster line', c.p.scores().outcome === 17 && c.j.held && c.j.verdict === 'lucky' && c.j.why === 'off-record'
+    && c.j.coaster && c.j.coaster.n === 4 && c.j.coaster.late === 4 && c.j.coaster.median === 17);
   const ho = pastContracts().contracts.filter((r) => r.crewsAdded === 0 && r.inspect === 0 && r.shiftWeeks === 0);
   t('the coaster line counts only contracts the record shows as hands-off', c.j.coaster.n === ho.length && c.j.coaster.median === summarizeContracts(ho).median);
   const d = judge(pace, HANDS_OFF, {});
-  t('pace, stated and played hands-off: Missed, with the coaster line', d.j.verdict === 'missed' && d.j.coaster?.n === 3);
+  t('pace, stated and played hands-off: Missed, with the coaster line', d.j.verdict === 'missed' && d.j.coaster?.n === 4);
   const e = judge(pace, C3I, { hire: 3, inspect: 0.1 });
   t('pace with the best plan stated and played: still Lucky, not Reasoned', e.j.held && e.j.verdict === 'lucky');
   t('the verdict never changes a score', a.p.scores().forecast === 90 && judge(pace, C3I, { hire: 3, inspect: 0.1 }).p.scores().forecast === 90);
@@ -255,15 +262,16 @@ console.log('The Decision Desk sees only the screen');
   for (const seed of ['ledger', 'compass', 'desk-x']) playPolicy(new Project(seed), { hire: 3, inspect: 0.1 });
   t('playing any scenario leaves every tool unchanged', JSON.stringify(plans.map((p) => allForecasts(screenData(), p))) === before);
   t('every tool gives low <= week <= high and a chance in 0-100', plans.every((p) => allForecasts(S, p).every((f) => f.low <= f.week && f.week <= f.high && f.chance >= 0 && f.chance <= 100)));
-  t('the AI Assistant gives the Status Report\'s numbers for every plan', plans.every((p) => JSON.stringify(aiAssistant(S, p).forecast) === JSON.stringify(statusReport(S).forecast)));
-  t('the AI Assistant shows its context and says what it is based on', aiAssistant(S, COMMON_PLANS[4]).context.length === 2 && /Status Report/.test(aiAssistant(S, COMMON_PLANS[4]).basis));
+  t('the AI Assistant, given the whole briefing, plans on the contracts run like the stated plan', plans.every((p) => JSON.stringify(aiAssistant(S, p).forecast) === JSON.stringify((({ week, low, high, chance }) => ({ week, low, high, chance }))(records(S, p).matched))));
+  t('the AI Assistant shows its context and names the pace, the record and rework', (() => { const a = aiAssistant(S, COMMON_PLANS[4]); return a.context.length === 2 && /whole briefing/.test(a.context[0]) && /19\.1/.test(a.answer) && /week 14/.test(a.answer) && /failed acceptance/.test(a.answer) && /scope change/.test(a.answer); })());
   t('every Team Chat colleague names the desk frame they reason from', teamChat(S, COMMON_PLANS[0]).every((c) => c.frame && c.reasoning && c.forecast));
-  t('the most confident colleague is the Status Report\'s', teamChat(S, COMMON_PLANS[0]).sort((a, b) => b.confidence - a.confidence)[0].frame === 'Status Report');
+  t('Team Chat is Mabel, Priya, Dana, Sam and Kim, and Mabel quotes the real record', (() => { const c = teamChat(S, COMMON_PLANS[0]); const all = records(S).all; return c.map((x) => x.name).join() === 'Mabel,Priya,Dana,Sam,Kim' && c[0].says.includes('fourteen weeks') && c[0].says.includes('one in seven') && all.week === 14 && all.chance === 15; })());
+  t('Priya quotes the last contract\'s real rework', teamChat(S, COMMON_PLANS[0])[1].says.includes(`${screenData().last.rejected} units`) && teamChat(S, COMMON_PLANS[0])[1].says.includes('four more weeks'));
   t('Cost Management implies the Schedule\'s finish, and shows the credit line', JSON.stringify(costManagement(S, COMMON_PLANS[4]).forecast) === JSON.stringify(schedule(S, COMMON_PLANS[4]).forecast)
     && costManagement(S, COMMON_PLANS[4]).limit === CONFIG.budget + CONFIG.creditLine);
   t('Cost Management: +2 crews with a shift every week runs out of money in week 13', costManagement(S, { crews: 2, inspect: 0, shift: 'every' }).brokeWeek === 13);
-  t('every tab has a one-line sees and can\'t-see, except the front tab', TABS.slice(1).every((x) => x.sees && x.cant) && TABS.length === 19);
-  t('tab letters are unique', new Set(TABS.map((x) => x.letter).filter(Boolean)).size === 18);
+  t('every tab has a one-line sees and can\'t-see, except the front tab', TABS.slice(1).every((x) => x.sees && x.cant) && TABS.length === 14);
+  t('tab letters are unique', new Set(TABS.map((x) => x.letter).filter(Boolean)).size === 13);
 }
 
 console.log('Desk numbers on ledger (work order, Oct 17)');
@@ -271,15 +279,16 @@ console.log('Desk numbers on ledger (work order, Oct 17)');
   const S = screenData();
   const f = (x) => `${x.week} (${x.low}-${x.high}) ${x.chance}`;
   const HO = COMMON_PLANS[0], C3I = COMMON_PLANS[4];
-  t('Status Report: 10 (10-11) 95', f(statusReport(S).forecast) === '10 (10-11) 95');
+  t('Status Report (EVM, 12 weeks / SPI): 10 (10-11) 90', f(statusReport(S).forecast) === '10 (10-11) 90' && statusReport(S).eacWeeks === 10.5);
   t('Schedule: hands-off 11 (10-12), +3/10% 9 (8-10)', f(schedule(S, HO).forecast).startsWith('11 (10-12)') && f(schedule(S, C3I).forecast).startsWith('9 (8-10)'));
-  t('Lessons Learned: 17 (16-18) 10', f(lessonsLearned(S).forecast) === '17 (16-18) 10');
+  t('Last 5 Contracts are records #36-40, the newest is the last contract: 16 (13-17) 0', (() => { const l = lastFive(S); return l.rows.map((r) => r.id).join() === '36,37,38,39,40' && l.newest.deliveredWeek === 17 && l.newest.dashboardFullWeek === 13 && l.newest.rejected === 19 && f(l.forecast) === '16 (13-17) 0'; })());
   // On the seeded-manager record (Oct 17 lists had 17 (15-20) 0 / 13 (11-14) 43 and 17 (15-19) 0 / 13 (11-14) 45).
-  t('Records like my plan: hands-off 15 (14-18) 0, +3/10% 13 (12-15) 29', f(records(S, HO).matched) === '15 (14-18) 0' && f(records(S, C3I).matched) === '13 (12-15) 29');
-  t('Analytics: hands-off 17 (15-18) 0, +3/10% 13 (11-15) 38', f(analytics(S, HO).forecast) === '17 (15-18) 0' && f(analytics(S, C3I).forecast) === '13 (11-15) 38');
-  t('Risk Simulator: hands-off 12 (11-12) 93, +3/10% 9 (9-10) 100', f(riskSimulator(S, HO).forecast) === '12 (11-12) 93' && f(riskSimulator(S, C3I).forecast) === '9 (9-10) 100');
+  t('Records like my plan: hands-off 17 (14-18) 0, +3/10% 13 (12-15) 29', f(records(S, HO).matched) === '17 (14-18) 0' && f(records(S, C3I).matched) === '13 (12-15) 29');
+  t('Analytics: hands-off 17 (15-18) 0, +3/10% 13 (11-14) 40', f(analytics(S, HO).forecast) === '17 (15-18) 0' && f(analytics(S, C3I).forecast) === '13 (11-14) 40');
+  t('Risk Simulator, rework on: hands-off 17 (15-19), +3/10% 13 (11-14); off: 12 (11-12) 93 and 9 (9-10) 100', f(riskSimulator(S, HO).forecast).startsWith('17 (15-19)') && f(riskSimulator(S, C3I).forecast).startsWith('13 (11-14)')
+    && f(riskSimulator(S, HO, { rework: false }).forecast) === '12 (11-12) 93' && f(riskSimulator(S, C3I, { rework: false }).forecast) === '9 (9-10) 100');
   t('Scenarios: hands-off 11/12/15/17, +3/10% 9/9/10/12', scenarios(S, HO).rows.map((r) => r.week).join('/') === '11/12/15/17' && scenarios(S, C3I).rows.map((r) => r.week).join('/') === '9/9/10/12');
-  t('Consensus of five, +3/10%: 12 (10-13)', f(consensus(S, C3I, ['records-all', 'records-plan', 'analytics', 'simulator', 'schedule']).forecast).startsWith('12 (10-13)'));
+  t('Consensus of five, +3/10%: 12 (11-14)', f(consensus(S, C3I, ['records-all', 'records-plan', 'analytics', 'simulator', 'schedule']).forecast).startsWith('12 (11-14)'));
 }
 
 console.log('Desk usage, recorded on the project');

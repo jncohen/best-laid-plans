@@ -36,7 +36,7 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
   const cases = [
     ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, 'Lucky', false],
     ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, 'Reasoned', false],
-    ['all 40, hands-off stated and played', { week: 14, low: 12, high: 17, onTimeChance: 15 }, HO, {}, 'Reasoned', true],
+    ['all 40, hands-off stated and played', { week: 14, low: 12, high: 17, onTimeChance: 15 }, HO, {}, 'Lucky', true],
     ['pace, hands-off stated and played', pace, HO, {}, 'Missed', true],
   ];
   for (const [i, [label, f, plan, pol, verdict, coaster]] of cases.entries()) {
@@ -61,7 +61,7 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
   }
   ok('Brief, front tab: plan, forecast and the disclosures', () => {
     const h = renderToString(<Brief onCommit={() => {}} />);
-    for (const s of ['Your Plan and Prediction · Commit Before Week 1', 'terminates the contract', 'turn out defective', 'scope change', '1 · Your plan', 'Status Report', 'Your Track Record']) {
+    for (const s of ['Your Plan and Prediction · Commit Before Week 1', 'terminates the contract', 'Last 5 Contracts', 'turn out defective', 'scope change', '1 · Your plan', 'Status Report', 'Your Track Record']) {
       if (!h.includes(s)) throw new Error(`missing "${s}"`);
     }
     return h;
@@ -74,10 +74,11 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
         if (!h.includes(t.sees.replace(/'/g, '&#x27;')) && !h.includes(t.sees)) throw new Error('sees-label missing');
         if (t.forecasts && t.id !== 'chat' && t.id !== 'consensus' && t.id !== 'records' && !h.includes('Use this on my prediction')) throw new Error('no Use this button');
         if (t.id === 'records' && (h.match(/<tr/g) || []).length < 41) throw new Error('table does not have 40 rows');
-        if (t.id === 'benchmark' && !h.includes('different population')) throw new Error('benchmark not labelled');
-        if (t.id === 'market' && !h.includes('simulated')) throw new Error('market traders not labelled');
-        if (t.id === 'cost' && !h.includes('bankruptcy')) throw new Error('bankruptcy line missing');
-        if (t.id === 'ai' && !h.includes('Context given to the assistant')) throw new Error('AI context hidden');
+                        if (t.id === 'cost' && !h.includes('bankruptcy')) throw new Error('bankruptcy line missing');
+        if (t.id === 'simulator' && !h.includes('Include rework')) throw new Error('rework switch missing');
+        if (t.id === 'last5' && !/#(<!-- -->)?40/.test(h)) throw new Error('last contract not record #40');
+        if (t.id === 'risks' && !h.includes('Premortem')) throw new Error('premortem missing');
+        if (t.id === 'ai' && !h.includes('Show what was pasted in')) throw new Error('AI context not offered');
         return h;
       });
     }
