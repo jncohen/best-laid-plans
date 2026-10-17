@@ -135,6 +135,7 @@ export class Project {
     this.finishWeek = null;
     this.forecast = null;      // committed before week 1
     this.plan = null;          // the plan stated before week 1
+    this.desk = null;          // how the Decision Desk was used before week 1
     this.forecastLog = [];
     this.history = [];
     this.spent = 0;
@@ -160,10 +161,11 @@ export class Project {
    * The forecast and the plan the student says they will play. Neither is read by
    * play(): they are recorded, never acted on.
    */
-  commit({ week, low, high, onTimeChance, plan = null }) {
+  commit({ week, low, high, onTimeChance, plan = null, desk = null }) {
     this.forecast = { week: +week, low: +low, high: +high, onTimeChance: +onTimeChance };
     this.forecastLog = [{ week: 0, forecast: +week }];
     this.plan = plan ? normalizePlan(plan) : null;
+    this.desk = desk ? normalizeDesk(desk) : null;
   }
 
   /** What the coming week will cost, before it is played. */
@@ -319,10 +321,11 @@ export class Project {
 
   /**
    * Compact code a student reads out or pastes for the Room page.
-   *   BLP2|seed|week|low|high|chance|outcome|D/T|ninety|spentK|plan|name
+   *   BLP3|seed|week|low|high|chance|outcome|D/T|ninety|spentK|plan|desk|name
    * `plan` is the stated plan in three characters (crews added, inspection in tens of
    * percent, shift n/l/e: "31n" is +3 crews, 10%, no shift), followed by the plan
-   * actually played only if that differs: "01n31n".
+   * actually played only if that differs: "01n31n". `desk` is how the briefing's tabs
+   * were used (see encodeDesk): "o7m6e".
    */
   resultCode(name = '') {
     const f = this.forecast || {};
@@ -330,7 +333,7 @@ export class Project {
     const stated = this.plan ? encodePlan(this.plan) : '';
     const played = encodePlan(playedPlan(this));
     const fields = [
-      'BLP2',
+      'BLP3',
       this.seed.toString(36),
       f.week, f.low, f.high, f.onTimeChance,
       s.outcome,
@@ -338,26 +341,27 @@ export class Project {
       this.ninetyWeek() ?? '',
       Math.round(this.spent / 1000),
       stated === played ? stated : stated + played,
+      this.desk ? encodeDesk(this.desk) : '',
       String(name).replace(/[^A-Za-z0-9 .'-]/g, '').slice(0, 24),
     ];
     return fields.join('|');
   }
 }
 
-/** Reads BLP2 codes and the older BLP1 codes (which carry no plan). */
+/** Reads BLP3 codes and the older BLP2 (no desk) and BLP1 (no plan) codes. */
 export function parseResultCode(code) {
   const parts = String(code).trim().split('|');
-  const v = parts[0]?.toUpperCase();
-  if (parts.length < 10 || (v !== 'BLP1' && v !== 'BLP2')) return null;
+  const version = { BLP1: 1, BLP2: 2, BLP3: 3 }[parts[0]?.toUpperCase()];
+  if (parts.length < 10 || !version) return null;
   const [, seed36, week, low, high, conf, outcome, res, ninety, spentK] = parts;
-  const planField = v === 'BLP2' ? (parts[10] ?? '').trim().toLowerCase() : '';
-  const name = (v === 'BLP2' ? parts[11] : parts[10]) ?? '';
+  const planField = version >= 2 ? (parts[10] ?? '').trim().toLowerCase() : '';
+  const name = parts[version === 1 ? 10 : version === 2 ? 11 : 12] ?? '';
   const n = (x) => (x === '' ? null : Number(x));
   const r = {
-    version: v === 'BLP2' ? 2 : 1,
+    version,
     seed: parseInt(seed36, 36), week: n(week), low: n(low), high: n(high), onTimeChance: n(conf),
     outcome: n(outcome), delivered: res?.toUpperCase() === 'D', ninetyWeek: n(ninety), spentK: n(spentK), name,
-    plan: null, played: null,
+    plan: null, played: null, desk: version === 3 ? decodeDesk(parts[11] ?? '') : null,
   };
   if (![r.week, r.low, r.high, r.onTimeChance, r.outcome].every(Number.isFinite)) return null;
   if (planField) {
@@ -366,6 +370,25 @@ export function parseResultCode(code) {
     if (stated && played) { r.plan = stated; r.played = played; }
   }
   return r;
+}
+
+// ── The Decision Desk, as recorded ───────────────────────────────────────────
+// What the student looked at before committing: the tool whose numbers they used (a
+// tab letter, or none), how many tool tabs they opened, minutes on the briefing, and
+// whether they changed the numbers they were given (the tool's, or the defaults).
+// The order the tabs were opened in stays on the device; it is too long to read aloud.
+export function normalizeDesk(d) {
+  const tool = /^[a-z]$/.test(d.tool || '') ? d.tool : '';
+  return { tool, tabs: Math.max(0, Math.min(99, Math.round(+d.tabs || 0))), minutes: Math.max(0, Math.min(99, Math.round(+d.minutes || 0))), edited: !!d.edited, order: Array.isArray(d.order) ? d.order.map(String) : [] };
+}
+
+/** "o7m6e": used tab o, opened 7 tabs, 6 minutes, edited. "x0m2": no tool, no tabs, 2 minutes, numbers as given. */
+export const encodeDesk = (d) => { const n = normalizeDesk(d); return `${n.tool || 'x'}${n.tabs}m${n.minutes}${n.edited ? 'e' : ''}`; };
+
+export function decodeDesk(s) {
+  const m = /^([a-z])(\d{1,2})m(\d{1,2})(e?)$/.exec(String(s).trim().toLowerCase());
+  if (!m) return null;
+  return { tool: m[1] === 'x' ? '' : m[1], tabs: +m[2], minutes: +m[3], edited: m[4] === 'e' };
 }
 
 // ── Plans ────────────────────────────────────────────────────────────────────
