@@ -129,9 +129,14 @@ Colours:
 The 40 past contracts are run by managers with habits of their own: eight
 archetypes (coaster, early hirer, reactive hirer, staged hirer, inspector, shift
 runner, hire + shift, quality-first). Each manager's parameters are drawn from a fixed
-seed (476), so the record is the same for everyone and on every scenario code. Each
+seed (659), so the record is the same for everyone and on every scenario code. Each
 manager plays the same engine week by week and reacts only to what their screen
 shows: the reported backlog, crews and week.
+
+On this seed the record has a median of week 14, a 10th–90th percentile range of
+weeks 12–17 and 6 of 40 on time, the same figures as the fixed record in 1.1.0. It
+has 24 distinct plans, and no past manager went bankrupt. A contract that was never
+accepted would count as later than any delivered one.
 
 The Records table shows, for each contract:
 - what the manager did: crews added and when, inspection, second-shift weeks;

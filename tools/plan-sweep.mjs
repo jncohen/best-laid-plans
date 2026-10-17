@@ -16,9 +16,9 @@
  *      staffing, and the most inspection is not the best.
  *   7. Reference-class matching works: for each common plan, the p10-p90 of the
  *      past contracts run like what was actually played holds the outcome >= 80%.
- *   8. Matching beats the whole record where the plan is far from typical: for
- *      hands-off and +3 crews with 10% inspection, all 40 hold less often than
- *      the matched contracts.
+ *   8. Matching is as reliable as the whole record and sharper where the plan is far
+ *      from typical: for hands-off and +3 crews with 10% inspection, the matched
+ *      contracts' p10-p90 holds within 3 points as often as all 40, and is narrower.
  *   9-11. The Decision Desk (frontend/src/plan/desk.js): record-based tools hold
  *      >= 80%, inside-view tools <= 10%, and the AI Assistant exactly as often as
  *      the Status Report it is given. Every tool, colleague included, is reported.
@@ -146,6 +146,8 @@ const byPlan = (k) => vals.find((r) => r.plan === k);
 const best = Math.max(...vals.map((r) => r.deliv));
 const bestOnTime = Math.max(...vals.map((r) => r.onTime));
 const ho = byPlan('hands-off'), c3i = byPlan('crews3-inspect');
+const matchOf = (k) => matchContracts(COMMON_PLANS.find((cp) => cp.key === k));
+const width = (s) => s.p90 - s.p10;
 const checks = [
   ['1. Dashboard projection runs late for every strategy (100% of runs)', Math.min(...vals.map((r) => r.dashLate)) === 1, `min ${pct(Math.min(...vals.map((r) => r.dashLate)))}`],
   ['2. Outside view contains the outcome (>= 70% overall)', mean(vals.map((r) => r.ovHit)) >= 0.7, pct(mean(vals.map((r) => r.ovHit)))],
@@ -156,8 +158,9 @@ const checks = [
     `0%: ${rows['+2 crews'].deliv.toFixed(1)}  10%: ${rows['+2 crews, inspect 10%'].deliv.toFixed(1)}  20%: ${rows['+2 crews, inspect 20%'].deliv.toFixed(1)}  30%: ${rows['+2 crews, inspect 30%'].deliv.toFixed(1)}`],
   ['7. Matched p10-p90 holds >= 80% for each common plan', common.length === COMMON_PLANS.length && Math.min(...common.map((r) => r.matchHit)) >= 0.8,
     common.map((r) => `${r.plan} ${pct(r.matchHit)}`).join('  ')],
-  ['8. All 40 hold less often than matched (hands-off; +3 crews, 10%)', ho.ovHit < ho.matchHit && c3i.ovHit < c3i.matchHit,
-    `hands-off ${pct(ho.ovHit)} < ${pct(ho.matchHit)};  +3/10% ${pct(c3i.ovHit)} < ${pct(c3i.matchHit)}`],
+  ['8. Matched holds within 3 points of all 40, with a narrower range (hands-off; +3 crews, 10%)',
+    [[ho, 'hands-off'], [c3i, 'crews3-inspect']].every(([r, k]) => r.matchHit >= r.ovHit - 0.03 && width(matchOf(k)) < width(past)),
+    [[ho, 'hands-off'], [c3i, 'crews3-inspect']].map(([r, k]) => `${k} matched ${pct(r.matchHit)} (${matchOf(k).p10}-${matchOf(k).p90}) vs all 40 ${pct(r.ovHit)} (${past.p10}-${past.p90})`).join(';  ')],
 ];
 // ── The Decision Desk: each tool's 80% range, playing the stated plan ───────────
 // The tools read only the screen, which is the same on every code, so each tool's

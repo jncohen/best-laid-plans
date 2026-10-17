@@ -87,11 +87,10 @@ console.log('The numbers the lecture quotes');
   t('seed ledger: scope change in week 4, +15 units', ledger.shockWeek === 4 && ledger.shockSize === 15);
   t('seed compass: scope change in week 6, +19 units', compass.shockWeek === 6 && compass.shockSize === 19);
   const past = pastContracts();
-  // PROVISIONAL (seed 476): the bankrupt contract counts as never delivered, so the median is 15, not the lecture's 14. Joe is choosing between this and seed 659 (median 14).
-  t('all 40 past contracts: median 15 (seed 476, bankrupt counted as never delivered)', past.median === 15);
+  t('all 40 past contracts: median 14', past.median === 14);
   t('all 40 past contracts: 10-90 range 12-17', past.p10 === 12 && past.p90 === 17);
-  // 5 on time since the record became 40 seeded managers (decision-desk, Joe, Oct 17); 6 under the fixed recipes.
-  t('all 40 past contracts: 5 on time', past.contracts.filter((r) => r.onTime).length === 5);
+  t('all 40 past contracts: 6 on time', past.contracts.filter((r) => r.onTime).length === 6);
+  t('no past manager went bankrupt or was terminated (record seed 659)', past.contracts.every((r) => r.delivered));
 }
 
 console.log('The past contracts are a table');
@@ -228,12 +227,13 @@ console.log('Verdicts on ledger');
   const b = judge({ week: mc.median, low: mc.p10, high: mc.p90, onTimeChance: Math.round(100 * mc.onTimeShare) }, C3I, { hire: 3, inspect: 0.1 });
   t(`matched record for +3/10% (${mc.median}, ${mc.p10}-${mc.p90}), stated and played: Reasoned`, b.j.held && b.j.verdict === 'reasoned' && b.j.matched.median === mc.median);
   const c = judge({ week: 14, low: 12, high: 17, onTimeChance: 15 }, HANDS_OFF, {});
-  t('all-40 record, stated and played hands-off: week 17, held, Lucky (off the coasters\' record), coaster line', c.p.scores().outcome === 17 && c.j.held && c.j.verdict === 'lucky' && c.j.why === 'off-record'
-    && c.j.coaster && c.j.coaster.n === 4 && c.j.coaster.late === 4 && c.j.coaster.median === 17);
+  // On seed 659 the hands-off match (crews within one) is 15 (14-18), close enough to all 40's 14 (12-17) to count as Reasoned.
+  t('all-40 record, stated and played hands-off: week 17, held, Reasoned, coaster line', c.p.scores().outcome === 17 && c.j.held && c.j.verdict === 'reasoned'
+    && c.j.coaster && c.j.coaster.n === 3 && c.j.coaster.late === 3 && c.j.coaster.median === 17);
   const ho = pastContracts().contracts.filter((r) => r.crewsAdded === 0 && r.inspect === 0 && r.shiftWeeks === 0);
   t('the coaster line counts only contracts the record shows as hands-off', c.j.coaster.n === ho.length && c.j.coaster.median === summarizeContracts(ho).median);
   const d = judge(pace, HANDS_OFF, {});
-  t('pace, stated and played hands-off: Missed, with the coaster line', d.j.verdict === 'missed' && d.j.coaster?.n === 4);
+  t('pace, stated and played hands-off: Missed, with the coaster line', d.j.verdict === 'missed' && d.j.coaster?.n === 3);
   const e = judge(pace, C3I, { hire: 3, inspect: 0.1 });
   t('pace with the best plan stated and played: still Lucky, not Reasoned', e.j.held && e.j.verdict === 'lucky');
   t('the verdict never changes a score', a.p.scores().forecast === 90 && judge(pace, C3I, { hire: 3, inspect: 0.1 }).p.scores().forecast === 90);
@@ -275,11 +275,11 @@ console.log('Desk numbers on ledger (work order, Oct 17)');
   t('Schedule: hands-off 11 (10-12), +3/10% 9 (8-10)', f(schedule(S, HO).forecast).startsWith('11 (10-12)') && f(schedule(S, C3I).forecast).startsWith('9 (8-10)'));
   t('Lessons Learned: 17 (16-18) 10', f(lessonsLearned(S).forecast) === '17 (16-18) 10');
   // On the seeded-manager record (Oct 17 lists had 17 (15-20) 0 / 13 (11-14) 43 and 17 (15-19) 0 / 13 (11-14) 45).
-  t('Records like my plan: hands-off 17 (15-19) 0, +3/10% 14 (12-15) 30', f(records(S, HO).matched) === '17 (15-19) 0' && f(records(S, C3I).matched) === '14 (12-15) 30');
-  t('Analytics: hands-off 17 (14-20) 3, +3/10% 13 (10-16) 36', f(analytics(S, HO).forecast) === '17 (14-20) 3' && f(analytics(S, C3I).forecast) === '13 (10-16) 36');
+  t('Records like my plan: hands-off 15 (14-18) 0, +3/10% 13 (12-15) 29', f(records(S, HO).matched) === '15 (14-18) 0' && f(records(S, C3I).matched) === '13 (12-15) 29');
+  t('Analytics: hands-off 17 (15-18) 0, +3/10% 13 (11-15) 38', f(analytics(S, HO).forecast) === '17 (15-18) 0' && f(analytics(S, C3I).forecast) === '13 (11-15) 38');
   t('Risk Simulator: hands-off 12 (11-12) 93, +3/10% 9 (9-10) 100', f(riskSimulator(S, HO).forecast) === '12 (11-12) 93' && f(riskSimulator(S, C3I).forecast) === '9 (9-10) 100');
   t('Scenarios: hands-off 11/12/15/17, +3/10% 9/9/10/12', scenarios(S, HO).rows.map((r) => r.week).join('/') === '11/12/15/17' && scenarios(S, C3I).rows.map((r) => r.week).join('/') === '9/9/10/12');
-  t('Consensus of five, +3/10%: 12 (10-14)', f(consensus(S, C3I, ['records-all', 'records-plan', 'analytics', 'simulator', 'schedule']).forecast).startsWith('12 (10-14)'));
+  t('Consensus of five, +3/10%: 12 (10-13)', f(consensus(S, C3I, ['records-all', 'records-plan', 'analytics', 'simulator', 'schedule']).forecast).startsWith('12 (10-13)'));
 }
 
 console.log('Desk usage, recorded on the project');

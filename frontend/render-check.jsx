@@ -36,7 +36,7 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
   const cases = [
     ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, 'Lucky', false],
     ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, 'Reasoned', false],
-    ['all 40, hands-off stated and played', { week: 14, low: 12, high: 17, onTimeChance: 15 }, HO, {}, 'Lucky', true],
+    ['all 40, hands-off stated and played', { week: 14, low: 12, high: 17, onTimeChance: 15 }, HO, {}, 'Reasoned', true],
     ['pace, hands-off stated and played', pace, HO, {}, 'Missed', true],
   ];
   for (const [i, [label, f, plan, pol, verdict, coaster]] of cases.entries()) {

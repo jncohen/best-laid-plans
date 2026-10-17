@@ -431,7 +431,7 @@ export function judgeForecast({ forecast: f, outcome, stated, played }, cfg = CO
 // the record is the same for the whole room and on every scenario code. Managers
 // play week by week and react only to what their screen shows (reported backlog,
 // crews, the week), never to the hidden defects.
-const PAST_SEED = 476;
+const PAST_SEED = 659;
 const ARCHETYPES = [
   ['coaster', 0.15], ['early hirer', 0.17], ['reactive hirer', 0.17], ['staged hirer', 0.08],
   ['inspector', 0.13], ['shift runner', 0.15], ['hire + shift', 0.08], ['quality-first', 0.07],
