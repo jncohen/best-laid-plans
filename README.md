@@ -24,7 +24,7 @@ favour of a show of hands. It is not live until it is merged into
    faces the same contract and the same scope change. A link with `?seed=ledger`
    fills it in.
 2. Each student opens the briefing. Its front tab, **Your Plan and Prediction ·
-   Commit Before Week 1**, starts with the decision: the plan (crews added at the
+   Commit Before Week 1** (the highlighted first tab), starts with the decision: the plan (crews added at the
    start, inspection, second shift), then the forecast (the acceptance week, an 80%
    range and the chance of week 12). Below that are the contract, the last contract's
    pace and story, the past contracts' range and the rules.
@@ -32,8 +32,10 @@ favour of a show of hands. It is not live until it is merged into
    tool computes a forecast from what the briefing shows and nothing else, and says
    what it can and can't see. "Use this on my prediction" copies a tool's numbers
    into the front tab, where they can still be edited.
-4. They play week by week. A collapsible **Decision support** bar above the
-   prediction holds the same tools, recomputed each week from what the screen shows:
+4. They play week by week. The same tab strip stays open. Its first tab, the
+   highlighted **This Week's Decisions** (crews, shift, inspection, the running
+   forecast and "Play week N"), opens each week, and switching to a tool and back
+   keeps unsaved choices. The tools are recomputed each week from what the screen shows:
    the dashboard, the crews, the spend and the week's events. "Use this" updates the
    running forecast (week, range and chance). The forecast committed before week 1
    remains the one that is scored. The contract ends when the customer accepts it,

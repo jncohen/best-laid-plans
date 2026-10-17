@@ -75,6 +75,7 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
       q.commit({ ...f, plan });
       const h = renderToString(<Play project={q} onPlay={() => {}} />);
       if (!h.includes('Your stated plan')) throw new Error('stated plan not shown');
+      if (!/This Week(&#x27;|')s Decisions/.test(h) || !h.includes('Status Report') || !/Play week (<!-- -->)?1/.test(h)) throw new Error('decisions tab or tool strip missing');
       return h;
     });
   }

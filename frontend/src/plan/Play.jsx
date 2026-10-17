@@ -7,6 +7,8 @@ import { Card, Stat, Slider } from './ui';
 import { money, pct } from './format';
 import { ProgressSpark, ForecastChart } from './charts';
 
+const DECIDE = { id: 'decide', short: "This Week's Decisions" };
+
 export default function Play({ project, onPlay }) {
   const c = CONFIG;
   const p = project;
@@ -22,8 +24,8 @@ export default function Play({ project, onPlay }) {
   const [forecast, setForecast] = useState(lastForecast);
   // The running forecast's range and chance, carried from week to week; the week-1 commitment is what is scored.
   const [range, setRange] = useState({ low: lastLog?.low ?? p.forecast.low, high: lastLog?.high ?? p.forecast.high, chance: lastLog?.chance ?? p.forecast.onTimeChance });
-  const [deskOpen, setDeskOpen] = useState(false);
-  const [deskTab, setDeskTab] = useState('status');
+  // The decisions tab opens each week; tool tabs sit beside it. Switching tabs keeps every choice above.
+  const [deskTab, setDeskTab] = useState('decide');
   const [seenTabs, setSeenTabs] = useState([]);
 
   const nextWeek = p.week + 1;
@@ -41,16 +43,18 @@ export default function Play({ project, onPlay }) {
     setRange(shownRange);
     setHire(0);
     setSeenTabs([]);
+    setDeskTab('decide');
   };
   const openTab = (id) => {
     setDeskTab(id);
-    if (!seenTabs.includes(id)) { setSeenTabs((t) => [...t, id]); p.noteDesk(nextWeek, id); }
+    if (id !== 'decide' && !seenTabs.includes(id)) { setSeenTabs((t) => [...t, id]); p.noteDesk(nextWeek, id); }
+    window.scrollTo(0, 0);
   };
   const useTool = (id, f) => {
     setForecast(Math.max(nextWeek, f.week));
     setRange({ low: f.low, high: f.high, chance: Math.round(f.chance / 5) * 5 });
     p.noteDesk(nextWeek, `use:${id}`);
-    setDeskOpen(false);
+    openTab('decide');
   };
   const live = liveScreen(p);
 
@@ -65,20 +69,17 @@ export default function Play({ project, onPlay }) {
         </span>
       </header>
 
-      <section className="bg-slate-900 border border-violet-500/40 rounded-2xl">
-        <button type="button" onClick={() => { setDeskOpen((o) => !o); if (!deskOpen) openTab(deskTab); }} aria-expanded={deskOpen}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm">
-          <span className="font-bold uppercase tracking-wider text-xs text-violet-200">Decision support</span>
-          <span className="text-slate-400">{deskOpen ? 'Close ▴' : `${TABS.length - 1} tools, updated for week ${nextWeek} ▾`}</span>
-        </button>
-        {deskOpen && (
-          <div className="px-4 pb-4 space-y-3">
-            <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} tabs={TABS.slice(1)} sticky={false} />
-            <DeskTab id={deskTab} S={S} plan={p.plan || { crews: 0, inspect: 0, shift: 'none' }} planReady={!!p.plan} onUse={useTool} live={live}
-              onCopyPrompt={() => p.noteDesk(nextWeek, 'ai-copy')} />
-          </div>
-        )}
-      </section>
+      <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} front={DECIDE} tabs={TABS.slice(1)} />
+
+      {deskTab !== 'decide' ? (
+        <>
+          <DeskTab id={deskTab} S={S} plan={p.plan || { crews: 0, inspect: 0, shift: 'none' }} planReady={!!p.plan} onUse={useTool} live={live}
+            onCopyPrompt={() => p.noteDesk(nextWeek, 'ai-copy')} />
+          <button type="button" onClick={() => openTab('decide')} className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
+            Back to This Week's Decisions
+          </button>
+        </>
+      ) : (<>
 
       <Card title="Your prediction" tone="emerald">
         <div className="flex items-baseline justify-between mb-2">
@@ -173,10 +174,11 @@ export default function Play({ project, onPlay }) {
           )}
           <button type="button" onClick={run}
             className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">
-            Run week {nextWeek} · {money(cost)}
+            Play week {nextWeek} · {money(cost)}
           </button>
         </div>
       </Card>
+      </>)}
     </div>
   );
 }
