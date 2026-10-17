@@ -275,8 +275,8 @@ console.log('The Decision Desk sees only the screen');
   t('Cost Management implies the Schedule\'s finish, and shows the credit line', JSON.stringify(costManagement(S, COMMON_PLANS[4]).forecast) === JSON.stringify(schedule(S, COMMON_PLANS[4]).forecast)
     && costManagement(S, COMMON_PLANS[4]).limit === CONFIG.budget + CONFIG.creditLine);
   t('Cost Management: +2 crews with a shift every week runs out of money in week 13', costManagement(S, { crews: 2, inspect: 0, shift: 'every' }).brokeWeek === 13);
-  t('every tab has a one-line sees and can\'t-see, except the front tab', TABS.slice(1).every((x) => x.sees && x.cant) && TABS.length === 14);
-  t('tab letters are unique', new Set(TABS.map((x) => x.letter).filter(Boolean)).size === 13);
+  t('every tab has a one-line sees and can\'t-see, except the front tab', TABS.slice(1).every((x) => x.sees && x.cant) && TABS.length === 15 && TABS[1].id === 'contract');
+  t('tab letters are unique', new Set(TABS.map((x) => x.letter).filter(Boolean)).size === 14);
 }
 
 console.log('The desk during play sees only the dashboard');

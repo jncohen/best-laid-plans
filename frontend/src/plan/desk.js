@@ -453,6 +453,7 @@ export function aiPrompt(S, plan, L = null) {
  */
 export const TABS = [
   { id: 'commit', letter: '', group: null, name: 'Your Plan and Prediction · Commit Before Week 1', short: 'Your Plan & Prediction', tone: 'front' },
+  { id: 'contract', letter: 'b', group: 'The brief', name: 'The Contract', tone: 'brief', forecasts: false, sees: 'The contract, every rule and both scores', cant: 'How long it will take' },
   { id: 'status', letter: 'a', group: "The mind's own frames", name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Earned value: units reported complete against plan', cant: 'Whether those units will pass acceptance' },
   { id: 'cost', letter: 'c', group: "The mind's own frames", name: 'Cost Management', tone: 'inside', forecasts: true, sees: 'Money: spend, burn rate, the credit line', cant: 'Defects, so you can watch every dollar and still be late' },
   { id: 'schedule', letter: 'd', group: "The mind's own frames", name: 'Schedule', tone: 'inside', forecasts: true, sees: 'Your plan, week by week, under the stated rules', cant: 'Defects or scope changes' },

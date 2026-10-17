@@ -79,11 +79,29 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
       return h;
     });
   }
-  ok('Brief, front tab: plan, forecast and the disclosures', () => {
+  ok('Brief, front tab: inputs only', () => {
     const h = renderToString(<Brief onCommit={() => {}} />);
-    for (const s of ['Your Plan and Prediction · Commit Before Week 1', 'terminates the contract', 'Last 5 Contracts', 'turn out defective', 'scope change', '1 · Your plan', 'Status Report', 'Your Track Record']) {
-      if (!h.includes(s)) throw new Error(`missing "${s}"`);
-    }
+    for (const s of ['1 · Your plan', '2 · Your forecast', 'Commit plan and forecast', "The contract, its rules and the line"]) if (!h.includes(s) && !h.includes(s.replace("'", '&#x27;'))) throw new Error(`missing "${s}"`);
+    for (const s of ['terminates the contract', 'What you decide each week', 'a week</strong>']) if (h.includes(s)) throw new Error(`front tab still shows "${s}"`);
+    return h;
+  });
+  // Fairness: everything a calibrated forecast needs is reachable before week 1, in the tabs.
+  const before = (id, plan = null) => renderToString(<Brief onCommit={() => {}} initialTab={id} initialPlan={plan} />);
+  const strip = (h) => h.replace(/<!-- -->/g, '').replace(/&#x27;/g, "'").replace(/<\/?(strong|span)[^>]*>/g, '');
+  ok('Before week 1, The Contract states every rule and both scores', () => {
+    const h = strip(before('contract'));
+    for (const s of ['200', '12', '4', '$5.00M', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Forecast', 'Delivery', 'costs double']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    return h;
+  });
+  ok('Before week 1, Last 5 Contracts gives the pace and the last contract’s story', () => {
+    const h = strip(before('last5'));
+    for (const s of ['19.1 a week', '10.5 weeks', '100% in week 13', 'Accepted in week 17', '19 units']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    return h;
+  });
+  ok('Before week 1, Records gives the 40 contracts, their dot strip and summary', () => {
+    const h = strip(before('records'));
+    for (const s of ['All 40 contracts', 'median week 14', 'percentile weeks 12–17', '15% made week 12']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    if ((before('records').match(/rounded-full/g) || []).length < 40) throw new Error('dot strip missing');
     return h;
   });
   const C3 = { crews: 3, inspect: 0.1, shift: 'none' };

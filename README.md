@@ -23,12 +23,15 @@ favour of a show of hands. It is not live until it is merged into
 1. Give the room one scenario code (for example `ledger`). Everyone on the same code
    faces the same contract and the same scope change. A link with `?seed=ledger`
    fills it in.
-2. Each student opens the briefing. Its front tab, **Your Plan and Prediction ·
-   Commit Before Week 1** (the highlighted first tab), starts with the decision: the plan (crews added at the
-   start, inspection, second shift), then the forecast (the acceptance week, an 80%
-   range and the chance of week 12). Below that are the contract, the last contract's
-   pace and story, the past contracts' range and the rules.
-3. Before committing they may open any of the 13 tool tabs (below), or none. Each
+2. Each student opens the briefing. Its front tab, **Your Plan & Prediction** (the
+   highlighted first tab), holds only the inputs: the plan (crews added at the start,
+   inspection, second shift), then the forecast (the acceptance week, an 80% range
+   and the chance of week 12), then the commit button. The contract, its rules and
+   the line's history are in the tabs:
+   - **The Contract** (second) has the terms, every disclosure and both scores;
+   - **Last 5 Contracts** has the last contract's six-week pace and its story;
+   - **Records** has all 40 past contracts.
+3. Before committing they may open any of the tool tabs (below), or none. Each
    tool computes a forecast from what the briefing shows and nothing else, and says
    what it can and can't see. "Use this on my prediction" copies a tool's numbers
    into the front tab, where they can still be edited.
@@ -119,6 +122,8 @@ Colours:
 
 | Tab | Clones | Sees · can't see |
 |---|---|---|
+| **The brief** | | |
+| The Contract | contract summary card: the terms (200 units, week 12, 4 crews, $5.00M), every disclosure (acceptance test, termination after week 22, credit line and bankruptcy, scope changes, defects), what you decide each week with its costs, and both scores. No forecast | The contract, every rule and both scores · how long it will take |
 | **The mind's own frames** | | |
 | Status Report | earned-value status report: red/amber/green light, SPI, CPI, schedule estimate at completion (planned duration ÷ SPI), burn-up chart | Earned value: units reported complete against plan · whether those units will pass acceptance |
 | Cost Management | project cost-control dashboard: BAC, EAC, CPI, cash runway, cumulative spend against the budget and the bankruptcy line | Money: spend, burn rate, the credit line · defects, so you can watch every dollar and still be late |
@@ -127,8 +132,8 @@ Colours:
 | Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap), updated each week. In order: Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan re-planned from now; Kim (sales) from the promise; Mabel, a veteran on the line, from the record; Priya (quality) from rework, the last contract's or this one's | Five colleagues, each from where they sit · which view to weigh most |
 | Ask an AI | a plain-text prompt to copy into any AI assistant. It holds everything on screen: the contract and every rule, the last six weeks, the last 5 contracts, all 40 contracts, the stated plan and, during play, the week-by-week status. It asks for a forecast, an 80% range and the chance of week 12 with reasoning, and says nothing about which information matters (about 3,000 characters before week 1, 3,500 during play). The tab gives no forecast of its own, and whether the prompt was copied is recorded | Whatever you paste in · anything not on screen |
 | **Records and structured judgment** | | |
-| Last 5 Contracts | recent-projects list plus an after-action review of the newest. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |
-| Records | historical-project database: the 40 past contracts, sortable and filterable, with "Contracts run like my plan" | What actually happened, defects and scope changes included · plans no past manager tried |
+| Last 5 Contracts | the last contract's first six weeks and its pace (19.1 a week, 10.5 weeks to 200 units), an after-action review of it, and a list of the five newest contracts. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |
+| Records | historical-project database: a dot strip of the 40 past contracts with its summary (median, 10th–90th, on-time share), above a sortable, filterable table with "Contracts run like my plan" | What actually happened, defects and scope changes included · plans no past manager tried |
 | Scenarios | best / base / base + rework / worst-seen matrix with assumptions | A wider range, on purpose · anything but your plan as the starting point |
 | Risk Register | probability × impact heat map with risk cards, and a premortem box ("It's week 17 and the customer has rejected the delivery. Why?"). No forecast | Each risk, one at a time, and your own premortem · their sum |
 | **Models** | | |

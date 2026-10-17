@@ -5,7 +5,7 @@ import {
   statusReport, costManagement, schedule, lastFive, teamChat, aiPrompt,
   scenarios, riskRegister, analytics, riskSimulator, consensus, FORECASTERS, FORECASTER_NAMES, tabById,
 } from './desk.js';
-import { pastContracts, describePlan } from './engine';
+import { CONFIG, pastContracts, describePlan } from './engine';
 import { Card } from './ui';
 import { money } from './format';
 import Records from './Records';
@@ -72,6 +72,43 @@ const Tile = ({ label, value, sub, tone = 'text-white' }) => (
     {sub && <div className="text-[10px] text-slate-500">{sub}</div>}
   </div>
 );
+
+// ── The contract ─────────────────────────────────────────────────────────────
+function ContractTab() {
+  const c = CONFIG;
+  return (
+    <Card title="The Contract" tone="slate">
+      <Label tab={tabById('contract')} />
+      <div className="grid grid-cols-4 gap-2 text-center">
+        <div><div className="text-lg font-bold text-white">{c.scope}</div><div className="text-[11px] text-slate-500">units</div></div>
+        <div><div className="text-lg font-bold text-white">{c.deadline}</div><div className="text-[11px] text-slate-500">weeks</div></div>
+        <div><div className="text-lg font-bold text-white">{c.crews}</div><div className="text-[11px] text-slate-500">crews</div></div>
+        <div><div className="text-lg font-bold text-white">{money(c.budget)}</div><div className="text-[11px] text-slate-500">budget</div></div>
+      </div>
+      <div className="space-y-2 mt-3 text-sm text-slate-300">
+        <p>The contract is done when the customer's acceptance test passes every unit. If it has not passed by the end of week {c.horizon}, the customer terminates the contract.</p>
+        <p>Your company can overspend the budget by up to {money(c.creditLine)} on credit. Past that, it can't make payroll: the company goes bankrupt and the contract ends.</p>
+        <p>Customers on this line add to the requirement partway through: every past contract on record had a scope change. Nobody knows in advance which week it comes or how many units it adds.</p>
+        <p>Some built units turn out defective. The dashboard counts them complete until inspection or the customer's acceptance test finds them.</p>
+      </div>
+      <div className="mt-4 pt-3 border-t border-slate-800">
+        <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">What you decide each week</div>
+        <ul className="space-y-2 text-sm text-slate-300">
+          <li><strong className="text-white">Crews.</strong> Add up to {c.maxHirePerWeek} a week ({money(c.hireFee)} each, {c.maxCrews} crews at most) or
+            release one ({money(c.releaseFee)}). A new crew slows the whole line for {c.onboardingWeeks} weeks, and every crew beyond {c.crews} makes all of them a little less efficient.</li>
+          <li><strong className="text-white">Second shift.</strong> +{Math.round((c.shiftBoost - 1) * 100)}% output for {money(c.shiftPremiumPerCrew)} per crew. From the second straight week, tired crews make more defects.</li>
+          <li><strong className="text-white">Inspection.</strong> Move 0–30% of the line from building to checking. You build less, but you find defects while they are cheap. Any defect the customer's test finds costs double to fix.</li>
+          <li><strong className="text-white">Your forecast.</strong> Each week you may move your finish-week estimate.</li>
+        </ul>
+        <p className="text-xs text-slate-400 mt-3">
+          Each crew costs {money(c.crewWeek)} a week. Two scores, kept apart: <strong className="text-emerald-300">Forecast</strong> (how right you were about your own project)
+          and <strong className="text-slate-200">Delivery</strong> (on time, on budget: −{c.latePenaltyPerWeek} a week late, −{c.overspendPenaltyPer50k} per $50k over budget,
+          0 if the contract is terminated or the company goes bankrupt). The forecast score is the one that counts most.
+        </p>
+      </div>
+    </Card>
+  );
+}
 
 // ── The mind's own frames ────────────────────────────────────────────────────
 function StatusTab({ S, onUse, live }) {
@@ -200,7 +237,15 @@ function Last5Tab({ S, onUse }) {
     r.inspect ? `${Math.round(r.inspect * 100)}% inspection` : 'no inspection', r.shiftWeeks ? `${r.shiftWeeks} second-shift weeks` : 'no second shift'].join(', ');
   return (
     <Frame id="last5" kind="recent projects and after-action review" f={L.forecast} onUse={onUse}>
-      <div className="text-xs font-bold uppercase tracking-wider text-amber-300">After-action review · contract #{N.id}, the line's last</div>
+      <div className="text-xs font-bold uppercase tracking-wider text-amber-300">The line's last contract (#{N.id}): its first six weeks</div>
+      <p className="text-xs text-slate-400 mt-1">Same line, same {S.rules.crews} crews. Units completed each week, from its dashboard:</p>
+      <div className="grid grid-cols-6 gap-1 font-mono text-sm text-center text-white mt-1">
+        {S.history.map((v, i) => <div key={i} className="bg-slate-950 rounded py-1">{Math.round(v)}</div>)}
+      </div>
+      <p className="text-sm text-slate-300 mt-2">
+        About <strong className="text-sky-300">{N.pace} a week</strong>. At that pace, {S.rules.scope} units takes <strong className="text-sky-300">{(S.rules.scope / N.pace).toFixed(1)} weeks</strong>.
+      </p>
+      <div className="text-xs font-bold uppercase tracking-wider text-amber-300 mt-4">After-action review · contract #{N.id}</div>
       <div className="space-y-2 text-sm text-slate-300 mt-2">
         <p><span className="text-slate-500">What happened.</span> Same line, same {S.rules.crews} crews, {plan(N)}. The dashboard showed {N.pace} units a week and read 100% in week {N.dashboardFullWeek}. The customer added {N.scopeUnits} units in week {N.scopeWeek}.</p>
         <p><span className="text-slate-500">What went wrong.</span> The acceptance test rejected <span className="text-rose-300 font-semibold">{N.rejected} units</span>, and fixing them that late took twice the work. Accepted in week {N.deliveredWeek}, {N.deliveredWeek - N.dashboardFullWeek} weeks after the dashboard said done.</p>
@@ -480,6 +525,7 @@ export default function DeskTab({ id, S, plan, planReady, onUse, live = null, on
     : <p className="text-xs text-slate-500 mb-3">For your plan: {describePlan(plan)}.</p>;
   const props = { S, plan, onUse, planNote, live, onCopyPrompt };
   switch (id) {
+    case 'contract': return <ContractTab />;
     case 'status': return <StatusTab {...props} />;
     case 'cost': return <CostTab {...props} />;
     case 'schedule': return <ScheduleTab {...props} />;
