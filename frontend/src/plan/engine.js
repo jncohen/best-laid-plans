@@ -134,6 +134,7 @@ export class Project {
     this.result = 'PLAYING';   // PLAYING | DELIVERED | TERMINATED
     this.finishWeek = null;
     this.forecast = null;      // committed before week 1
+    this.plan = null;          // the plan stated before week 1
     this.forecastLog = [];
     this.history = [];
     this.spent = 0;
@@ -155,9 +156,14 @@ export class Project {
     return c.baseDefectRate * this.defectProne + Math.min(c.shiftDefectCap, Math.max(0, streak - 1) * c.shiftDefectPerStreak);
   }
 
-  commit({ week, low, high, onTimeChance }) {
+  /**
+   * The forecast and the plan the student says they will play. Neither is read by
+   * play(): they are recorded, never acted on.
+   */
+  commit({ week, low, high, onTimeChance, plan = null }) {
     this.forecast = { week: +week, low: +low, high: +high, onTimeChance: +onTimeChance };
     this.forecastLog = [{ week: 0, forecast: +week }];
+    this.plan = plan ? normalizePlan(plan) : null;
   }
 
   /** What the coming week will cost, before it is played. */
@@ -311,35 +317,132 @@ export class Project {
     return { delivery, forecast: forecastScore, outcome, held, missBy, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
   }
 
-  /** Compact code a student reads out or pastes for the Room page. */
+  /**
+   * Compact code a student reads out or pastes for the Room page.
+   *   BLP2|seed|week|low|high|chance|outcome|D/T|ninety|spentK|plan|name
+   * `plan` is the stated plan in three characters (crews added, inspection in tens of
+   * percent, shift n/l/e: "31n" is +3 crews, 10%, no shift), followed by the plan
+   * actually played only if that differs: "01n31n".
+   */
   resultCode(name = '') {
     const f = this.forecast || {};
     const s = this.scores();
+    const stated = this.plan ? encodePlan(this.plan) : '';
+    const played = encodePlan(playedPlan(this));
     const fields = [
-      'BLP1',
+      'BLP2',
       this.seed.toString(36),
       f.week, f.low, f.high, f.onTimeChance,
       s.outcome,
       this.result === 'DELIVERED' ? 'D' : 'T',
       this.ninetyWeek() ?? '',
       Math.round(this.spent / 1000),
+      stated === played ? stated : stated + played,
       String(name).replace(/[^A-Za-z0-9 .'-]/g, '').slice(0, 24),
     ];
     return fields.join('|');
   }
 }
 
+/** Reads BLP2 codes and the older BLP1 codes (which carry no plan). */
 export function parseResultCode(code) {
   const parts = String(code).trim().split('|');
-  if (parts.length < 10 || parts[0] !== 'BLP1') return null;
-  const [, seed36, week, low, high, conf, outcome, res, ninety, spentK, name = ''] = parts;
+  const v = parts[0]?.toUpperCase();
+  if (parts.length < 10 || (v !== 'BLP1' && v !== 'BLP2')) return null;
+  const [, seed36, week, low, high, conf, outcome, res, ninety, spentK] = parts;
+  const planField = v === 'BLP2' ? (parts[10] ?? '').trim().toLowerCase() : '';
+  const name = (v === 'BLP2' ? parts[11] : parts[10]) ?? '';
   const n = (x) => (x === '' ? null : Number(x));
   const r = {
+    version: v === 'BLP2' ? 2 : 1,
     seed: parseInt(seed36, 36), week: n(week), low: n(low), high: n(high), onTimeChance: n(conf),
-    outcome: n(outcome), delivered: res === 'D', ninetyWeek: n(ninety), spentK: n(spentK), name,
+    outcome: n(outcome), delivered: res?.toUpperCase() === 'D', ninetyWeek: n(ninety), spentK: n(spentK), name,
+    plan: null, played: null,
   };
   if (![r.week, r.low, r.high, r.onTimeChance, r.outcome].every(Number.isFinite)) return null;
+  if (planField) {
+    const stated = decodePlan(planField.slice(0, 3));
+    const played = planField.length > 3 ? decodePlan(planField.slice(3, 6)) : stated;
+    if (stated && played) { r.plan = stated; r.played = played; }
+  }
   return r;
+}
+
+// ── Plans ────────────────────────────────────────────────────────────────────
+// A plan, as the commit screen asks for it: crews added at the start, the inspection
+// share, and a second shift ('none', 'late' for the closing weeks, 'every' week).
+export const SHIFT_MODES = ['none', 'late', 'every'];
+
+const shiftOn = (plan) => (typeof plan.shift === 'string' ? plan.shift !== 'none' : !!plan.shift);
+
+export function normalizePlan(plan) {
+  const inspect = CONFIG.inspectionOptions.reduce((best, o) => (Math.abs(o - +plan.inspect) < Math.abs(best - +plan.inspect) ? o : best), 0);
+  const shift = SHIFT_MODES.includes(plan.shift) ? plan.shift : plan.shift === true ? 'late' : 'none';
+  return { crews: Math.max(0, Math.min(9, Math.round(+plan.crews || 0))), inspect, shift };
+}
+
+export const encodePlan = (plan) => {
+  const p = normalizePlan(plan);
+  return `${p.crews}${Math.round(p.inspect * 10)}${p.shift[0]}`;
+};
+
+export function decodePlan(s) {
+  const m = /^(\d)(\d)([nle])$/.exec(String(s).trim().toLowerCase());
+  if (!m || +m[2] > 3) return null;
+  return { crews: +m[1], inspect: +m[2] / 10, shift: SHIFT_MODES.find((x) => x[0] === m[3]) };
+}
+
+/** The plan a student actually played, in the commit screen's terms. */
+export function playedPlan(p) {
+  const base = planFromProject(p);
+  const shiftWeeks = p.history.filter((x) => x.shift).length;
+  const shift = shiftWeeks === 0 ? 'none' : shiftWeeks === p.history.length && shiftWeeks > 1 ? 'every' : 'late';
+  return { crews: base.crews, inspect: base.inspect, shift };
+}
+
+const PLAN_INSPECT = ['no inspection', '10% inspection', '20% inspection', '30% inspection'];
+const PLAN_SHIFT = { none: 'no second shift', late: 'second shift in the late weeks', every: 'second shift every week' };
+export function describePlan(plan) {
+  const p = normalizePlan(plan);
+  if (p.crews === 0 && p.inspect === 0 && p.shift === 'none') return 'hands-off (no crews added, no inspection, no second shift)';
+  return [p.crews ? `+${p.crews} crew${p.crews > 1 ? 's' : ''} at the start` : 'no crews added', PLAN_INSPECT[Math.round(p.inspect * 10)], PLAN_SHIFT[p.shift]].join(', ');
+}
+
+/**
+ * Kept means the same plan in the terms the record is matched on: crews added,
+ * inspection or not, second shift or not.
+ */
+export const planKept = (a, b) => normalizePlan(a).crews === normalizePlan(b).crews
+  && (+a.inspect > 0) === (+b.inspect > 0) && shiftOn(a) === shiftOn(b);
+
+export const isHandsOff = (plan) => { const p = normalizePlan(plan); return p.crews === 0 && p.inspect === 0 && p.shift === 'none'; };
+
+/**
+ * Was a held range reasoned or lucky? Information only: it never changes a score.
+ *   reasoned  the range held, the plan was kept, and the forecast sat on the record
+ *             of contracts run like the plan played (point within a week of their
+ *             median, each end within two weeks of their 10th and 90th percentiles)
+ *   lucky     the range held, but the play left the stated plan, or the forecast
+ *             sat far from that record
+ *   missed    the range missed
+ * Old codes with no stated plan get null for a held range.
+ * Hands-off play also returns the record of the past managers who coasted.
+ */
+export function judgeForecast({ forecast: f, outcome, stated, played }, cfg = CONFIG) {
+  const held = outcome >= f.low && outcome <= f.high;
+  const matched = matchContracts(played, { cfg });
+  const statedMatch = stated ? matchContracts(stated, { cfg }) : null;
+  const kept = stated ? planKept(stated, played) : null;
+  const onRecord = Math.abs(f.week - matched.median) <= 1
+    && Math.abs(f.low - matched.p10) <= 2 && Math.abs(f.high - matched.p90) <= 2;
+  const verdict = !held ? 'missed' : kept === null ? null : kept && onRecord ? 'reasoned' : 'lucky';
+  const why = verdict === 'lucky' ? (kept ? 'off-record' : 'changed') : null;
+  let coaster = null;
+  if (isHandsOff(played)) {
+    const rows = matched.contracts;
+    coaster = { n: rows.length, late: rows.filter((r) => !r.onTime).length, median: matched.median, min: matched.min, max: matched.max };
+  }
+  return { held, kept, onRecord, verdict, why, matched, statedMatch, coaster };
 }
 
 // ── The outside view ─────────────────────────────────────────────────────────
@@ -471,7 +574,7 @@ export function matchContracts(plan, { min = 5, cfg = CONFIG } = {}) {
   const all = pastContracts(cfg).contracts;
   const crews = Math.max(0, Math.round(+plan.crews || 0));
   const insp = +plan.inspect > 0;
-  const shift = !!plan.shift;
+  const shift = shiftOn(plan);
   const same = (r) => (r.inspect > 0) === insp && (r.shiftWeeks > 0) === shift;
   const rules = [
     ['crews, inspection and shift', (r) => same(r) && r.crewsAdded === crews],
