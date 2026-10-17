@@ -32,8 +32,12 @@ favour of a show of hands. It is not live until it is merged into
    tool computes a forecast from what the briefing shows and nothing else, and says
    what it can and can't see. "Use this on my prediction" copies a tool's numbers
    into the front tab, where they can still be edited.
-4. They play week by week. The contract ends when the customer accepts it, when the
-   customer terminates it after week 22, or when the company goes bankrupt.
+4. They play week by week. A collapsible **Decision support** bar above the
+   prediction holds the same tools, recomputed each week from what the screen shows:
+   the dashboard, the crews, the spend and the week's events. "Use this" updates the
+   running forecast (week, range and chance). The forecast committed before week 1
+   remains the one that is scored. The contract ends when the customer accepts it,
+   when the customer terminates it after week 22, or when the company goes bankrupt.
 5. At the end the game holds the result until the class reveals together. Each
    student's reveal opens with **Your numbers**, so they can answer a show of hands:
    - whether their 80% range held, and if not, whether it missed late or early;
@@ -44,8 +48,12 @@ favour of a show of hands. It is not live until it is merged into
      changes a score;
    - the tool whose numbers they used, if any, and how many tool tabs they opened.
 
-   Below that, the reveal shows their plan against what they played, their range
-   against the record, and how every tool on the desk would have done.
+   Below that, the reveal shows:
+   - their plan against what they played, and their range against the record;
+   - the forecast's trajectory week by week, and the week it first came within a
+     week of the outcome;
+   - how often they opened decision support during play;
+   - how every tool on the desk would have done.
 6. Ask the room: whose range held? Who was late? Who said 50% or more for week 12,
    and who made it? Who used a tool, and which?
 
@@ -91,9 +99,13 @@ product. Every one is computed in `frontend/src/plan/desk.js` from the screen al
 - the line's last six weeks;
 - the last contract;
 - the 40 past contracts;
-- the stated rules.
+- the stated rules;
+- during play, the dashboard: each week's units built, crews, inspection, shift,
+  defects found, units rejected, scope added and reported percentage, plus spend and
+  budget.
 
-No tool reads the scenario's hidden draws, and the tests check this.
+No tool reads the scenario's hidden draws. The tests check this, including by changing
+every hidden draw mid-game and confirming that no weekly tool's output moves.
 
 Colours:
 - blue: inside-view tools;
@@ -108,8 +120,8 @@ Colours:
 | Cost Management | project cost-control dashboard: BAC, EAC, CPI, cash runway, cumulative spend against the budget and the bankruptcy line | Money: spend, burn rate, the credit line · defects, so you can watch every dollar and still be late |
 | Schedule | Gantt chart: task bars, milestones, finish diamond | Your plan, week by week, under the stated rules · defects or scope changes |
 | **Other people** | | |
-| Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap). Mabel, a veteran on the line, speaks from the record; Priya (quality) from the last contract's rework; Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan on paper; Kim (sales) from the promise | Five colleagues, each from where they sit · which view to weigh most |
-| AI Assistant | chat assistant given the whole briefing, as if pasted in. It notes the pace, the record, rework and the scope change, and plans on the contracts run like the stated plan. Its context is shown on request | The whole briefing · this contract's own defects and scope change |
+| Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap), updated each week. In order: Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan re-planned from now; Kim (sales) from the promise; Mabel, a veteran on the line, from the record; Priya (quality) from rework, the last contract's or this one's | Five colleagues, each from where they sit · which view to weigh most |
+| Ask an AI | a plain-text prompt to copy into any AI assistant. It holds everything on screen: the contract and every rule, the last six weeks, the last 5 contracts, all 40 contracts, the stated plan and, during play, the week-by-week status. It asks for a forecast, an 80% range and the chance of week 12 with reasoning, and says nothing about which information matters (about 3,000 characters before week 1, 3,500 during play). The tab gives no forecast of its own, and whether the prompt was copied is recorded | Whatever you paste in · anything not on screen |
 | **Records and structured judgment** | | |
 | Last 5 Contracts | recent-projects list plus an after-action review of the newest. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |
 | Records | historical-project database: the 40 past contracts, sortable and filterable, with "Contracts run like my plan" | What actually happened, defects and scope changes included · plans no past manager tried |
@@ -123,11 +135,14 @@ Colours:
 | Your Track Record | personal stats from earlier plays on this device | Your past forecasts on this device · anything, if you haven't kept score |
 
 `npm run plan` pins the desk's hold rates across 1,000 codes:
-- the tools that use the record (Records, Analytics, the AI Assistant, Mabel) hold at
-  least 80% of the time;
+- the tools that use the record (Records, Analytics, Mabel) hold at least 80% of the
+  time;
 - the pace and the plan on paper (Status Report, Schedule, Cost Management, Sam, the
   Risk Simulator with rework off) hold at most 10%;
 - the Risk Simulator with historical rework holds at least 80%.
+
+These rates are for the desk as it stands before week 1. Ask an AI is not swept,
+because it gives no forecast of its own.
 
 ## The past record
 

@@ -4,7 +4,8 @@ import { Project, playPolicy } from './src/plan/engine.js';
 import Brief from './src/plan/Brief.jsx';
 import Play from './src/plan/Play.jsx';
 import Reveal from './src/plan/Reveal.jsx';
-import { TABS } from './src/plan/desk.js';
+import { TABS, screenData, liveScreen } from './src/plan/desk.js';
+import DeskTab from './src/plan/DeskTabs.jsx';
 
 let fails = 0;
 const ok = (n, fn) => {
@@ -14,6 +15,23 @@ const ok = (n, fn) => {
 
 console.log('Render checks');
 ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
+{
+  // Every desk tab during play, recomputed from the week's dashboard.
+  const p = new Project('ledger');
+  p.commit({ week: 13, low: 11, high: 14, onTimeChance: 40, plan: { crews: 3, inspect: 0.1, shift: 'none' } });
+  const S = screenData();
+  for (const w of [1, 4, 10]) {
+    while (p.week < w && !p.done) p.play({ hire: p.week === 0 ? 3 : 0, inspect: 0.1, forecast: 13, range: { low: 11, high: 14, chance: 40 } });
+    for (const t of TABS.slice(1)) {
+      ok(`Desk during play, week ${w}: ${t.name}`, () => {
+        const h = renderToString(<DeskTab id={t.id} S={S} plan={p.plan} planReady onUse={() => {}} live={liveScreen(p)} />);
+        if (t.id === 'ai' && !h.includes(`STATUS AFTER WEEK ${w}`)) throw new Error('prompt lacks the current status');
+        if (t.id === 'chat' && !h.includes(`after week ${w}`)) throw new Error('chat not updated for the week');
+        return h;
+      });
+    }
+  }
+}
 {
   const p = new Project('render-plan');
   p.commit({ week: 10, low: 9, high: 12, onTimeChance: 70 });
@@ -78,7 +96,7 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
         if (t.id === 'simulator' && !h.includes('Include rework')) throw new Error('rework switch missing');
         if (t.id === 'last5' && !/#(<!-- -->)?40/.test(h)) throw new Error('last contract not record #40');
         if (t.id === 'risks' && !h.includes('Premortem')) throw new Error('premortem missing');
-        if (t.id === 'ai' && !h.includes('Show what was pasted in')) throw new Error('AI context not offered');
+        if (t.id === 'ai' && (!h.includes('Copy the prompt') || !h.includes('PAST CONTRACTS'))) throw new Error('AI prompt missing');
         return h;
       });
     }

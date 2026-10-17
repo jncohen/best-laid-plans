@@ -137,6 +137,7 @@ export class Project {
     this.forecast = null;      // committed before week 1
     this.plan = null;          // the plan stated before week 1
     this.desk = null;          // how the Decision Desk was used before week 1
+    this.deskLog = [];         // decision-support tabs opened during play: { week, tab }, and prompt copies
     this.forecastLog = [];
     this.history = [];
     this.spent = 0;
@@ -164,9 +165,14 @@ export class Project {
    */
   commit({ week, low, high, onTimeChance, plan = null, desk = null }) {
     this.forecast = { week: +week, low: +low, high: +high, onTimeChance: +onTimeChance };
-    this.forecastLog = [{ week: 0, forecast: +week }];
+    this.forecastLog = [{ week: 0, forecast: +week, low: +low, high: +high, chance: +onTimeChance }];
     this.plan = plan ? normalizePlan(plan) : null;
     this.desk = desk ? normalizeDesk(desk) : null;
+  }
+
+  /** Records that a decision-support tab was opened (or the AI prompt copied) before a week was played. Never read by play(). */
+  noteDesk(week, tab) {
+    this.deskLog.push({ week: +week, tab: String(tab) });
   }
 
   /** What the coming week will cost, before it is played. */
@@ -183,7 +189,7 @@ export class Project {
    * Play one week.
    * @param {{hire?: number, shift?: boolean, inspect?: number, forecast?: number}} d
    */
-  play({ hire = 0, shift = false, inspect = 0, forecast = null } = {}) {
+  play({ hire = 0, shift = false, inspect = 0, forecast = null, range = null } = {}) {
     if (this.done) return null;
     const c = this.cfg;
     this.week++;
@@ -202,7 +208,7 @@ export class Project {
         bankrupt: true,
         events: [`Week ${this.week}'s payroll (${Math.round(cost / 1000)}k) would take the company past its ${Math.round(c.creditLine / 1000)}k credit line. It can't pay its crews: the company is bankrupt and the contract ends.`],
       };
-      if (forecast !== null && forecast !== undefined && Number.isFinite(+forecast)) this.forecastLog.push({ week: this.week, forecast: +forecast });
+      if (forecast !== null && forecast !== undefined && Number.isFinite(+forecast)) this.forecastLog.push({ week: this.week, forecast: +forecast, ...(range || {}) });
       this.history.push(row);
       return row;
     }
@@ -265,7 +271,7 @@ export class Project {
     }
 
     if (forecast !== null && forecast !== undefined && Number.isFinite(+forecast)) {
-      this.forecastLog.push({ week: this.week, forecast: +forecast });
+      this.forecastLog.push({ week: this.week, forecast: +forecast, ...(range || {}) });
     }
 
     if (accepted) {
@@ -342,7 +348,7 @@ export class Project {
 // whether they changed the numbers they were given (the tool's, or the defaults).
 export function normalizeDesk(d) {
   const tool = /^[a-z]$/.test(d.tool || '') ? d.tool : '';
-  return { tool, tabs: Math.max(0, Math.min(99, Math.round(+d.tabs || 0))), minutes: Math.max(0, Math.min(99, Math.round(+d.minutes || 0))), edited: !!d.edited, order: Array.isArray(d.order) ? d.order.map(String) : [] };
+  return { tool, tabs: Math.max(0, Math.min(99, Math.round(+d.tabs || 0))), minutes: Math.max(0, Math.min(99, Math.round(+d.minutes || 0))), edited: !!d.edited, copied: !!d.copied, order: Array.isArray(d.order) ? d.order.map(String) : [] };
 }
 
 // ── Plans ────────────────────────────────────────────────────────────────────

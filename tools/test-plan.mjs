@@ -3,7 +3,7 @@ import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean
   encodePlan, decodePlan, normalizePlan, playedPlan, judgeForecast } from '../frontend/src/plan/engine.js';
 import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/plan/table.js';
 import { pastManagers, playManager, recordWeek, contractSeed } from '../frontend/src/plan/engine.js';
-import { screenData, allForecasts, statusReport, schedule, lastFive, records, analytics, riskSimulator, scenarios, consensus, aiAssistant, teamChat, costManagement, TABS } from '../frontend/src/plan/desk.js';
+import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, analytics, riskSimulator, scenarios, consensus, aiPrompt, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
@@ -262,16 +262,49 @@ console.log('The Decision Desk sees only the screen');
   for (const seed of ['ledger', 'compass', 'desk-x']) playPolicy(new Project(seed), { hire: 3, inspect: 0.1 });
   t('playing any scenario leaves every tool unchanged', JSON.stringify(plans.map((p) => allForecasts(screenData(), p))) === before);
   t('every tool gives low <= week <= high and a chance in 0-100', plans.every((p) => allForecasts(S, p).every((f) => f.low <= f.week && f.week <= f.high && f.chance >= 0 && f.chance <= 100)));
-  t('the AI Assistant, given the whole briefing, plans on the contracts run like the stated plan', plans.every((p) => JSON.stringify(aiAssistant(S, p).forecast) === JSON.stringify((({ week, low, high, chance }) => ({ week, low, high, chance }))(records(S, p).matched))));
-  t('the AI Assistant shows its context and names the pace, the record and rework', (() => { const a = aiAssistant(S, COMMON_PLANS[4]); return a.context.length === 2 && /whole briefing/.test(a.context[0]) && /19\.1/.test(a.answer) && /week 14/.test(a.answer) && /failed acceptance/.test(a.answer) && /scope change/.test(a.answer); })());
+  const prompt = aiPrompt(S, COMMON_PLANS[4]);
+  t(`Ask an AI: the prompt holds the rules, the last six weeks, all 40 contracts and the plan (${prompt.length} chars, under 4,000)`, prompt.length < 4000
+    && ['terminates', 'bankrupt', '2× to fix', 'slows the whole line', 'tired crews', '19.1'].every((x) => prompt.toLowerCase().includes(x.toLowerCase()) || prompt.includes(x))
+    && screenData().contracts.every((r) => prompt.includes(`\n${r.id},`)) && prompt.includes('MY PLAN: add 3 crews'));
+  t('Ask an AI is even-handed: it asks for the forecast and reasoning, and names no theory', /forecast of the week the customer accepts the contract, an 80% range, and the chance of making week 12, with your reasoning/.test(prompt)
+    && !/reference class|outside view|inside view|anchor|base rate|hidden|planning fallacy|bias|calibrat/i.test(prompt));
+  t('Ask an AI has no forecast of its own, so Consensus and the sweep leave it out', !TABS.find((x) => x.id === 'ai').forecasts && !Object.keys(FORECASTERS).includes('ai'));
   t('every Team Chat colleague names the desk frame they reason from', teamChat(S, COMMON_PLANS[0]).every((c) => c.frame && c.reasoning && c.forecast));
-  t('Team Chat is Mabel, Priya, Dana, Sam and Kim, and Mabel quotes the real record', (() => { const c = teamChat(S, COMMON_PLANS[0]); const all = records(S).all; return c.map((x) => x.name).join() === 'Mabel,Priya,Dana,Sam,Kim' && c[0].says.includes('fourteen weeks') && c[0].says.includes('one in seven') && all.week === 14 && all.chance === 15; })());
-  t('Priya quotes the last contract\'s real rework', teamChat(S, COMMON_PLANS[0])[1].says.includes(`${screenData().last.rejected} units`) && teamChat(S, COMMON_PLANS[0])[1].says.includes('four more weeks'));
+  t('Team Chat runs Dana, Sam, Kim, Mabel, Priya (the record\'s voice fourth), and Mabel quotes the real record', (() => { const c = teamChat(S, COMMON_PLANS[0]); const all = records(S).all; return c.map((x) => x.name).join() === 'Dana,Sam,Kim,Mabel,Priya' && c[3].says.includes('fourteen weeks') && c[3].says.includes('one in seven') && all.week === 14 && all.chance === 15; })());
+  t('Priya quotes the last contract\'s real rework', teamChat(S, COMMON_PLANS[0])[4].says.includes(`${screenData().last.rejected} units`) && teamChat(S, COMMON_PLANS[0])[4].says.includes('four more weeks'));
   t('Cost Management implies the Schedule\'s finish, and shows the credit line', JSON.stringify(costManagement(S, COMMON_PLANS[4]).forecast) === JSON.stringify(schedule(S, COMMON_PLANS[4]).forecast)
     && costManagement(S, COMMON_PLANS[4]).limit === CONFIG.budget + CONFIG.creditLine);
   t('Cost Management: +2 crews with a shift every week runs out of money in week 13', costManagement(S, { crews: 2, inspect: 0, shift: 'every' }).brokeWeek === 13);
   t('every tab has a one-line sees and can\'t-see, except the front tab', TABS.slice(1).every((x) => x.sees && x.cant) && TABS.length === 14);
   t('tab letters are unique', new Set(TABS.map((x) => x.letter).filter(Boolean)).size === 13);
+}
+
+console.log('The desk during play sees only the dashboard');
+{
+  const S = screenData();
+  const C3I = COMMON_PLANS[4];
+  const p = new Project('ledger');
+  p.commit({ week: 13, low: 11, high: 14, onTimeChance: 40, plan: C3I });
+  for (let w = 0; w < 6; w++) p.play({ hire: w === 0 ? 3 : 0, inspect: 0.1 });
+  const L = liveScreen(p);
+  t('the live screen copies only dashboard fields', JSON.stringify(Object.keys(L)) === JSON.stringify(LIVE_FIELDS)
+    && L.rows.every((r) => JSON.stringify(Object.keys(r)) === JSON.stringify(LIVE_ROW_FIELDS)) && !LIVE_ROW_FIELDS.includes('true') && !LIVE_ROW_FIELDS.includes('defectRate'));
+  const outputs = () => JSON.stringify([allForecasts(S, C3I, liveScreen(p)), teamChat(S, C3I, liveScreen(p)).map((c) => c.says), aiPrompt(S, C3I, liveScreen(p)), costManagement(S, C3I, liveScreen(p)).cost]);
+  const before = outputs();
+  const saved = [p.hidden, p.productivity, p.defectProne, p.shockWeek, p.shockSize, [...p._noise]];
+  p.hidden = 999; p.productivity = 0.5; p.defectProne = 3; p.shockWeek = 7; p.shockSize = 99; p._noise.fill(2);
+  t('changing every hidden draw leaves every weekly tool unchanged', outputs() === before);
+  [p.hidden, p.productivity, p.defectProne, p.shockWeek, p.shockSize] = saved; saved[5].forEach((v, i) => { p._noise[i] = v; });
+  t('weekly tools are pure functions of the live screen', JSON.stringify(allForecasts(S, C3I, JSON.parse(JSON.stringify(L)))) === JSON.stringify(allForecasts(S, C3I, L)));
+  t('the Schedule re-plans from the current week', schedule(S, C3I, L).from === 6 && schedule(S, C3I, L).forecast.week > 6);
+  t('the Status Report reports this contract to date during play', statusReport(S, L).live && statusReport(S, L).weeksShown === 6);
+  t('Cost Management uses actual spend', costManagement(S, C3I, L).spent === p.spent);
+  t('Team Chat speaks to the latest week', teamChat(S, C3I, L)[0].says.startsWith(`We built ${Math.round(L.rows[5].built)} last week`));
+  t('the AI prompt carries the current status', aiPrompt(S, C3I, L).includes('STATUS AFTER WEEK 6'));
+  const q = new Project('ledger');
+  q.commit({ week: 13, low: 11, high: 14, onTimeChance: 40, plan: C3I });
+  for (let w = 0; w < 6; w++) { q.noteDesk(w + 1, 'status'); q.play({ hire: w === 0 ? 3 : 0, inspect: 0.1, forecast: 9 + w, range: { low: 8, high: 15, chance: 10 * w } }); }
+  t('weekly forecasts and desk use are recorded and never change an outcome', JSON.stringify(q.history) === JSON.stringify(p.history) && q.deskLog.length === 6 && q.forecastLog.length === 7 && q.forecastLog[6].chance === 50);
 }
 
 console.log('Desk numbers on ledger (work order, Oct 17)');

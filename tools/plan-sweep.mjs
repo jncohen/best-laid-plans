@@ -21,12 +21,13 @@
  *   8. Matching is as reliable as the whole record and sharper where the plan is far
  *      from typical: for hands-off and +3 crews with 10% inspection, the matched
  *      contracts' p10-p90 holds within 3 points as often as all 40, and is narrower.
- *   9-11. The Decision Desk (frontend/src/plan/desk.js): the tools that use the
- *      record (Records, Analytics, the AI Assistant, Mabel) hold >= 80%; the plan and
+ *   9-11. The Decision Desk (frontend/src/plan/desk.js), as it stands before week 1:
+ *      the tools that use the record (Records, Analytics, Mabel) hold >= 80%; the plan and
  *      the pace on paper (Status Report, Schedule, Cost Management, Sam, the
  *      Risk Simulator with rework off) hold <= 10%; the Risk Simulator with its
  *      historical rework on holds >= 80%. Every tool and colleague is reported, with
- *      the share of the desk that is calibrated (holds >= 75%).
+ *      the share of the desk that is calibrated (holds >= 75%). Ask an AI gives no
+ *      forecast of its own (it builds a prompt), so it is not swept.
  *   12. Bankruptcy (past the credit line) never hits a plan that wins: no strategy
  *      on time >= 40% of the time goes bankrupt in more than 5% of runs.
  */
@@ -193,7 +194,7 @@ for (const [name, h] of Object.entries(deskHold)) {
   deskMean[name] = mean(Object.values(h));
   console.log(name.padEnd(42) + COMMON_PLANS.map((cp) => pct(h[cp.key]).padStart(10)).join('') + pct(deskMean[name]).padStart(7) + mean(deskBrier[name]).toFixed(2).padStart(7));
 }
-const RECORD_TOOLS = ['Records, all 40', 'Records, like my plan', 'Analytics', 'AI Assistant', 'Team Chat: Mabel, veteran on the line'];
+const RECORD_TOOLS = ['Records, all 40', 'Records, like my plan', 'Analytics', 'Team Chat: Mabel, veteran on the line'];
 const INSIDE_TOOLS = ['Status Report', 'Schedule', 'Cost Management', 'Risk Simulator (rework off)', 'Team Chat: Sam, planner'];
 const deskNames = Object.keys(deskMean).filter((k) => k !== 'Risk Simulator (rework off)');
 const calibrated = deskNames.filter((k) => deskMean[k] >= 0.75);

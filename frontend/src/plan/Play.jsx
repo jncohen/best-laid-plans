@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CONFIG, pastContracts, describePlan } from './engine';
+import { TABS, screenData, liveScreen } from './desk.js';
+import DeskTab from './DeskTabs';
+import TabStrip from './DeskStrip';
 import { Card, Stat, Slider } from './ui';
 import { money, pct } from './format';
 import { ProgressSpark, ForecastChart } from './charts';
@@ -9,12 +12,19 @@ export default function Play({ project, onPlay }) {
   const p = project;
   const past = pastContracts();
   const last = p.history[p.history.length - 1];
-  const lastForecast = p.forecastLog[p.forecastLog.length - 1]?.forecast ?? p.forecast.week;
+  const lastLog = p.forecastLog[p.forecastLog.length - 1];
+  const lastForecast = lastLog?.forecast ?? p.forecast.week;
+  const S = useMemo(() => screenData(), []);
 
   const [hire, setHire] = useState(0);
   const [shift, setShift] = useState(false);
   const [inspect, setInspect] = useState(last ? last.inspect : 0);
   const [forecast, setForecast] = useState(lastForecast);
+  // The running forecast's range and chance, carried from week to week; the week-1 commitment is what is scored.
+  const [range, setRange] = useState({ low: lastLog?.low ?? p.forecast.low, high: lastLog?.high ?? p.forecast.high, chance: lastLog?.chance ?? p.forecast.onTimeChance });
+  const [deskOpen, setDeskOpen] = useState(false);
+  const [deskTab, setDeskTab] = useState('status');
+  const [seenTabs, setSeenTabs] = useState([]);
 
   const nextWeek = p.week + 1;
   // A forecast earlier than the week about to be played is no longer possible.
@@ -24,11 +34,25 @@ export default function Play({ project, onPlay }) {
   const fatigueNext = shift && p.shiftStreak >= 1;
   const maxHire = Math.min(c.maxHirePerWeek, c.maxCrews - p.crews);
 
+  const shownRange = { low: Math.min(Math.max(range.low, nextWeek), shownForecast), high: Math.max(range.high, shownForecast), chance: nextWeek > c.deadline ? 0 : range.chance };
   const run = () => {
-    onPlay({ hire, shift, inspect, forecast: shownForecast });
+    onPlay({ hire, shift, inspect, forecast: shownForecast, range: shownRange });
     setForecast(shownForecast);
+    setRange(shownRange);
     setHire(0);
+    setSeenTabs([]);
   };
+  const openTab = (id) => {
+    setDeskTab(id);
+    if (!seenTabs.includes(id)) { setSeenTabs((t) => [...t, id]); p.noteDesk(nextWeek, id); }
+  };
+  const useTool = (id, f) => {
+    setForecast(Math.max(nextWeek, f.week));
+    setRange({ low: f.low, high: f.high, chance: Math.round(f.chance / 5) * 5 });
+    p.noteDesk(nextWeek, `use:${id}`);
+    setDeskOpen(false);
+  };
+  const live = liveScreen(p);
 
   const late = nextWeek > c.deadline;
 
@@ -41,6 +65,21 @@ export default function Play({ project, onPlay }) {
         </span>
       </header>
 
+      <section className="bg-slate-900 border border-violet-500/40 rounded-2xl">
+        <button type="button" onClick={() => { setDeskOpen((o) => !o); if (!deskOpen) openTab(deskTab); }} aria-expanded={deskOpen}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm">
+          <span className="font-bold uppercase tracking-wider text-xs text-violet-200">Decision support</span>
+          <span className="text-slate-400">{deskOpen ? 'Close ▴' : `${TABS.length - 1} tools, updated for week ${nextWeek} ▾`}</span>
+        </button>
+        {deskOpen && (
+          <div className="px-4 pb-4 space-y-3">
+            <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} tabs={TABS.slice(1)} sticky={false} />
+            <DeskTab id={deskTab} S={S} plan={p.plan || { crews: 0, inspect: 0, shift: 'none' }} planReady={!!p.plan} onUse={useTool} live={live}
+              onCopyPrompt={() => p.noteDesk(nextWeek, 'ai-copy')} />
+          </div>
+        )}
+      </section>
+
       <Card title="Your prediction" tone="emerald">
         <div className="flex items-baseline justify-between mb-2">
           <span className="text-sm text-slate-300">The customer accepts it in</span>
@@ -52,7 +91,15 @@ export default function Play({ project, onPlay }) {
         />
         <Slider label="Move it if the evidence says so" value={shownForecast} min={nextWeek} max={24} onChange={setForecast}
           format={(v) => `week ${v}`}
-          hint={`Committed before week 1: week ${p.forecast.week}, 80% sure of ${p.forecast.low}–${p.forecast.high}. Amber band: past contracts.`} />
+          hint={`Committed before week 1 (the forecast that is scored): week ${p.forecast.week}, 80% sure of ${p.forecast.low}–${p.forecast.high}. Amber band: past contracts.`} />
+        <details className="mt-2 text-sm">
+          <summary className="text-slate-300 cursor-pointer">Now: 80% range weeks {shownRange.low}–{shownRange.high}, {shownRange.chance}% for week {c.deadline}</summary>
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            <Slider label="earliest" value={shownRange.low} min={nextWeek} max={24} onChange={(v) => setRange((r) => ({ ...r, low: Math.min(v, shownForecast) }))} format={(v) => `wk ${v}`} />
+            <Slider label="latest" value={shownRange.high} min={nextWeek} max={26} onChange={(v) => setRange((r) => ({ ...r, high: Math.max(v, shownForecast) }))} format={(v) => `wk ${v}`} />
+          </div>
+          <Slider label={`Chance of week ${c.deadline}`} value={shownRange.chance} min={0} max={100} step={5} onChange={(v) => setRange((r) => ({ ...r, chance: v }))} format={(v) => `${v}%`} />
+        </details>
       </Card>
 
       <Card title="Dashboard">

@@ -56,6 +56,11 @@ export default function Reveal({ project, onReplay }) {
     ...t, verdict: outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
   }));
   const usedTool = p.desk?.tool ? tabByLetter(p.desk.tool) : null;
+  // The running forecast: when did it first come within a week of the outcome?
+  const close = p.forecastLog.find((e) => Math.abs(e.forecast - outcome) <= 1);
+  const deskWeeks = new Set(p.deskLog.map((d) => d.week)).size;
+  const deskUses = p.deskLog.filter((d) => d.tab.startsWith('use:')).length;
+  const promptCopies = p.deskLog.filter((d) => d.tab === 'ai-copy').length;
 
   // Keep score on this device, once per contract, for the Your Track Record tab.
   useEffect(() => {
@@ -99,7 +104,7 @@ export default function Reveal({ project, onReplay }) {
             ['Outcome', `week ${outcome}`, delivered ? 'accepted' : p.result === 'BANKRUPT' ? 'bankrupt: projected' : 'terminated: projected'],
             [`Your chance of week ${c.deadline}`, `${f.onTimeChance}%`, s.onTime ? 'you made it' : 'you missed it'],
             ['Verdict', vTitle || '—', vTitle ? 'plan and range' : 'no plan stated'],
-            ['Tool used', usedTool ? usedTool.name : 'None', p.desk ? `${p.desk.tabs} tab${p.desk.tabs === 1 ? '' : 's'} opened` : ''],
+            ['Tool used', usedTool ? usedTool.name : 'None', p.desk ? `${p.desk.tabs} tab${p.desk.tabs === 1 ? '' : 's'} opened${p.desk.copied ? ' · AI prompt copied' : ''}` : ''],
           ].map(([k, v, sub]) => (
             <div key={k} className="bg-slate-950 rounded-lg p-3">
               <dt className="text-[10px] uppercase tracking-wider text-slate-500">{k}</dt>
@@ -115,6 +120,11 @@ export default function Reveal({ project, onReplay }) {
           log={p.forecastLog} interval={f} band={[past.p10, past.p90]} deadline={c.deadline}
           outcome={outcome} ninetyWeek={ninety} xEnd={Math.max(p.week, c.deadline)}
         />
+        <p className="text-sm text-slate-200 mt-2">
+          {close ? (close.week === 0 ? 'Your forecast was within a week of the outcome from the start, before week 1.' : `Your forecast first came within a week of the outcome when you played week ${close.week}.`) : 'Your forecast never came within a week of the outcome.'}
+          {' '}During play you opened decision support in {deskWeeks} of {p.week} week{p.week === 1 ? '' : 's'}{deskUses ? ` and used a tool's numbers ${deskUses} time${deskUses === 1 ? '' : 's'}` : ''}{promptCopies ? `, and copied the AI prompt ${promptCopies} time${promptCopies === 1 ? '' : 's'}` : ''}.
+          {' '}The forecast you committed before week 1 is the one that is scored.
+        </p>
         <p className="text-xs text-slate-500 mt-2">
           Green: the week you predicted, each week (the bar at week 0 is your 80% range). Gold: when it was actually
           accepted. Amber band: where most past contracts landed — on your screen before week 1.

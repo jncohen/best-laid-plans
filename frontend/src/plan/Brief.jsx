@@ -1,51 +1,12 @@
 import { useMemo, useState } from 'react';
 import { CONFIG, pastContracts, lastContract, historyMean } from './engine';
-import { TABS, tabById, screenData } from './desk.js';
+import { tabById, screenData } from './desk.js';
+import TabStrip from './DeskStrip';
 import { Card, Slider, DotStrip } from './ui';
 import { money } from './format';
 import DeskTab from './DeskTabs';
 
 const DEFAULTS = { week: 12, low: 11, high: 13, chance: 50 };
-const TAB_TONE = {
-  inside: ['text-sky-300', 'border-sky-400'],
-  record: ['text-amber-300', 'border-amber-400'],
-  people: ['text-violet-300', 'border-violet-400'],
-  front: ['text-white', 'border-white'],
-};
-
-/** The tab strip: the front tab, then the tools in their groups. Scrolls sideways on a phone. */
-function TabStrip({ tab, opened, onOpen }) {
-  const groups = [];
-  for (const t of TABS) {
-    const g = t.group || '';
-    if (!groups.length || groups[groups.length - 1].name !== g) groups.push({ name: g, tabs: [] });
-    groups[groups.length - 1].tabs.push(t);
-  }
-  return (
-    <nav aria-label="Briefing tabs" className="sticky top-0 z-10 -mx-4 px-4 py-2 bg-slate-950/95 backdrop-blur border-b border-slate-800">
-      <div className="flex gap-4 gap-y-2 overflow-x-auto sm:flex-wrap pb-1" role="tablist">
-        {groups.map((g) => (
-          <div key={g.name} className="shrink-0">
-            <div className="text-[9px] uppercase tracking-wider text-slate-500 h-3 whitespace-nowrap">{g.name}</div>
-            <div className="flex gap-1 mt-1">
-              {g.tabs.map((t) => {
-                const active = tab === t.id;
-                const [txt, bd] = TAB_TONE[t.tone];
-                return (
-                  <button key={t.id} type="button" role="tab" aria-selected={active} onClick={() => onOpen(t.id)}
-                    className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs border ${active ? `bg-slate-800 ${bd} ${txt} font-semibold` : `border-slate-800 ${opened.includes(t.id) ? 'text-slate-300' : 'text-slate-400'}`}`}>
-                    {t.id === 'commit' ? t.short : t.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    </nav>
-  );
-}
-
 function Choice({ label, options, value, onChange }) {
   return (
     <div role="radiogroup" aria-label={label}>
@@ -80,6 +41,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const [opened, setOpened] = useState([]);
   const [startedAt] = useState(() => Date.now());
   const [loaded, setLoaded] = useState(null);
+  const [copied, setCopied] = useState(false);
   const [seed, setSeed] = useState(initialSeed);
   // The plan comes first: crews added at the start, inspection share, second shift.
   const [plan, setPlan] = useState(initialPlan || { crews: null, inspect: null, shift: null });
@@ -109,7 +71,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const commit = () => {
     const given = loaded ? loaded.numbers : DEFAULTS;
     const edited = given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
-    const desk = { tool: loaded ? tabById(loaded.id).letter : '', tabs: opened.length, minutes: (Date.now() - startedAt) / 60000, edited, order: opened };
+    const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', tabs: opened.length, minutes: (Date.now() - startedAt) / 60000, edited, copied, order: opened };
     onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim());
   };
   const deskPlan = planReady ? plan : { crews: 0, inspect: 0, shift: 'none' };
@@ -131,7 +93,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
 
       {tab !== 'commit' ? (
         <>
-          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} />
+          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} onCopyPrompt={() => setCopied(true)} />
           <button type="button" onClick={() => open('commit')} className="w-full py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
             Back to Your Plan and Prediction
           </button>
