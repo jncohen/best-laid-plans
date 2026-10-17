@@ -19,8 +19,12 @@
  *   8. Matching beats the whole record where the plan is far from typical: for
  *      hands-off and +3 crews with 10% inspection, all 40 hold less often than
  *      the matched contracts.
+ *   9-11. The Decision Desk (frontend/src/plan/desk.js): record-based tools hold
+ *      >= 80%, inside-view tools <= 10%, and the AI Assistant exactly as often as
+ *      the Status Report it is given. Every tool, colleague included, is reported.
  */
 import { Project, CONFIG, COMMON_PLANS, pastContracts, historyMean, lastContract, matchContracts, planFromProject } from '../frontend/src/plan/engine.js';
+import { screenData, allForecasts } from '../frontend/src/plan/desk.js';
 
 const N = Number(process.env.N || 1000);
 const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
@@ -152,6 +156,38 @@ const checks = [
   ['8. All 40 hold less often than matched (hands-off; +3 crews, 10%)', ho.ovHit < ho.matchHit && c3i.ovHit < c3i.matchHit,
     `hands-off ${pct(ho.ovHit)} < ${pct(ho.matchHit)};  +3/10% ${pct(c3i.ovHit)} < ${pct(c3i.matchHit)}`],
 ];
+// ── The Decision Desk: each tool's 80% range, playing the stated plan ───────────
+// The tools read only the screen, which is the same on every code, so each tool's
+// forecast is computed once per plan and only the outcome varies.
+const SCREEN = screenData();
+const PLAYS = { 'hands-off': {}, inspect: { insp: 0.1 }, crews2: { hire: 2 }, crews3: { hire: 3 }, 'crews3-inspect': { hire: 3, insp: 0.1 }, shift: { shiftFrom: 9, shiftTo: 11 } };
+const deskHold = {};
+const deskBrier = {};
+for (const cp of COMMON_PLANS) {
+  const pol = PLAYS[cp.key];
+  const outs = Array.from({ length: N }, (_, i) => { const p = new Project(70000 + i); while (!p.done) { const w = p.week + 1; p.play({ hire: w === 1 ? pol.hire || 0 : 0, inspect: pol.insp || 0, shift: w >= (pol.shiftFrom ?? 99) && w <= (pol.shiftTo ?? 99) }); } return p; });
+  for (const f of allForecasts(SCREEN, cp)) {
+    (deskHold[f.name] ||= {})[cp.key] = mean(outs.map((p) => { const o = p.outcomeWeek(); return o >= f.low && o <= f.high ? 1 : 0; }));
+    (deskBrier[f.name] ||= []).push(mean(outs.map((p) => (f.chance / 100 - (p.result === 'DELIVERED' && p.outcomeWeek() <= CONFIG.deadline ? 1 : 0)) ** 2)));
+  }
+}
+console.log(`\nDecision Desk: share of each tool's 80% ranges that held, across ${N} codes, playing the stated plan`);
+const dh = 'Tool'.padEnd(42) + COMMON_PLANS.map((cp) => cp.key.slice(0, 9).padStart(10)).join('') + 'Mean'.padStart(7) + 'Brier'.padStart(7);
+console.log(dh); console.log('-'.repeat(dh.length));
+const deskMean = {};
+for (const [name, h] of Object.entries(deskHold)) {
+  deskMean[name] = mean(Object.values(h));
+  console.log(name.padEnd(42) + COMMON_PLANS.map((cp) => pct(h[cp.key]).padStart(10)).join('') + pct(deskMean[name]).padStart(7) + mean(deskBrier[name]).toFixed(2).padStart(7));
+}
+const RECORD_TOOLS = ['Records, all 40', 'Records, like my plan', 'Analytics'];
+const INSIDE_TOOLS = ['Status Report', 'Sprint Burndown', 'Schedule', 'Risk Simulator'];
+checks.push(
+  ['9. Desk: record-based tools hold >= 80%', RECORD_TOOLS.every((k) => deskMean[k] >= 0.8), RECORD_TOOLS.map((k) => `${k} ${pct(deskMean[k])}`).join('  ')],
+  ['10. Desk: inside-view tools hold <= 10%', INSIDE_TOOLS.every((k) => deskMean[k] <= 0.1), INSIDE_TOOLS.map((k) => `${k} ${pct(deskMean[k])}`).join('  ')],
+  ['11. Desk: the AI Assistant holds exactly as often as the Status Report', JSON.stringify(deskHold['AI Assistant']) === JSON.stringify(deskHold['Status Report']),
+    `AI ${pct(deskMean['AI Assistant'])}, Status Report ${pct(deskMean['Status Report'])}`],
+);
+
 console.log('\n=== TARGETS ===');
 let fails = 0;
 for (const [label, ok, detail] of checks) { if (!ok) fails++; console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${label}\n          ${detail}`); }

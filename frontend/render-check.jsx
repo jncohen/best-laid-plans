@@ -5,6 +5,7 @@ import Brief from './src/plan/Brief.jsx';
 import Play from './src/plan/Play.jsx';
 import Reveal from './src/plan/Reveal.jsx';
 import Room from './src/plan/Room.jsx';
+import { TABS } from './src/plan/desk.js';
 
 let fails = 0;
 const ok = (n, fn) => {
@@ -43,7 +44,7 @@ ok('Room, empty', () => renderToString(<Room />));
   const codes = [];
   for (const [label, f, plan, pol, verdict, coaster] of cases) {
     const p = new Project('ledger');
-    p.commit({ ...f, plan });
+    p.commit({ ...f, plan, desk: { tool: ['a', 'o', 'j', ''][codes.length], tabs: codes.length * 3, minutes: 4 + codes.length, edited: codes.length === 1, order: ['status', 'analytics'] } });
     playPolicy(p, pol);
     codes.push(p.resultCode(label.slice(0, 10)));
     ok(`Reveal, ledger: ${label} → ${verdict}`, () => {
@@ -60,20 +61,36 @@ ok('Room, empty', () => renderToString(<Room />));
       return h;
     });
   }
-  ok('Room, BLP2 and BLP1 codes together', () => {
-    const h = renderToString(<Room initialText={[...codes, 'BLP1|1u65p58|11|10|12|75|12|D|10|4500|Old'].join('\n')} />);
+  ok('Room, BLP3, BLP2 and BLP1 codes together', () => {
+    const h = renderToString(<Room initialText={[...codes, 'BLP2|1u65p58|13|11|14|45|12|D|10|4500|31n|Two', 'BLP1|1u65p58|11|10|12|75|12|D|10|4500|Old'].join('\n')} />);
+    if (!h.includes('Ranges that held, by the tool used') || !h.includes('Analytics')) throw new Error('hold rate by tool missing');
     if (!h.includes('changed') || !h.includes('kept')) throw new Error('kept/changed markers missing');
-    if (!/1<!-- --> reasoned/.test(h) || !/2<!-- --> lucky/.test(h)) throw new Error('reasoned/lucky counts wrong');
+    if (!/2<!-- --> reasoned/.test(h) || !/2<!-- --> lucky/.test(h)) throw new Error('reasoned/lucky counts wrong');
     return h;
   });
-  ok('Brief shows the record table and the disclosures', () => {
+  ok('Brief, front tab: plan, forecast and the disclosures', () => {
     const h = renderToString(<Brief onCommit={() => {}} />);
-    for (const s of ['Crews added', 'Scope change', 'terminates the contract', 'turn out defective', 'Contracts run like my plan', '1 · Your plan']) {
+    for (const s of ['Your Plan and Prediction · Commit Before Week 1', 'terminates the contract', 'turn out defective', 'scope change', '1 · Your plan', 'Status Report', 'Your Track Record']) {
       if (!h.includes(s)) throw new Error(`missing "${s}"`);
     }
-    if ((h.match(/<tr /g) || []).length < 41 && (h.match(/<tr>/g) || []).length + (h.match(/<tr /g) || []).length < 41) throw new Error('table does not have 40 rows');
     return h;
   });
+  const C3 = { crews: 3, inspect: 0.1, shift: 'none' };
+  for (const t of TABS.slice(1)) {
+    for (const plan of [null, C3, { crews: 1, inspect: 0.3, shift: 'every' }]) {
+      ok(`Desk tab ${t.name}${plan ? `, plan ${plan.crews}/${plan.inspect}/${plan.shift}` : ', no plan yet'}`, () => {
+        const h = renderToString(<Brief onCommit={() => {}} initialTab={t.id} initialPlan={plan} />);
+        if (!h.includes(t.sees.replace(/'/g, '&#x27;')) && !h.includes(t.sees)) throw new Error('sees-label missing');
+        if (t.forecasts && t.id !== 'chat' && t.id !== 'consensus' && t.id !== 'records' && !h.includes('Use this on my prediction')) throw new Error('no Use this button');
+        if (t.id === 'records' && (h.match(/<tr/g) || []).length < 41) throw new Error('table does not have 40 rows');
+        if (t.id === 'benchmark' && !h.includes('different population')) throw new Error('benchmark not labelled');
+        if (t.id === 'market' && !h.includes('simulated')) throw new Error('market traders not labelled');
+        if (t.id === 'budget' && !h.includes('about money')) throw new Error('budget small print missing');
+        if (t.id === 'ai' && !h.includes('Context given to the assistant')) throw new Error('AI context hidden');
+        return h;
+      });
+    }
+  }
 }
 {
   let n = 0;
