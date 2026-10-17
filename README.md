@@ -43,13 +43,15 @@ favour of a show of hands. It is not live until it is merged into
    - whether their 80% range held, and if not, whether it missed late or early;
    - the outcome week;
    - their stated chance of week 12;
-   - their verdict: Reasoned (range held, plan kept, forecast built on contracts run
-     like it), Lucky (range held for another reason) or Missed. The verdict never
-     changes a score;
+   - whether they played the plan they stated (if not, what they said and what they
+     played);
    - the tool whose numbers they used, if any, and how many tool tabs they opened.
 
    Below that, the reveal shows:
-   - their plan against what they played, and their range against the record;
+   - two plain facts: whether their 80% range held (or by how many weeks it missed,
+     late or early), and whether they played the plan they stated. For hands-off play
+     it adds the record of past managers who coasted. Neither fact changes a score;
+   - their range against the record;
    - the forecast's trajectory week by week, and the week it first came within a
      week of the outcome;
    - how often they opened decision support during play;

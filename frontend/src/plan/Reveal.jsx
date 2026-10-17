@@ -1,16 +1,10 @@
 import { useEffect } from 'react';
-import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, planKept } from './engine';
+import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan } from './engine';
 import { screenData, allForecasts, tabById, tabByLetter } from './desk.js';
 import { addToTrack } from './track';
 import { Card } from './ui';
 import { money } from './format';
 import { RevealChart, ForecastChart } from './charts';
-
-const VERDICT = {
-  reasoned: ['Reasoned', 'Your range held because you forecast from contracts run like yours.'],
-  lucky: ['Lucky', 'Your range held, but not for the reason you gave.'],
-  missed: ['Missed', 'Your range missed.'],
-};
 
 /** One range on a shared week axis, with the outcome marked. */
 function RangeBar({ label, low, high, mid, outcome, tone, lo, hi }) {
@@ -30,13 +24,13 @@ function RangeBar({ label, low, high, mid, outcome, tone, lo, hi }) {
   );
 }
 
-function Row({ label, children, verdict, good }) {
+function Row({ label, children, result, good }) {
   return (
     <div className="py-3 border-t border-slate-800 first:border-t-0">
       <div className="text-[11px] uppercase tracking-wider text-slate-500">{label}</div>
       <div className="flex items-baseline justify-between gap-3 mt-0.5">
         <div className="text-sm text-slate-200">{children}</div>
-        {verdict && <div className={`text-sm font-bold whitespace-nowrap ${good ? 'text-emerald-400' : 'text-rose-400'}`}>{verdict}</div>}
+        {result && <div className={`text-sm font-bold whitespace-nowrap ${good ? 'text-emerald-400' : 'text-rose-400'}`}>{result}</div>}
       </div>
     </div>
   );
@@ -53,7 +47,7 @@ export default function Reveal({ project, onReplay }) {
   const outsideHeld = outcome >= past.p10 && outcome <= past.p90;
   // How every tool on the desk would have done, for the plan the student stated.
   const tools = allForecasts(screenData(), p.plan || playedPlan(p)).map((t) => ({
-    ...t, verdict: outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
+    ...t, result: outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
   }));
   const usedTool = p.desk?.tool ? tabByLetter(p.desk.tool) : null;
   // The running forecast: when did it first come within a week of the outcome?
@@ -72,7 +66,6 @@ export default function Reveal({ project, onReplay }) {
   const played = playedPlan(p);
   const j = judgeForecast({ forecast: f, outcome, stated: p.plan, played });
   const m = j.matched;
-  const [vTitle, vLine] = j.verdict ? VERDICT[j.verdict] : [null, null];
   const lo = Math.floor(Math.min(f.low, past.p10, m.p10, outcome)) - 1;
   const hi = Math.ceil(Math.max(f.high, past.p90, m.p90, outcome)) + 1;
 
@@ -103,7 +96,7 @@ export default function Reveal({ project, onReplay }) {
             ['Late or early', s.held ? 'Neither' : s.missBy > 0 ? 'Late' : 'Early', s.held ? 'inside your range' : `by ${Math.abs(s.missBy)} wk`],
             ['Outcome', `week ${outcome}`, delivered ? 'accepted' : p.result === 'BANKRUPT' ? 'bankrupt: projected' : 'terminated: projected'],
             [`Your chance of week ${c.deadline}`, `${f.onTimeChance}%`, s.onTime ? 'you made it' : 'you missed it'],
-            ['Verdict', vTitle || '—', vTitle ? 'plan and range' : 'no plan stated'],
+            ['Your plan', j.kept === null ? '—' : j.kept ? 'Kept' : 'Changed', j.kept === null ? 'no plan stated' : j.kept ? 'played as stated' : 'played differently'],
             ['Tool used', usedTool ? usedTool.name : 'None', p.desk ? `${p.desk.tabs} tab${p.desk.tabs === 1 ? '' : 's'} opened${p.desk.copied ? ' · AI prompt copied' : ''}` : ''],
           ].map(([k, v, sub]) => (
             <div key={k} className="bg-slate-950 rounded-lg p-3">
@@ -132,12 +125,19 @@ export default function Reveal({ project, onReplay }) {
       </Card>
 
       {p.plan && (
-        <Card title="Your plan and your range" tone="amber">
-          <div className="text-sm text-slate-300 space-y-1">
-            <p><span className="text-slate-500">You said you would play:</span> {describePlan(p.plan)}.</p>
-            <p><span className="text-slate-500">You played:</span> {describePlan(played)}.{' '}
-              <strong className="text-white">{planKept(p.plan, played) ? 'Plan kept.' : 'Plan changed.'}</strong></p>
-          </div>
+        <Card title="Your range and your plan" tone="amber">
+          <dl className="space-y-3">
+            <div>
+              <dt className="text-[11px] uppercase tracking-wider text-slate-500">Your 80% range</dt>
+              <dd className="text-xl font-bold text-white">{j.held ? 'Held' : `Missed: ${Math.abs(j.missBy)} week${Math.abs(j.missBy) === 1 ? '' : 's'} ${j.missBy > 0 ? 'late' : 'early'}`}</dd>
+              <dd className="text-sm text-slate-300">Weeks {f.low}–{f.high}; accepted week {outcome}.</dd>
+            </div>
+            <div>
+              <dt className="text-[11px] uppercase tracking-wider text-slate-500">Your plan</dt>
+              <dd className="text-xl font-bold text-white">{j.kept ? 'You played the plan you stated' : 'You changed plan'}</dd>
+              <dd className="text-sm text-slate-300">{j.kept ? `${describePlan(p.plan)}.` : `You said ${describePlan(p.plan)}; you played ${describePlan(played)}.`}</dd>
+            </div>
+          </dl>
           <div className="mt-3">
             <RangeBar label="Your 80% range" low={f.low} high={f.high} mid={f.week} outcome={outcome} tone="bg-emerald-400/70" lo={lo} hi={hi} />
             <RangeBar label={`All ${past.n} past contracts`} low={past.p10} high={past.p90} mid={past.median} outcome={outcome} tone="bg-amber-500/40" lo={lo} hi={hi} />
@@ -145,21 +145,6 @@ export default function Reveal({ project, onReplay }) {
             <p className="text-[11px] text-slate-500 mt-1">Bars: 80% ranges (past contracts: 10th–90th percentile). White tick: point forecast or median. Gold line: week {outcome}, when it was accepted.</p>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-800">
-            <div className="text-[11px] uppercase tracking-wider text-slate-500">Verdict</div>
-            <div className="text-2xl font-bold text-white mt-0.5">{vTitle}</div>
-            <p className="text-sm text-slate-200 mt-1">{vLine}</p>
-            {j.why === 'changed' && (
-              <p className="text-xs text-slate-400 mt-1">You played a different plan from the one you stated. The contracts run like what you actually played said weeks {m.p10}–{m.p90}.</p>
-            )}
-            {j.why === 'off-record' && (
-              <p className="text-xs text-slate-400 mt-1">Contracts run like yours said week {m.median} (weeks {m.p10}–{m.p90}); your forecast of week {f.week} (weeks {f.low}–{f.high}) was not built on them.</p>
-            )}
-            {j.verdict === 'reasoned' && (
-              <p className="text-xs text-slate-400 mt-1">You kept your plan, and your forecast sat on the {m.n} contracts run like it: median week {m.median}, weeks {m.p10}–{m.p90}.</p>
-            )}
-            {j.verdict === 'missed' && (
-              <p className="text-xs text-slate-400 mt-1">The {m.n} past contracts run like what you played said week {m.median}, weeks {m.p10}–{m.p90}. They were on your screen before week 1.</p>
-            )}
             {j.coaster && (
               <p className="text-sm text-amber-200 mt-3">
                 {j.coaster.n} past managers also ran it hands-off.{' '}
@@ -167,19 +152,18 @@ export default function Reveal({ project, onReplay }) {
                 {j.coaster.matched && <> Counting managers who added at most one crew: {j.coaster.matched.n}, {j.coaster.matched.late === j.coaster.matched.n ? 'all' : j.coaster.matched.late} late, median week {j.coaster.matched.median}.</>}
               </p>
             )}
-            <p className="text-[11px] text-slate-500 mt-3">The verdict is information. It does not change your scores.</p>
           </div>
         </Card>
       )}
 
       <Card>
-        <Row label="Your 80% range" verdict={s.held ? 'Held' : 'Missed'} good={s.held}>
+        <Row label="Your 80% range" result={s.held ? 'Held' : 'Missed'} good={s.held}>
           Weeks {f.low}–{f.high}. Accepted week {outcome}.
         </Row>
-        <Row label="The past contracts" verdict={outsideHeld ? 'Held' : 'Missed'} good={outsideHeld}>
+        <Row label="The past contracts" result={outsideHeld ? 'Held' : 'Missed'} good={outsideHeld}>
           Most landed in weeks {past.p10}–{past.p90} (median {past.median}).
         </Row>
-        <Row label={`Your chance of making week ${c.deadline}`} verdict={s.onTime ? 'Made it' : 'Late'} good={s.onTime}>
+        <Row label={`Your chance of making week ${c.deadline}`} result={s.onTime ? 'Made it' : 'Late'} good={s.onTime}>
           You said {f.onTimeChance}%. {Math.round(past.onTimeShare * 100)}% of past contracts made it.
         </Row>
       </Card>
@@ -208,8 +192,8 @@ export default function Reveal({ project, onReplay }) {
             <li key={t.key} className="flex items-baseline justify-between gap-2 py-1.5 text-sm">
               <span className="text-slate-200 min-w-0">{t.name}</span>
               <span className="font-mono text-xs text-slate-400 whitespace-nowrap">wk {t.week} ({t.low}–{t.high})</span>
-              <span className={`text-xs font-semibold w-20 text-right ${t.verdict === 'held' ? 'text-slate-100' : 'text-rose-300'}`}>
-                {t.verdict === 'held' ? 'held' : `missed ${t.verdict}`}
+              <span className={`text-xs font-semibold w-20 text-right ${t.result === 'held' ? 'text-slate-100' : 'text-rose-300'}`}>
+                {t.result === 'held' ? 'held' : `missed ${t.result}`}
               </span>
             </li>
           ))}

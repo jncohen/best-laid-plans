@@ -218,7 +218,7 @@ console.log('The table summarises what matchContracts finds');
   t('a stated "no shift" plan does not match the second-shift contracts', matchContracts({ crews: 0, inspect: 0, shift: 'none' }).contracts.every((r) => r.shiftWeeks === 0));
 }
 
-console.log('Verdicts on ledger');
+console.log('The two facts on ledger');
 {
   const HANDS_OFF = { crews: 0, inspect: 0, shift: 'none' }, C3I = { crews: 3, inspect: 0.1, shift: 'none' };
   const judge = (f, plan, pol) => {
@@ -228,23 +228,23 @@ console.log('Verdicts on ledger');
     return { p, j: judgeForecast({ forecast: p.forecast, outcome: p.scores().outcome, stated: p.plan, played: playedPlan(p) }) };
   };
   const pace = { week: 11, low: 10, high: 12, onTimeChance: 75 };
+  // The reveal states two facts: did the range hold (and if not, by how much), and was the stated plan played.
   const a = judge(pace, HANDS_OFF, { hire: 3, inspect: 0.1 });
-  t('pace, stated hands-off, plays +3/10%: week 12, range held, Lucky (plan changed)', a.p.scores().outcome === 12 && a.j.held && a.j.verdict === 'lucky' && a.j.why === 'changed' && !a.j.coaster);
-  const mc = matchContracts(C3I);
-  const b = judge({ week: mc.median, low: mc.p10, high: mc.p90, onTimeChance: Math.round(100 * mc.onTimeShare) }, C3I, { hire: 3, inspect: 0.1 });
-  t(`matched record for +3/10% (${mc.median}, ${mc.p10}-${mc.p90}), stated and played: Reasoned`, b.j.held && b.j.verdict === 'reasoned' && b.j.matched.median === mc.median);
+  t('pace, stated hands-off, plays +3/10%: week 12, range held, plan changed', a.p.scores().outcome === 12 && a.j.held && a.j.missBy === 0 && a.j.kept === false && !a.j.coaster);
+  const b = judge({ week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 });
+  t('the record for +3/10%, stated and played: range held, plan kept', b.j.held && b.j.kept === true);
   const c = judge({ week: 14, low: 12, high: 17, onTimeChance: 15 }, HANDS_OFF, {});
-  // With record #40 the line's last contract (a coaster), the hands-off match is 17 (14-18): all 40's 14 sits off it.
-  t('all-40 record, stated and played hands-off: week 17, held, Lucky (off the hands-off record), coaster line', c.p.scores().outcome === 17 && c.j.held && c.j.verdict === 'lucky' && c.j.why === 'off-record'
+  t('all 40, hands-off stated and played: week 17, range held, plan kept, coaster line', c.p.scores().outcome === 17 && c.j.held && c.j.kept === true
     && c.j.coaster && c.j.coaster.n === 4 && c.j.coaster.late === 4 && c.j.coaster.median === 17);
   const ho = pastContracts().contracts.filter((r) => r.crewsAdded === 0 && r.inspect === 0 && r.shiftWeeks === 0);
   t('the coaster line counts only contracts the record shows as hands-off', c.j.coaster.n === ho.length && c.j.coaster.median === summarizeContracts(ho).median);
   const d = judge(pace, HANDS_OFF, {});
-  t('pace, stated and played hands-off: Missed, with the coaster line', d.j.verdict === 'missed' && d.j.coaster?.n === 4);
-  const e = judge(pace, C3I, { hire: 3, inspect: 0.1 });
-  t('pace with the best plan stated and played: still Lucky, not Reasoned', e.j.held && e.j.verdict === 'lucky');
-  t('the verdict never changes a score', a.p.scores().forecast === 90 && judge(pace, C3I, { hire: 3, inspect: 0.1 }).p.scores().forecast === 90);
-  t('a code without a plan gets no verdict for a held range', judgeForecast({ forecast: pace, outcome: 12, stated: null, played: C3I }).verdict === null);
+  t('pace, hands-off stated and played: range missed 5 weeks late, plan kept, coaster line', !d.j.held && d.j.missBy === 5 && d.j.kept === true && d.j.coaster?.n === 4);
+  const e = judge({ week: 20, low: 18, high: 22, onTimeChance: 0 }, C3I, { hire: 3, inspect: 0.1 });
+  t('a range that misses early says so: 6 weeks early', !e.j.held && e.j.missBy === -6);
+  t('there is no judgement of method: no verdict, no closeness-to-record test', !('verdict' in a.j) && !('onRecord' in a.j) && !('why' in a.j));
+  t('the facts never change a score', a.p.scores().forecast === 90 && judge(pace, C3I, { hire: 3, inspect: 0.1 }).p.scores().forecast === 90);
+  t('with no stated plan, the plan fact is empty', judgeForecast({ forecast: pace, outcome: 12, stated: null, played: C3I }).kept === null);
 }
 
 console.log('The Decision Desk sees only the screen');

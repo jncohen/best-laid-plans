@@ -401,25 +401,17 @@ export const planKept = (a, b) => normalizePlan(a).crews === normalizePlan(b).cr
 export const isHandsOff = (plan) => { const p = normalizePlan(plan); return p.crews === 0 && p.inspect === 0 && p.shift === 'none'; };
 
 /**
- * Was a held range reasoned or lucky? Information only: it never changes a score.
- *   reasoned  the range held, the plan was kept, and the forecast sat on the record
- *             of contracts run like the plan played (point within a week of their
- *             median, each end within two weeks of their 10th and 90th percentiles)
- *   lucky     the range held, but the play left the stated plan, or the forecast
- *             sat far from that record
- *   missed    the range missed
- * Old codes with no stated plan get null for a held range.
+ * The two facts the reveal states, and the record for the plan played. Information
+ * only: nothing here changes a score.
+ *   held, missBy   did the 80% range hold; if not, by how many weeks (+ late, − early)
+ *   kept           was the plan played the plan stated (null with no stated plan)
  * Hands-off play also returns the record of the past managers who coasted.
  */
 export function judgeForecast({ forecast: f, outcome, stated, played }, cfg = CONFIG) {
   const held = outcome >= f.low && outcome <= f.high;
+  const missBy = held ? 0 : +(outcome > f.high ? outcome - f.high : outcome - f.low).toFixed(1);
   const matched = matchContracts(played, { cfg });
-  const statedMatch = stated ? matchContracts(stated, { cfg }) : null;
   const kept = stated ? planKept(stated, played) : null;
-  const onRecord = Math.abs(f.week - matched.median) <= 1
-    && Math.abs(f.low - matched.p10) <= 2 && Math.abs(f.high - matched.p90) <= 2;
-  const verdict = !held ? 'missed' : kept === null ? null : kept && onRecord ? 'reasoned' : 'lucky';
-  const why = verdict === 'lucky' ? (kept ? 'off-record' : 'changed') : null;
   let coaster = null;
   if (isHandsOff(played)) {
     const rows = matched.contracts;
@@ -428,7 +420,7 @@ export function judgeForecast({ forecast: f, outcome, stated, played }, cfg = CO
     const s = summarizeContracts(coasters, cfg);
     coaster = { n: s.n, late: coasters.filter((r) => !r.onTime).length, median: s.median, min: s.min, max: s.max, matched: rows.length !== s.n ? { n: rows.length, late: rows.filter((r) => !r.onTime).length, median: matched.median, rule: matched.rule } : null };
   }
-  return { held, kept, onRecord, verdict, why, matched, statedMatch, coaster };
+  return { held, missBy, kept, matched, coaster };
 }
 
 // ── The outside view ─────────────────────────────────────────────────────────

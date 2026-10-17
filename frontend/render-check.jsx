@@ -48,22 +48,23 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
   ok('Reveal, terminated or very late', () => renderToString(<Reveal project={t} onReplay={() => {}} />));
 }
 {
-  // The four ledger cases from the work order: each reveal must name its verdict.
+  // Four ledger cases: each reveal states whether the range held and whether the plan was kept.
   const C3I = { crews: 3, inspect: 0.1, shift: 'none' }, HO = { crews: 0, inspect: 0, shift: 'none' };
   const pace = { week: 11, low: 10, high: 12, onTimeChance: 75 };
   const cases = [
-    ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, 'Lucky', false],
-    ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, 'Reasoned', false],
-    ['all 40, hands-off stated and played', { week: 14, low: 12, high: 17, onTimeChance: 15 }, HO, {}, 'Lucky', true],
-    ['pace, hands-off stated and played', pace, HO, {}, 'Missed', true],
+    ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, ['>Held<', 'You changed plan'], false],
+    ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, ['>Held<', 'You played the plan you stated'], false],
+    ['all 40, hands-off stated and played', { week: 14, low: 12, high: 17, onTimeChance: 15 }, HO, {}, ['>Held<', 'You played the plan you stated'], true],
+    ['pace, hands-off stated and played', pace, HO, {}, ['Missed: 5 weeks late', 'You played the plan you stated'], true],
   ];
   for (const [i, [label, f, plan, pol, verdict, coaster]] of cases.entries()) {
     const p = new Project('ledger');
     p.commit({ ...f, plan, desk: { tool: ['a', 'o', 'j', ''][i], tabs: i * 3, minutes: 4 + i, edited: i === 1, order: ['status', 'analytics'] } });
     playPolicy(p, pol);
-    ok(`Reveal, ledger: ${label} → ${verdict}`, () => {
+    ok(`Reveal, ledger: ${label} → ${verdict.join(', ')}`, () => {
       const h = renderToString(<Reveal project={p} onReplay={() => {}} />);
-      if (!h.includes(`>${verdict}</div>`)) throw new Error(`verdict ${verdict} not shown`);
+      for (const v of verdict) if (!h.includes(v)) throw new Error(`"${v}" not shown`);
+      if (/Reasoned|Lucky|Verdict/.test(h)) throw new Error('a verdict label is still shown');
       if (h.includes('past managers also ran it hands-off') !== coaster) throw new Error('coaster line wrong');
       for (const s of ['Your numbers', `week ${p.scores().outcome}`, `${f.onTimeChance}%`, 'Tool used']) if (!h.includes(s)) throw new Error(`"${s}" missing from Your numbers`);
       if (h.includes('BLP') || h.includes('result code')) throw new Error('a result code is still shown');
