@@ -65,6 +65,7 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
       const h = renderToString(<Reveal project={p} onReplay={() => {}} />);
       for (const v of verdict) if (!h.includes(v)) throw new Error(`"${v}" not shown`);
       if (/Reasoned|Lucky|Verdict/.test(h)) throw new Error('a verdict label is still shown');
+      if (!h.includes('How you played') || !/changed nothing and checked no tools|still checking or changing things/.test(h)) throw new Error('How you played panel missing');
       if (h.includes('past managers also ran it hands-off') !== coaster) throw new Error('coaster line wrong');
       for (const s of ['Your numbers', `week ${p.scores().outcome}`, `${f.onTimeChance}%`, 'Tool used']) if (!h.includes(s)) throw new Error(`"${s}" missing from Your numbers`);
       if (h.includes('BLP') || h.includes('result code')) throw new Error('a result code is still shown');

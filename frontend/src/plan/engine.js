@@ -138,6 +138,7 @@ export class Project {
     this.plan = null;          // the plan stated before week 1
     this.desk = null;          // how the Decision Desk was used before week 1
     this.deskLog = [];         // decision-support tabs opened during play: { week, tab }, and prompt copies
+    this.weekSeconds = {};     // roughly how long each week took on the play screen
     this.forecastLog = [];
     this.history = [];
     this.spent = 0;
@@ -173,6 +174,11 @@ export class Project {
   /** Records that a decision-support tab was opened (or the AI prompt copied) before a week was played. Never read by play(). */
   noteDesk(week, tab) {
     this.deskLog.push({ week: +week, tab: String(tab) });
+  }
+
+  /** Records roughly how many seconds a week took before it was played. Never read by play(). */
+  noteTime(week, seconds) {
+    this.weekSeconds[+week] = Math.max(0, Math.round(+seconds || 0));
   }
 
   /** What the coming week will cost, before it is played. */
@@ -355,13 +361,59 @@ export function firstCloseWeek(log, outcome) {
   return e ? e.week : null;
 }
 
+/**
+ * How the student played, week by week, as plain facts for the reveal. For each week:
+ * the tool tabs opened before it was played (in order), the change the student made
+ * to the running forecast (null if they didn't touch it), the decisions that changed
+ * from the week before (week 1 against the starting line: the opening crews, no shift, no
+ * inspection), and the seconds it took. Plus counts, the most-checked tools, and the
+ * autopilot week: the last week with any tab check, forecast change or decision change.
+ */
+export function playSummary(p) {
+  const c = p.cfg;
+  const rows = p.history.filter((h) => !h.bankrupt);
+  const logAt = (w) => p.forecastLog.find((e) => e.week === w);
+  const weeks = rows.map((h, i) => {
+    const prev = i ? rows[i - 1] : { crews: c.crews, shift: false, inspect: 0 };
+    const opened = p.deskLog.filter((d) => d.week === h.week);
+    const tabs = opened.filter((d) => !d.tab.startsWith('use:') && d.tab !== 'ai-copy').map((d) => d.tab);
+    const e = logAt(h.week);
+    const before = p.forecastLog.filter((x) => x.week < h.week).pop();
+    let forecast = null;
+    if (e && e.touched && before) {
+      forecast = { week: e.forecast - before.forecast, low: (e.low ?? before.low) - before.low, high: (e.high ?? before.high) - before.high, chance: (e.chance ?? before.chance) - before.chance };
+      if (!forecast.week && !forecast.low && !forecast.high && !forecast.chance) forecast = null;
+    }
+    const decisions = { crews: h.crews - prev.crews, shift: h.shift !== prev.shift, inspect: h.inspect !== prev.inspect };
+    const decided = decisions.crews !== 0 || decisions.shift || decisions.inspect;
+    return { week: h.week, tabs, used: opened.some((d) => d.tab.startsWith('use:')), copied: opened.some((d) => d.tab === 'ai-copy'),
+      forecast, decisions, decided, seconds: p.weekSeconds[h.week] ?? null, engaged: tabs.length > 0 || !!forecast || decided };
+  });
+  const counts = {};
+  for (const w of weeks) for (const t of w.tabs) counts[t] = (counts[t] || 0) + 1;
+  const changes = weeks.filter((w) => w.forecast);
+  const lastEngaged = [...weeks].reverse().find((w) => w.engaged);
+  const played = weeks.length;
+  return {
+    weeks, played,
+    checkedWeeks: weeks.filter((w) => w.tabs.length).length,
+    forecastChanges: changes.length, firstForecastChange: changes.length ? changes[0].week : null,
+    decisionWeeks: weeks.filter((w) => w.decided).length,
+    autopilotAfter: lastEngaged ? lastEngaged.week : 0,
+    engagedToEnd: !!lastEngaged && lastEngaged.week === played,
+    topTools: Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 3).map(([tab, n]) => ({ tab, n })),
+    secondsBeforeCommit: p.desk ? p.desk.seconds : null,
+    secondsPlaying: weeks.reduce((a, w) => a + (w.seconds || 0), 0),
+  };
+}
+
 // ── The Decision Desk, as recorded ───────────────────────────────────────────
 // What the student looked at before committing: the tool whose numbers they used (a
 // tab letter, or none), how many tool tabs they opened, minutes on the briefing, and
 // whether they changed the numbers they were given (the tool's, or the defaults).
 export function normalizeDesk(d) {
   const tool = /^[a-z]$/.test(d.tool || '') ? d.tool : '';
-  return { tool, tabs: Math.max(0, Math.min(99, Math.round(+d.tabs || 0))), minutes: Math.max(0, Math.min(99, Math.round(+d.minutes || 0))), edited: !!d.edited, copied: !!d.copied, order: Array.isArray(d.order) ? d.order.map(String) : [] };
+  return { tool, tabs: Math.max(0, Math.min(99, Math.round(+d.tabs || 0))), minutes: Math.max(0, Math.min(99, Math.round(+d.minutes || 0))), edited: !!d.edited, copied: !!d.copied, seconds: Math.max(0, Math.round((+d.minutes || 0) * 60)), order: Array.isArray(d.order) ? d.order.map(String) : [] };
 }
 
 // ── Plans ────────────────────────────────────────────────────────────────────

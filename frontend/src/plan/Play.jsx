@@ -27,6 +27,11 @@ export default function Play({ project, onPlay }) {
   // The decisions tab opens each week; tool tabs sit beside it. Switching tabs keeps every choice above.
   const [deskTab, setDeskTab] = useState('decide');
   const [seenTabs, setSeenTabs] = useState([]);
+  // For "How you played": did the student move the running forecast this week, and how long did the week take.
+  const [touched, setTouched] = useState(false);
+  const [weekStart, setWeekStart] = useState(() => Date.now());
+  const moveForecast = (v) => { setForecast(v); setTouched(true); };
+  const moveRange = (f) => { setRange((r) => (typeof f === 'function' ? f(r) : f)); setTouched(true); };
 
   const nextWeek = p.week + 1;
   // A forecast earlier than the week about to be played is no longer possible.
@@ -39,7 +44,10 @@ export default function Play({ project, onPlay }) {
   const shownRange = { low: Math.min(Math.max(range.low, nextWeek), shownForecast), high: Math.max(range.high, shownForecast), chance: nextWeek > c.deadline ? 0 : range.chance };
   const run = () => {
     // A forecast the student left behind the calendar is carried forward to the week being played; mark it.
-    onPlay({ hire, shift, inspect, forecast: shownForecast, range: { ...shownRange, carried: forecast < nextWeek } });
+    p.noteTime(nextWeek, (Date.now() - weekStart) / 1000);
+    onPlay({ hire, shift, inspect, forecast: shownForecast, range: { ...shownRange, carried: forecast < nextWeek && !touched, touched } });
+    setTouched(false);
+    setWeekStart(Date.now());
     setHire(0);
     setSeenTabs([]);
     setDeskTab('decide');
@@ -50,8 +58,8 @@ export default function Play({ project, onPlay }) {
     window.scrollTo(0, 0);
   };
   const useTool = (id, f) => {
-    setForecast(Math.max(nextWeek, f.week));
-    setRange({ low: f.low, high: f.high, chance: Math.round(f.chance / 5) * 5 });
+    moveForecast(Math.max(nextWeek, f.week));
+    moveRange({ low: f.low, high: f.high, chance: Math.round(f.chance / 5) * 5 });
     p.noteDesk(nextWeek, `use:${id}`);
     openTab('decide');
   };
@@ -89,16 +97,16 @@ export default function Play({ project, onPlay }) {
           compact log={[...p.forecastLog, { week: nextWeek, forecast: shownForecast }]} interval={p.forecast}
           band={[past.p10, past.p90]} deadline={c.deadline} xEnd={Math.max(c.deadline, nextWeek)}
         />
-        <Slider label="Move it if the evidence says so" value={shownForecast} min={nextWeek} max={24} onChange={setForecast}
+        <Slider label="Move it if the evidence says so" value={shownForecast} min={nextWeek} max={24} onChange={moveForecast}
           format={(v) => `week ${v}`}
           hint={`Committed before week 1 (the forecast that is scored): week ${p.forecast.week}, 80% sure of ${p.forecast.low}–${p.forecast.high}. Amber band: past contracts.`} />
         <details className="mt-2 text-sm">
           <summary className="text-slate-300 cursor-pointer">Now: 80% range weeks {shownRange.low}–{shownRange.high}, {shownRange.chance}% for week {c.deadline}</summary>
           <div className="grid grid-cols-2 gap-3 mt-2">
-            <Slider label="earliest" value={shownRange.low} min={nextWeek} max={24} onChange={(v) => setRange((r) => ({ ...r, low: Math.min(v, shownForecast) }))} format={(v) => `wk ${v}`} />
-            <Slider label="latest" value={shownRange.high} min={nextWeek} max={26} onChange={(v) => setRange((r) => ({ ...r, high: Math.max(v, shownForecast) }))} format={(v) => `wk ${v}`} />
+            <Slider label="earliest" value={shownRange.low} min={nextWeek} max={24} onChange={(v) => moveRange((r) => ({ ...r, low: Math.min(v, shownForecast) }))} format={(v) => `wk ${v}`} />
+            <Slider label="latest" value={shownRange.high} min={nextWeek} max={26} onChange={(v) => moveRange((r) => ({ ...r, high: Math.max(v, shownForecast) }))} format={(v) => `wk ${v}`} />
           </div>
-          <Slider label={`Chance of week ${c.deadline}`} value={shownRange.chance} min={0} max={100} step={5} onChange={(v) => setRange((r) => ({ ...r, chance: v }))} format={(v) => `${v}%`} />
+          <Slider label={`Chance of week ${c.deadline}`} value={shownRange.chance} min={0} max={100} step={5} onChange={(v) => moveRange((r) => ({ ...r, chance: v }))} format={(v) => `${v}%`} />
         </details>
       </Card>
 

@@ -63,10 +63,23 @@ favour of a show of hands. It is not live until it is merged into
      week of the outcome (a forecast the calendar overtook, and the game carried
      forward, doesn't count);
    - how often they opened decision support during play;
+   - **How you played**, in plain facts with no labels or scores:
+     - a week-by-week strip of the tool tabs checked, forecast moves and decision
+       changes;
+     - how many weeks they checked decision support, and how many times they
+       changed the forecast (first in which week);
+     - the weeks in which their decisions changed;
+     - the autopilot week ("After week K you changed nothing and checked no
+       tools");
+     - the most-checked tools;
+     - the time taken.
+
+     The tracking stays on the device and never changes an outcome;
    - how every tool on the desk would have done, each with a line on what it sees
      and can't see.
 6. Ask the room: whose range held? Who was late? Who said 50% or more for week 12,
-   and who made it? Who used a tool, and which?
+   and who made it? Who used a tool, and which? Who went on autopilot by week 6? Who
+   never moved their forecast?
 
 `?tab=analytics` opens the briefing on one tab and `?plan=31n` pre-states a plan,
 for projecting a tab in class.

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, firstCloseWeek } from './engine';
+import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, firstCloseWeek, playSummary } from './engine';
 import { screenData, allForecasts, tabById, tabByLetter } from './desk.js';
 import { addToTrack } from './track';
 import { Card } from './ui';
@@ -13,6 +13,53 @@ function aboutTool(key) {
   const tab = tabById(TOOL_TAB[key] || (key.startsWith('chat-') ? 'chat' : ''));
   if (key.startsWith('chat-')) return null;
   return tab ? `Sees ${tab.sees.charAt(0).toLowerCase()}${tab.sees.slice(1)} · can't see ${tab.cant.charAt(0).toLowerCase()}${tab.cant.slice(1)}` : null;
+}
+
+/** How you played: plain facts about engagement, week by week. No labels, no scores. */
+function HowYouPlayed({ p }) {
+  const h = playSummary(p);
+  const name = (id) => tabById(id)?.name || id;
+  const secs = (n) => (n === null || n === undefined ? '' : n >= 90 ? `${Math.round(n / 60)} min` : `${n} s`);
+  const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  return (
+    <Card title="How you played">
+      <div className="overflow-x-auto -mx-1 px-1">
+        <div className="flex gap-1 pb-1">
+          {h.weeks.map((w) => {
+            const d = w.decisions;
+            const f = w.forecast;
+            return (
+              <div key={w.week} className="shrink-0 w-12 bg-slate-950 rounded-lg p-1 text-center text-[10px] leading-tight"
+                title={`Week ${w.week}: ${w.tabs.length ? `checked ${w.tabs.map(name).join(', ')}` : 'no tools checked'}${f ? `; forecast ${f.week > 0 ? '+' : ''}${f.week} wk` : ''}${w.decided ? '; decisions changed' : ''}${w.seconds !== null ? `; ${secs(w.seconds)}` : ''}`}>
+                <div className="text-slate-500">wk {w.week}</div>
+                <div className={w.tabs.length ? 'text-violet-300 font-bold' : 'text-slate-700'}>{w.tabs.length ? `${w.tabs.length} tab${w.tabs.length === 1 ? '' : 's'}` : '·'}</div>
+                <div className={f ? 'text-emerald-300 font-bold' : 'text-slate-700'}>{f ? (f.week ? `${f.week > 0 ? '↑' : '↓'}${Math.abs(f.week)}` : 'range') : '·'}</div>
+                <div className={w.decided ? 'text-sky-300 font-bold' : 'text-slate-700'}>
+                  {w.decided ? [d.crews ? `${d.crews > 0 ? '+' : '−'}${Math.abs(d.crews)}c` : '', d.shift ? 'S' : '', d.inspect ? 'I' : ''].filter(Boolean).join(' ') : '·'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <p className="text-[10px] text-slate-500 mt-1">Each week: tool tabs checked · forecast moved (↑↓ weeks, or "range" for the range or chance only) · decisions changed (+c/−c crews, S shift, I inspection). Tap or hover a week for details.</p>
+      <ul className="mt-3 space-y-1 text-sm text-slate-200">
+        {p.desk && <li>Before committing you opened {plural(p.desk.tabs, 'tool tab')}.</li>}
+        <li>During play you checked decision support in {h.checkedWeeks} of {h.played} week{h.played === 1 ? '' : 's'}.</li>
+        <li>{h.forecastChanges === 0 ? 'You never changed your forecast during play.' : `You changed your forecast ${h.forecastChanges === 1 ? 'once' : `${h.forecastChanges} times`} (first in week ${h.firstForecastChange}).`}</li>
+        <li>You changed your decisions in {plural(h.decisionWeeks, 'week')}.</li>
+        <li className="font-semibold text-white">
+          {h.engagedToEnd ? 'You were still checking or changing things in your last week.'
+            : h.autopilotAfter === 0 ? 'After you committed, you changed nothing and checked no tools.'
+              : `After week ${h.autopilotAfter} you changed nothing and checked no tools.`}
+        </li>
+        {h.topTools.length > 0 && <li>Most checked: {h.topTools.map((t) => `${name(t.tab)} (${t.n})`).join(', ')}.</li>}
+        {(h.secondsBeforeCommit !== null || h.secondsPlaying > 0) && (
+          <li className="text-slate-400">Time: about {secs(h.secondsBeforeCommit ?? 0)} before committing, {secs(h.secondsPlaying)} playing.</li>
+        )}
+      </ul>
+    </Card>
+  );
 }
 
 export default function Reveal({ project, onReplay }) {
@@ -31,9 +78,6 @@ export default function Reveal({ project, onReplay }) {
   const usedTool = p.desk?.tool ? tabByLetter(p.desk.tool) : null;
   // The running forecast: when did it first come within a week of the outcome?
   const closeWeek = firstCloseWeek(p.forecastLog, outcome);
-  const deskWeeks = new Set(p.deskLog.map((d) => d.week)).size;
-  const deskUses = p.deskLog.filter((d) => d.tab.startsWith('use:')).length;
-  const promptCopies = p.deskLog.filter((d) => d.tab === 'ai-copy').length;
 
   // Keep score on this device, once per contract, for the Your Track Record tab.
   useEffect(() => {
@@ -86,7 +130,6 @@ export default function Reveal({ project, onReplay }) {
         />
         <p className="text-sm text-slate-200 mt-2">
           {closeWeek === null ? 'Your forecast never came within a week of the outcome.' : closeWeek === 0 ? 'Your forecast was within a week of the outcome from the start, before week 1.' : `Your forecast first came within a week of the outcome when you played week ${closeWeek}.`}
-          {' '}During play you opened decision support in {deskWeeks} of {p.week} week{p.week === 1 ? '' : 's'}{deskUses ? ` and used a tool's numbers ${deskUses} time${deskUses === 1 ? '' : 's'}` : ''}{promptCopies ? `, and copied the AI prompt ${promptCopies} time${promptCopies === 1 ? '' : 's'}` : ''}.
           {' '}The forecast you committed before week 1 is the one that is scored.
         </p>
         <p className="text-xs text-slate-500 mt-2">
@@ -94,6 +137,8 @@ export default function Reveal({ project, onReplay }) {
           accepted. Amber band: where most past contracts landed — on your screen before week 1.
         </p>
       </Card>
+
+      <HowYouPlayed p={p} />
 
       {p.plan && (
         <Card title="Your plan" tone="amber">

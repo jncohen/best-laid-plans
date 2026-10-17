@@ -2,7 +2,7 @@
 import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean, playPolicy, matchContracts, planFromProject, summarizeContracts,
   encodePlan, decodePlan, normalizePlan, playedPlan, judgeForecast } from '../frontend/src/plan/engine.js';
 import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/plan/table.js';
-import { pastManagers, playManager, recordWeek, contractSeed, firstCloseWeek } from '../frontend/src/plan/engine.js';
+import { pastManagers, playManager, recordWeek, contractSeed, firstCloseWeek, playSummary } from '../frontend/src/plan/engine.js';
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, analytics, riskSimulator, scenarios, consensus, aiPrompt, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
 
@@ -387,6 +387,40 @@ console.log('Review fixes (Oct 17)');
 }
 
 
+
+console.log('How you played');
+{
+  const plan = { crews: 3, inspect: 0.1, shift: 'none' };
+  const f0 = { week: 13, low: 11, high: 14, onTimeChance: 40, plan };
+  // A: commits, then plays the defaults every week, touching nothing.
+  const a = new Project('ledger'); a.commit(f0);
+  while (!a.done) { const w = a.week + 1; a.play({ forecast: Math.max(13, w), range: { low: 11, high: 14, chance: 40, carried: 13 < w, touched: false } }); }
+  const sa = playSummary(a);
+  t('untouched play: autopilot after week 0, nothing checked, no forecast or decision changes', sa.autopilotAfter === 0 && !sa.engagedToEnd && sa.checkedWeeks === 0 && sa.forecastChanges === 0 && sa.decisionWeeks === 0);
+  // B: hires in week 1, checks two tools before week 3, moves the forecast in week 5, then coasts.
+  const b = new Project('ledger'); b.commit(f0);
+  while (!b.done) {
+    const w = b.week + 1;
+    if (w === 3) { b.noteDesk(3, 'records'); b.noteDesk(3, 'status'); }
+    if (w === 4) b.noteDesk(4, 'records');
+    b.noteTime(w, 20 + w);
+    b.play({ hire: w === 1 ? 3 : 0, inspect: 0.1, forecast: w >= 5 ? 14 : 13, range: { low: 11, high: w >= 5 ? 15 : 14, chance: 40, touched: w === 5 } });
+  }
+  const sb = playSummary(b);
+  t('scenario B: autopilot after week 5; forecast changed once, first in week 5 (+1 week); decisions changed in week 1 only',
+    sb.autopilotAfter === 5 && sb.forecastChanges === 1 && sb.firstForecastChange === 5 && sb.weeks[4].forecast.week === 1 && sb.decisionWeeks === 1 && sb.weeks[0].decisions.crews === 3 && sb.weeks[0].decisions.inspect);
+  t('scenario B: checked tools in 2 weeks; most checked Records (2), then Status Report (1); per-week seconds recorded',
+    sb.checkedWeeks === 2 && sb.topTools[0].tab === 'records' && sb.topTools[0].n === 2 && sb.topTools[1].tab === 'status' && sb.weeks[2].tabs.join() === 'records,status' && sb.weeks[0].seconds === 21);
+  // C: changes inspection in the last week played: engaged to the end.
+  const c = new Project('ledger'); c.commit(f0);
+  const last = (() => { const q = new Project('ledger'); q.commit(f0); playPolicy(q, { hire: 3, inspect: 0.1 }); return q.week; })();
+  while (!c.done) { const w = c.week + 1; c.play({ hire: w === 1 ? 3 : 0, inspect: w === last ? 0 : 0.1 }); }
+  const sc = playSummary(c);
+  t('scenario C: a change in the last week means engaged to the end', sc.engagedToEnd && sc.autopilotAfter === sc.played);
+  const d = new Project('ledger'); d.commit({ week: 9, low: 8, high: 10, onTimeChance: 99, plan: { crews: 0, inspect: 0, shift: 'none' } });
+  while (!d.done) { const w = d.week + 1; d.play({ hire: w === 1 ? 3 : 0, inspect: 0.1 }); }
+  t('tracking (tabs, times, forecast touches) never changes an outcome', JSON.stringify(b.history) === JSON.stringify(d.history) && b.outcomeWeek() === d.outcomeWeek());
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
