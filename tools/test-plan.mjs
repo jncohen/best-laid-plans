@@ -2,7 +2,7 @@
 import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean, playPolicy, matchContracts, planFromProject, summarizeContracts,
   encodePlan, decodePlan, normalizePlan, playedPlan, judgeForecast } from '../frontend/src/plan/engine.js';
 import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/plan/table.js';
-import { pastManagers, playManager, recordWeek, contractSeed } from '../frontend/src/plan/engine.js';
+import { pastManagers, playManager, recordWeek, contractSeed, firstCloseWeek } from '../frontend/src/plan/engine.js';
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, analytics, riskSimulator, scenarios, consensus, aiPrompt, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
 
@@ -355,6 +355,38 @@ console.log('Bankruptcy past the credit line');
   t('the best plan on ledger never goes broke ($4.5M, week 12)', best.result === 'DELIVERED' && best.spent === 4_500_000 && best.outcomeWeek() === 12);
   t('the credit line is a stated rule the desk can see', screenData().rules.creditLine === CONFIG.creditLine);
 }
+
+console.log('Review fixes (Oct 17)');
+{
+  // A forecast never moved from 12 is carried forward by the play screen as the calendar passes it; that must not count.
+  const p = new Project('ledger');
+  p.commit({ week: 12, low: 11, high: 13, onTimeChance: 50, plan: { crews: 0, inspect: 0, shift: 'none' } });
+  while (!p.done) { const w = p.week + 1; p.play({ forecast: Math.max(12, w), range: { low: 11, high: 13, chance: 50, carried: 12 < w } }); }
+  t('an untouched forecast carried forward by the calendar never counts as coming close', p.outcomeWeek() === 17 && firstCloseWeek(p.forecastLog, p.outcomeWeek()) === null);
+  t('a forecast the student set does count', firstCloseWeek([{ week: 0, forecast: 12 }, { week: 5, forecast: 16 }], 17) === 5 && firstCloseWeek([{ week: 0, forecast: 17 }], 17) === 0);
+  // Event wording: no "Inspection found" without inspection; singular and plural.
+  const q = new Project('ledger');
+  while (!q.done) q.play({});
+  const events = q.history.flatMap((h) => h.events);
+  t('with no inspection, defects "turn up in the work" rather than being found by inspection', !events.some((e) => e.startsWith('Inspection found')) && events.some((e) => /turned up in the work/.test(e)));
+  t('no "1 units" or "1 bad units" anywhere', !events.some((e) => /\b1 units\b|\b1 bad units\b|\b1 defective units\b/.test(e)));
+  const r = new Project('ledger');
+  for (let w = 0; w < 4; w++) r.play({ inspect: 0.2 });
+  t('with inspection, the log says inspection found them', r.history.some((h) => h.events.some((e) => e.startsWith('Inspection found'))));
+  // Cost efficiency against the plan's own cost baseline, not the budget.
+  const S = screenData(), C3I = COMMON_PLANS[4];
+  t('Status Report CPI is near 1 before week 1 (1.15), measured against the line\'s own cost baseline', statusReport(S).cpi === 1.15);
+  t('Cost Management before week 1: baseline = EAC, CPI 1.00, headroom to the budget shown separately', (() => { const c = costManagement(S, C3I); return c.cost.cpi === 1 && c.cost.bac === c.cost.eac && c.headroom === CONFIG.budget - c.cost.eac && c.headroomCredit === CONFIG.budget + CONFIG.creditLine - c.cost.eac; })());
+  const live = new Project('ledger');
+  live.commit({ week: 13, low: 11, high: 14, onTimeChance: 40, plan: C3I });
+  for (let w = 0; w < 6; w++) live.play({ hire: w === 0 ? 3 : 0, inspect: 0.1 });
+  const cl = costManagement(S, C3I, liveScreen(live)).cost, sl = statusReport(S, liveScreen(live), C3I);
+  t(`during play CPI sits near 1 (cost ${cl.cpi}, status ${sl.cpi})`, cl.cpi > 0.6 && cl.cpi < 1.4 && sl.cpi > 0.6 && sl.cpi < 1.4);
+  t('every tool keeps its sees / cant-see line, now shown on the reveal', TABS.slice(1).every((x) => x.sees && x.cant));
+  t('group headers are neutral', JSON.stringify([...new Set(TABS.slice(1).map((x) => x.group))]) === JSON.stringify(['The Brief', 'Dashboards', 'People', 'History', 'Models', 'Your Record']));
+}
+
+
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

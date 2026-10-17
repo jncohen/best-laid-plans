@@ -5,7 +5,6 @@ import TabStrip from './DeskStrip';
 import { Card, Slider } from './ui';
 import DeskTab from './DeskTabs';
 
-const DEFAULTS = { week: 12, low: 11, high: 13, chance: 50 };
 function Choice({ label, options, value, onChange }) {
   return (
     <div role="radiogroup" aria-label={label}>
@@ -26,10 +25,11 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const c = CONFIG;
 
   const S = useMemo(() => screenData(), []);
-  const [week, setWeek] = useState(DEFAULTS.week);
-  const [low, setLow] = useState(DEFAULTS.low);
-  const [high, setHigh] = useState(DEFAULTS.high);
-  const [chance, setChance] = useState(DEFAULTS.chance);
+  // No starting forecast: each number is unset until the student sets it (or a tool's numbers are used).
+  const [week, setWeek] = useState(null);
+  const [low, setLow] = useState(null);
+  const [high, setHigh] = useState(null);
+  const [chance, setChance] = useState(null);
   // The desk: which tab is showing, the tool tabs opened (in order), when the briefing
   // opened, and the numbers last copied in from a tool.
   const [tab, setTab] = useState(initialTab);
@@ -46,10 +46,11 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
 
   const setPoint = (v) => {
     setWeek(v);
-    if (low > v) setLow(v);
-    if (high < v) setHigh(v);
+    if (low !== null && low > v) setLow(v);
+    if (high !== null && high < v) setHigh(v);
   };
-  const intervalOk = low <= week && week <= high;
+  const forecastSet = week !== null && low !== null && high !== null && chance !== null;
+  const intervalOk = forecastSet && low <= week && week <= high;
 
   const open = (id) => {
     setTab(id);
@@ -65,8 +66,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
     open('commit');
   };
   const commit = () => {
-    const given = loaded ? loaded.numbers : DEFAULTS;
-    const edited = given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
+    const given = loaded ? loaded.numbers : null;
+    const edited = !given || given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
     const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', tabs: opened.length, minutes: (Date.now() - startedAt) / 60000, edited, copied, order: opened };
     onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim());
   };
@@ -114,8 +115,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
           <Slider label="Week the customer accepts it" value={week} min={8} max={22} onChange={setPoint} format={(v) => `week ${v}`} />
           <div>
             <div className="grid grid-cols-2 gap-3">
-              <Slider label="80% sure: earliest" value={low} min={6} max={22} onChange={(v) => setLow(Math.min(v, week))} format={(v) => `wk ${v}`} />
-              <Slider label="latest" value={high} min={8} max={24} onChange={(v) => setHigh(Math.max(v, week))} format={(v) => `wk ${v}`} />
+              <Slider label="80% sure: earliest" value={low} min={6} max={22} onChange={(v) => setLow(week === null ? v : Math.min(v, week))} format={(v) => `wk ${v}`} />
+              <Slider label="latest" value={high} min={8} max={24} onChange={(v) => setHigh(week === null ? v : Math.max(v, week))} format={(v) => `wk ${v}`} />
             </div>
           </div>
           <Slider
@@ -140,7 +141,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
           >
             Commit plan and forecast, start week 1
           </button>
-          {!planReady && <p className="text-xs text-slate-500 text-center -mt-2">Choose all three parts of your plan first.</p>}
+          {(!planReady || !forecastSet) && <p className="text-xs text-slate-500 text-center -mt-2">{!planReady ? 'Choose all three parts of your plan' : 'Set the week, both ends of the range and the chance'} first.</p>}
         </div>
       </Card>
 

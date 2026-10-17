@@ -55,7 +55,7 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
     ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, ['>Held<', 'You changed plan'], false],
     ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, ['>Held<', 'You played the plan you stated'], false],
     ['all 40, hands-off stated and played', { week: 14, low: 12, high: 17, onTimeChance: 15 }, HO, {}, ['>Held<', 'You played the plan you stated'], true],
-    ['pace, hands-off stated and played', pace, HO, {}, ['Missed: 5 weeks late', 'You played the plan you stated'], true],
+    ['pace, hands-off stated and played', pace, HO, {}, ['Missed, 5 wk late', 'You played the plan you stated', 'Sees '], true],
   ];
   for (const [i, [label, f, plan, pol, verdict, coaster]] of cases.entries()) {
     const p = new Project('ledger');
@@ -109,7 +109,7 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
     for (const plan of [null, C3, { crews: 1, inspect: 0.3, shift: 'every' }]) {
       ok(`Desk tab ${t.name}${plan ? `, plan ${plan.crews}/${plan.inspect}/${plan.shift}` : ', no plan yet'}`, () => {
         const h = renderToString(<Brief onCommit={() => {}} initialTab={t.id} initialPlan={plan} />);
-        if (!h.includes(t.sees.replace(/'/g, '&#x27;')) && !h.includes(t.sees)) throw new Error('sees-label missing');
+        if (/>Can(&#x27;|')t see</.test(h)) throw new Error('the tab still carries a sees or cant-see label');
         if (t.forecasts && t.id !== 'chat' && t.id !== 'consensus' && t.id !== 'records' && !h.includes('Use this on my prediction')) throw new Error('no Use this button');
         if (t.id === 'records' && (h.match(/<tr/g) || []).length < 41) throw new Error('table does not have 40 rows');
                         if (t.id === 'cost' && !h.includes('bankruptcy')) throw new Error('bankruptcy line missing');

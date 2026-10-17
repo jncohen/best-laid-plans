@@ -22,16 +22,6 @@ const toneOf = (id) => TONE[tabById(id)?.tone || 'front'];
 const W = 600;
 const svgText = { fontSize: 11, fill: '#94a3b8' };
 
-/** Sees · can't see, the tab's honest label. */
-function Label({ tab }) {
-  return (
-    <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-      <div className="bg-slate-950 rounded-lg px-3 py-2"><div className="text-[10px] uppercase tracking-wider text-slate-500">Sees</div><div className="text-slate-200">{tab.sees}</div></div>
-      <div className="bg-slate-950 rounded-lg px-3 py-2"><div className="text-[10px] uppercase tracking-wider text-slate-500">Can't see</div><div className="text-slate-200">{tab.cant}</div></div>
-    </div>
-  );
-}
-
 /** The forecast a tab produces, and the button that copies it to the front tab. */
 export function ForecastTile({ f, tone, onUse, label = 'This tool says' }) {
   if (!f) return null;
@@ -57,7 +47,6 @@ function Frame({ id, kind, children, f, onUse, planNote }) {
   const tone = toneOf(id);
   return (
     <Card title={`${tab.name} · ${kind}`} tone={tone.border}>
-      <Label tab={tab} />
       {planNote}
       {children}
       {tab.forecasts && f !== undefined && <ForecastTile f={f} tone={tone} onUse={f ? () => onUse(id, f) : null} />}
@@ -78,7 +67,6 @@ function ContractTab() {
   const c = CONFIG;
   return (
     <Card title="The Contract" tone="slate">
-      <Label tab={tabById('contract')} />
       <div className="grid grid-cols-4 gap-2 text-center">
         <div><div className="text-lg font-bold text-white">{c.scope}</div><div className="text-[11px] text-slate-500">units</div></div>
         <div><div className="text-lg font-bold text-white">{c.deadline}</div><div className="text-[11px] text-slate-500">weeks</div></div>
@@ -111,8 +99,8 @@ function ContractTab() {
 }
 
 // ── The mind's own frames ────────────────────────────────────────────────────
-function StatusTab({ S, onUse, live }) {
-  const st = statusReport(S, live);
+function StatusTab({ S, plan, onUse, live }) {
+  const st = statusReport(S, live, plan);
   const R = S.rules;
   const light = { green: 'bg-emerald-400', amber: 'bg-amber-400', red: 'bg-rose-500' }[st.light];
   // Burn-up: cumulative earned units for the weeks shown, then the EVM projection to completion.
@@ -163,15 +151,17 @@ function CostTab({ S, plan, onUse, planNote, live }) {
   return (
     <Frame id="cost" kind="project cost control" f={c.forecast} onUse={onUse} planNote={planNote}>
       <div className="grid grid-cols-4 gap-2">
-        <Tile label="Budget (BAC)" value={m(c.cost.bac)} />
-        <Tile label="Est. at completion" value={m(c.cost.eac)} sub="EAC" tone="text-sky-300" />
-        <Tile label="CPI" value={c.cost.cpi} sub="BAC ÷ EAC" tone="text-sky-300" />
+        <Tile label="Plan baseline" value={m(c.cost.bac)} sub="BAC" />
+        <Tile label="Est. at completion" value={m(c.cost.eac)} sub="EAC = BAC ÷ CPI" tone="text-sky-300" />
+        <Tile label="CPI" value={c.cost.cpi} sub="EV ÷ AC" tone="text-sky-300" />
         <Tile label="Cash runway" value={`${c.runwayWeeks} wk`} sub={`at ${money(c.perWeek)}/wk`} tone="text-sky-300" />
       </div>
       <p className="text-sm text-slate-300 mt-3">
-        Spend to date{c.live ? ` (week ${c.week})` : ''}: <span className="font-mono">{money(c.spent)}</span> of {money(c.budget)}, plus a {money(c.creditLine)} credit line.
-        {c.live ? ' At this burn' : ' Your plan'} costs {money(c.cost.eac)} if it finishes when the Schedule says (week {c.forecast.week}):{' '}
-        <strong className={c.onBudget ? 'text-sky-300' : 'text-rose-300'}>{c.onBudget ? `${money(c.cost.vac)} under budget` : `${money(-c.cost.vac)} over budget`}</strong>.
+        Spend to date{c.live ? ` (week ${c.week})` : ''}: <span className="font-mono">{money(c.spent)}</span>. Your plan's cost baseline is {money(c.cost.bac)}
+        {c.live ? `; at CPI ${c.cost.cpi} the estimate at completion is ${money(c.cost.eac)}` : ''}.
+      </p>
+      <p className="text-sm text-slate-300 mt-1">
+        Budget {money(c.budget)}: headroom <span className="font-mono">{money(c.headroom)}</span>. With the {money(c.creditLine)} credit line: <span className="font-mono">{money(c.headroomCredit)}</span>.
       </p>
       <svg viewBox={`0 0 ${W} ${h}`} width="100%" className="mt-3" role="img" aria-label="Cumulative spend against the budget and the bankruptcy line">
         <line x1={x(0)} x2={x(end)} y1={y(c.budget)} y2={y(c.budget)} stroke="#64748b" strokeDasharray="3 3" />
@@ -192,7 +182,7 @@ function CostTab({ S, plan, onUse, planNote, live }) {
       <ul className="mt-2 space-y-1 text-xs text-slate-300">
         {c.lines.map((l) => <li key={l.label} className="flex justify-between"><span>{l.label}</span><span className="font-mono">{money(l.amount)}</span></li>)}
       </ul>
-      <p className="text-[11px] text-slate-500 mt-2">The schedule forecast below is the one this spend plan assumes, the Schedule's. Cost control sees money, not defects.</p>
+      <p className="text-[11px] text-slate-500 mt-2">The schedule forecast below is the one this spend plan assumes, the Schedule's.</p>
     </Frame>
   );
 }
@@ -327,7 +317,6 @@ function RecordsTab({ plan, planReady, onUse }) {
   const past = pastContracts();
   return (
     <Card title="Records · project database" tone="amber">
-      <Label tab={tabById('records')} />
       <Records past={past} plan={planReady ? plan : null} onUse={(f, label) => onUse('records', f, label)} />
     </Card>
   );
@@ -380,7 +369,7 @@ function RisksTab({ S, plan, planNote }) {
           </li>
         ))}
       </ul>
-      <p className="text-sm text-violet-200 mt-3">No forecast here. If several of these can happen at once, does your range leave room for them? Most ranges that miss, miss late.</p>
+      <p className="text-sm text-violet-200 mt-3">No forecast here: each risk is listed on its own.</p>
       <Premortem />
     </Frame>
   );

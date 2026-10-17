@@ -38,9 +38,8 @@ export default function Play({ project, onPlay }) {
 
   const shownRange = { low: Math.min(Math.max(range.low, nextWeek), shownForecast), high: Math.max(range.high, shownForecast), chance: nextWeek > c.deadline ? 0 : range.chance };
   const run = () => {
-    onPlay({ hire, shift, inspect, forecast: shownForecast, range: shownRange });
-    setForecast(shownForecast);
-    setRange(shownRange);
+    // A forecast the student left behind the calendar is carried forward to the week being played; mark it.
+    onPlay({ hire, shift, inspect, forecast: shownForecast, range: { ...shownRange, carried: forecast < nextWeek } });
     setHire(0);
     setSeenTabs([]);
     setDeskTab('decide');

@@ -27,17 +27,22 @@ export function Stat({ label, value, sub, tone = 'text-white' }) {
   );
 }
 
+/** A slider. `value` null means not yet set: it shows "set it" and a dimmed thumb until touched. */
 export function Slider({ label, value, min, max, step = 1, onChange, format = (v) => v, hint }) {
+  const unset = value === null || value === undefined;
+  const mid = Math.round((min + max) / 2 / step) * step;
   return (
     <label className="block">
       <div className="flex justify-between items-baseline text-sm mb-1">
         <span className="text-slate-300">{label}</span>
-        <span className="font-mono font-bold text-white">{format(value)}</span>
+        <span className={`font-mono font-bold ${unset ? 'text-amber-300' : 'text-white'}`}>{unset ? 'set it' : format(value)}</span>
       </div>
       <input
-        type="range" min={min} max={max} step={step} value={value}
+        type="range" min={min} max={max} step={step} value={unset ? mid : value} aria-valuetext={unset ? 'not set' : String(format(value))}
         onChange={(e) => onChange(+e.target.value)}
-        className="w-full accent-amber-400 h-2"
+        onPointerUp={(e) => { if (unset) onChange(+e.target.value); }}
+        onKeyUp={(e) => { if (unset) onChange(+e.target.value); }}
+        className={`w-full accent-amber-400 h-2 ${unset ? 'opacity-40' : ''}`}
       />
       {hint && <div className="text-[11px] text-slate-500 mt-1">{hint}</div>}
     </label>

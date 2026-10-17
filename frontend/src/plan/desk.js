@@ -108,7 +108,7 @@ export function planModel(S, plan, { noise = () => 1, scope = null, trace = fals
  * planned duration ÷ SPI, with a range from the SPI of each week to date. It runs
  * early only because "earned" counts units built, not units that will pass.
  */
-export function statusReport(S, L = null) {
+export function statusReport(S, L = null, plan = null) {
   const R = S.rules;
   const weekly = L
     ? L.rows.map((r) => { const spi = r.reported / (r.week / R.deadline); return { week: r.week, spi, eac: R.deadline / Math.max(0.05, spi) }; })
@@ -117,14 +117,16 @@ export function statusReport(S, L = null) {
   const wk = last.week;
   const earnedPct = L ? L.rows[L.rows.length - 1].reported : S.history.reduce((a, b) => a + b, 0) / R.scope;
   const plannedPct = Math.min(1, wk / R.deadline);
-  const ev = earnedPct * R.budget, pv = plannedPct * R.budget, ac = L ? L.spent : wk * R.crews * R.crewWeek;
+  // Earned value against the cost baseline: the last contract's crews over the planned 12 weeks, or the student's own plan.
+  const bac = L ? costBaseline(S, plan) : R.crews * R.crewWeek * R.deadline;
+  const ev = earnedPct * bac, pv = plannedPct * bac, ac = L ? L.spent : wk * R.crews * R.crewWeek;
   const eacs = weekly.map((x) => Math.max(x.eac, L ? wk + 0.5 : 0));
   const eac = Math.max(last.eac, L ? wk + 0.5 : 0);
   return {
     forecast: clampF({ week: Math.round(eac), low: Math.floor(Math.min(...eacs)), high: Math.ceil(Math.max(...eacs)), chance: eac <= R.deadline - 0.5 ? 90 : eac <= R.deadline ? 60 : 20 }),
     live: !!L, pace: +pace(S).toFixed(1), weeksAtPace: +(R.scope / pace(S)).toFixed(1), eacWeeks: +eac.toFixed(1), weekly,
     earnedPct, plannedPct, weeksShown: wk, built: earnedPct * R.scope, planned: plannedPct * R.scope,
-    spi: +last.spi.toFixed(2), cpi: +(ev / ac).toFixed(2), light: ev >= pv ? 'green' : ev >= 0.9 * pv ? 'amber' : 'red',
+    spi: +last.spi.toFixed(2), cpi: +(ev / ac).toFixed(2), bac, light: ev >= pv ? 'green' : ev >= 0.9 * pv ? 'amber' : 'red',
   };
 }
 
@@ -135,6 +137,14 @@ export function statusReport(S, L = null) {
  * CPI = BAC / EAC. Money only: it cannot see defects, so the schedule it implies is
  * the Schedule's.
  */
+/** The plan's cost baseline (BAC): what the stated plan costs if it runs as the Schedule says from week 0. */
+export function costBaseline(S, plan) {
+  const R = S.rules, p = asPlan(plan), weeks = planModel(S, p), crews = R.crews + p.crews;
+  let total = p.crews * R.hireFee;
+  for (let w = 1; w <= weeks; w++) total += crews * R.crewWeek + (shiftIn(p, w) ? crews * R.shiftPremiumPerCrew : 0);
+  return total;
+}
+
 export function costManagement(S, plan, L = null) {
   const R = S.rules, p = asPlan(plan);
   const sc = schedule(S, p, L).forecast;
@@ -147,17 +157,22 @@ export function costManagement(S, plan, L = null) {
   for (let w = from + 1; w <= R.horizon; w++) { total += weekCost(w); burn.push({ week: w, spent: total }); }
   const limit = R.budget + R.creditLine;
   const broke = burn.find((b) => !b.actual && b.spent > limit);
-  const eac = (burn.find((b) => b.week === Math.min(Math.max(sc.week, from), R.horizon)) || burn[burn.length - 1]).spent;
+  const toFinish = (burn.find((b) => b.week === Math.min(Math.max(sc.week, from), R.horizon)) || burn[burn.length - 1]).spent;
   const spent = L ? L.spent : 0;
+  // Earned value against the plan's cost baseline: CPI = EV / AC, EAC = BAC / CPI (BAC before any spend).
+  const bac = costBaseline(S, p);
+  const earned = L ? L.rows[L.rows.length - 1].reported : 0;
+  const cpi = L && spent > 0 ? (earned * bac) / spent : 1;
+  const eac = L ? bac / Math.max(0.05, cpi) : bac;
   const lines = [
     { label: L ? 'Spent to date' : 'Crews', amount: L ? spent : crews * R.crewWeek * sc.week },
-    { label: L ? 'Still to spend, to the Schedule\'s finish' : 'Hiring fees', amount: L ? eac - spent : p.crews * R.hireFee },
+    { label: L ? 'Still to spend, to the Schedule\'s finish' : 'Hiring fees', amount: L ? toFinish - spent : p.crews * R.hireFee },
   ];
-  if (!L) lines.push({ label: 'Second-shift premium', amount: eac - crews * R.crewWeek * sc.week - p.crews * R.hireFee });
+  if (!L) lines.push({ label: 'Second-shift premium', amount: toFinish - crews * R.crewWeek * sc.week - p.crews * R.hireFee });
   const steady = weekCost(Math.max(from + 2, sc.week));
   return {
-    forecast: sc, cost: { eac, bac: R.budget, vac: R.budget - eac, cpi: +(R.budget / eac).toFixed(2) }, live: !!L, spent, week: from,
-    burn, lines, budget: R.budget, creditLine: R.creditLine, limit, onBudget: eac <= R.budget,
+    forecast: sc, cost: { eac, bac, vac: bac - eac, cpi: +cpi.toFixed(2), toFinish }, live: !!L, spent, week: from,
+    burn, lines, budget: R.budget, creditLine: R.creditLine, limit, onBudget: eac <= R.budget, headroom: R.budget - eac, headroomCredit: limit - eac,
     brokeWeek: broke ? broke.week : null, runwayWeeks: +Math.max(0, (limit - spent) / steady).toFixed(1), perWeek: steady,
   };
 }
@@ -369,12 +384,12 @@ export function teamChat(S, plan, L = null) {
   if (rejected > 0) {
     const fix = Math.max(1, Math.ceil(left / Math.max(1, v)));
     priya = { forecast: clampF({ week: now + fix, low: now + fix, high: now + fix + 2, chance: now + fix <= R.deadline ? 50 : 10 }),
-      says: `Acceptance bounced ${rejected} units. Fixing them that late is double the work: about ${word(fix)} more week${fix === 1 ? '' : 's'} at this pace.`,
+      says: `Acceptance bounced ${rejected} unit${rejected === 1 ? '' : 's'}. Fixing ${rejected === 1 ? 'it' : 'them'} that late is double the work: about ${word(fix)} more week${fix === 1 ? '' : 's'} at this pace.`,
       reasoning: `The ${Math.round(left)} units now left, at the ${v.toFixed(1)} a week built lately.` };
   } else {
     const rw = p.inspect > 0 ? Math.max(1, Math.round(gap / 2)) : gap;
     priya = { forecast: clampF({ week: sc.week + rw, low: sc.week + rw - 1, high: sc.week + rw + 2, chance: sc.week + rw <= R.deadline ? 50 : 15 }),
-      says: `${found > 0 ? `Inspection has caught ${found} bad units so far. ` : ''}Last time ${S.last.rejected} units bounced at acceptance, and it took ${word(gap)} more weeks after the dashboard said done. Budget ${gap > 1 ? `${word(gap - 1)} or ${word(gap)}` : word(gap)} weeks for rework${p.inspect > 0 ? ', maybe half that if you keep inspecting' : ''}.`,
+      says: `${found > 0 ? `Inspection has caught ${found} bad unit${found === 1 ? '' : 's'} so far. ` : ''}Last time ${S.last.rejected} units bounced at acceptance, and it took ${word(gap)} more weeks after the dashboard said done. Budget ${gap > 1 ? `${word(gap - 1)} or ${word(gap)}` : word(gap)} weeks for rework${p.inspect > 0 ? ', maybe half that if you keep inspecting' : ''}.`,
       reasoning: `The plan from here (week ${sc.week}) plus the rework the last contract needed after its dashboard read 100% (${gap} weeks${p.inspect > 0 ? ', halved for inspection' : ''}).` };
   }
   return [
@@ -453,27 +468,27 @@ export function aiPrompt(S, plan, L = null) {
  */
 export const TABS = [
   { id: 'commit', letter: '', group: null, name: 'Your Plan and Prediction · Commit Before Week 1', short: 'Your Plan & Prediction', tone: 'front' },
-  { id: 'contract', letter: 'b', group: 'The brief', name: 'The Contract', tone: 'brief', forecasts: false, sees: 'The contract, every rule and both scores', cant: 'How long it will take' },
-  { id: 'status', letter: 'a', group: "The mind's own frames", name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Earned value: units reported complete against plan', cant: 'Whether those units will pass acceptance' },
-  { id: 'cost', letter: 'c', group: "The mind's own frames", name: 'Cost Management', tone: 'inside', forecasts: true, sees: 'Money: spend, burn rate, the credit line', cant: 'Defects, so you can watch every dollar and still be late' },
-  { id: 'schedule', letter: 'd', group: "The mind's own frames", name: 'Schedule', tone: 'inside', forecasts: true, sees: 'Your plan, week by week, under the stated rules', cant: 'Defects or scope changes' },
-  { id: 'chat', letter: 'f', group: 'Other people', name: 'Team Chat', tone: 'people', forecasts: true, sees: 'Five colleagues, each from where they sit', cant: 'Which view to weigh most' },
-  { id: 'ai', letter: 'i', group: 'Other people', name: 'Ask an AI', tone: 'people', forecasts: false, sees: 'Whatever you paste in: this prompt holds everything on screen', cant: 'Anything not on screen' },
-  { id: 'last5', letter: 'e', group: 'Records and structured judgment', name: 'Last 5 Contracts', tone: 'record', forecasts: true, sees: 'The five newest contracts, and the story of the last one', cant: 'Whether five is enough' },
-  { id: 'records', letter: 'j', group: 'Records and structured judgment', name: 'Records', tone: 'record', forecasts: true, sees: 'What actually happened, defects and scope changes included', cant: 'Plans no past manager tried' },
-  { id: 'scenarios', letter: 'l', group: 'Records and structured judgment', name: 'Scenarios', tone: 'people', forecasts: true, sees: 'A wider range, on purpose', cant: 'Anything but your plan as the starting point' },
-  { id: 'risks', letter: 'm', group: 'Records and structured judgment', name: 'Risk Register', tone: 'people', forecasts: false, sees: 'Each risk, one at a time, and your own premortem', cant: 'Their sum' },
+  { id: 'contract', letter: 'b', group: 'The Brief', name: 'The Contract', tone: 'brief', forecasts: false, sees: 'The contract, every rule and both scores', cant: 'How long it will take' },
+  { id: 'status', letter: 'a', group: 'Dashboards', name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Earned value: units reported complete against plan', cant: 'Whether those units will pass acceptance' },
+  { id: 'cost', letter: 'c', group: 'Dashboards', name: 'Cost Management', tone: 'inside', forecasts: true, sees: 'Money: spend, burn rate, the credit line', cant: 'Defects, so you can watch every dollar and still be late' },
+  { id: 'schedule', letter: 'd', group: 'Dashboards', name: 'Schedule', tone: 'inside', forecasts: true, sees: 'Your plan, week by week, under the stated rules', cant: 'Defects or scope changes' },
+  { id: 'chat', letter: 'f', group: 'People', name: 'Team Chat', tone: 'people', forecasts: true, sees: 'Five colleagues, each from where they sit', cant: 'Which view to weigh most' },
+  { id: 'ai', letter: 'i', group: 'People', name: 'Ask an AI', tone: 'people', forecasts: false, sees: 'Whatever you paste in: this prompt holds everything on screen', cant: 'Anything not on screen' },
+  { id: 'last5', letter: 'e', group: 'History', name: 'Last 5 Contracts', tone: 'record', forecasts: true, sees: 'The five newest contracts, and the story of the last one', cant: 'Whether five is enough' },
+  { id: 'records', letter: 'j', group: 'History', name: 'Records', tone: 'record', forecasts: true, sees: 'What actually happened, defects and scope changes included', cant: 'Plans no past manager tried' },
+  { id: 'scenarios', letter: 'l', group: 'History', name: 'Scenarios', tone: 'people', forecasts: true, sees: 'A wider range, on purpose', cant: 'Anything but your plan as the starting point' },
+  { id: 'risks', letter: 'm', group: 'History', name: 'Risk Register', tone: 'people', forecasts: false, sees: 'Each risk, one at a time, and your own premortem', cant: 'Their sum' },
   { id: 'analytics', letter: 'o', group: 'Models', name: 'Analytics', tone: 'record', forecasts: true, sees: "The record's patterns", cant: 'Plans the record does not contain' },
   { id: 'simulator', letter: 'p', group: 'Models', name: 'Risk Simulator', tone: 'people', forecasts: true, sees: 'Variability, scope changes and, if switched on, rework from the record', cant: 'Anything its switches leave out' },
   { id: 'consensus', letter: 'q', group: 'Models', name: 'Consensus', tone: 'people', forecasts: true, sees: 'The tabs you tick', cant: 'Anything you leave out' },
-  { id: 'track', letter: 'r', group: 'Your own record', name: 'Your Track Record', tone: 'record', forecasts: false, sees: 'Your past forecasts on this device', cant: "Anything, if you haven't kept score" },
+  { id: 'track', letter: 'r', group: 'Your Record', name: 'Your Track Record', tone: 'record', forecasts: false, sees: 'Your past forecasts on this device', cant: "Anything, if you haven't kept score" },
 ];
 export const tabById = (id) => TABS.find((t) => t.id === id);
 export const tabByLetter = (l) => TABS.find((t) => t.letter && t.letter === l);
 
 /** The forecasts the Consensus tab can combine, and the sweep checks. Each is a function of (screen, plan). */
 export const FORECASTERS = {
-  status: (S, p, L) => statusReport(S, L).forecast,
+  status: (S, p, L) => statusReport(S, L, p).forecast,
   cost: (S, p, L) => costManagement(S, p, L).forecast,
   schedule: (S, p, L) => schedule(S, p, L).forecast,
   last5: (S) => lastFive(S).forecast,

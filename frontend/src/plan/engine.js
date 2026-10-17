@@ -256,7 +256,7 @@ export class Project {
         rejected = this.hidden;
         this.backlog = this.hidden * c.lateFixMultiplier;
         this.hidden = 0;
-        events.push(`Customer acceptance test: ${Math.round(rejected)} units rejected. Fixing them this late takes ${Math.round(rejected * c.lateFixMultiplier)} units of work.`);
+        events.push(`Customer acceptance test: ${Math.round(rejected)} unit${Math.round(rejected) === 1 ? '' : 's'} rejected. Fixing ${Math.round(rejected) === 1 ? 'it' : 'them'} this late takes ${Math.round(rejected * c.lateFixMultiplier)} units of work.`);
       } else {
         this.hidden = 0;
         accepted = true;
@@ -267,7 +267,10 @@ export class Project {
       found = this.hidden * discovery;
       this.hidden -= found;
       this.backlog += found;
-      if (found >= 0.5) events.push(`Inspection found ${Math.round(found)} defective unit${Math.round(found) === 1 ? '' : 's'}; back in the queue.`);
+      if (found >= 0.5) {
+        const n = Math.round(found), units = `${n} defective unit${n === 1 ? '' : 's'}`;
+        events.push(inspect > 0 ? `Inspection found ${units}; back in the queue.` : `${units[0].toUpperCase()}${units.slice(1)} turned up in the work; back in the queue.`);
+      }
     }
 
     if (forecast !== null && forecast !== undefined && Number.isFinite(+forecast)) {
@@ -340,6 +343,16 @@ export class Project {
     return { delivery, forecast: forecastScore, outcome, held, missBy, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
   }
 
+}
+
+/**
+ * The week the running forecast first came within a week of the outcome: 0 for the
+ * commitment, otherwise the week whose play logged it. Forecasts the game carried
+ * forward (left behind the calendar, so moved up to the week being played) don't count.
+ */
+export function firstCloseWeek(log, outcome) {
+  const e = log.find((x) => !x.carried && Math.abs(x.forecast - outcome) <= 1);
+  return e ? e.week : null;
 }
 
 // ── The Decision Desk, as recorded ───────────────────────────────────────────
