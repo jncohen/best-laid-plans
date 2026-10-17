@@ -19,7 +19,7 @@ export const CONFIG = {
   deadline: 12,
   horizon: 22,               // the customer terminates the contract after this week
   crews: 4,
-  budget: 5_000_000,
+  budget: 4_600_000,
   creditLine: 500_000,       // overspend allowed on credit; past it, payroll fails and the company goes bankrupt
 
   // Production
@@ -27,8 +27,8 @@ export const CONFIG = {
   noise: 0.05,
   // Each contract differs: how hard its build is, and how defect-prone its parts are.
   // Drawn per seed and never shown, so it is part of what the past contracts' spread reflects.
-  productivityRange: [0.92, 1.08],
-  defectProneRange: [0.75, 1.3],
+  productivityRange: [0.80, 1.20],
+  defectProneRange: [0.5, 1.8],
   maxCrews: 9,
   coordinationLoss: 0.04,    // each crew above the opening four costs every crew 4% (Brooks)
   maxHirePerWeek: 3,
@@ -39,10 +39,10 @@ export const CONFIG = {
   releaseFee: 50_000,
   shiftPremiumPerCrew: 20_000,
 
-  // Hiring drag: while a new crew is onboarded, the whole line runs slower
+  // Hiring drag: new crews are brought up to speed
   onboardingWeeks: 2,
-  onboardingFactor: 0.7,
-  onboardingDrag: 'line',    // 'line': the whole line runs at onboardingFactor; 'new': only the new crews do
+  onboardingFactor: 0.5,
+  onboardingDrag: 'new',     // 'new': only the new crews work at onboardingFactor; 'line': the whole line does
 
   // Second shift
   shiftBoost: 1.3,
@@ -68,11 +68,10 @@ export const CONFIG = {
   shockTailUnits: [40, 55],
 
   // Mid-game events, disclosed as possibilities and drawn per contract before play.
-  // Off (0) until Joe's set-and-forget decision; the code and disclosures are ready.
-  crewOutChance: 0,          // a crew is out for crewOutWeeks, starting in a week in crewOutWeekRange
+  crewOutChance: 0.5,        // a crew is out for crewOutWeeks, starting in a week in crewOutWeekRange
   crewOutWeeks: 2,
   crewOutWeekRange: [3, 9],
-  delayChance: 0,            // a parts delay idles part of the line for one week
+  delayChance: 0.4,          // a parts delay idles part of the line for one week
   delayShare: 0.5,
   delayWeekRange: [4, 10],
 
@@ -259,7 +258,7 @@ export class Project {
       this.crews += hire;
       this.onboarding = c.onboardingWeeks;
       this.newCrews = (this.onboarding > 0 && c.onboardingDrag === 'new' ? this.newCrews : 0) + hire;
-      events.push(`${hire} new crew${hire > 1 ? 's' : ''} joined. The line runs slower while ${hire > 1 ? 'they are' : 'it is'} brought up to speed.`);
+      events.push(`${hire} new crew${hire > 1 ? 's' : ''} joined. ${c.onboardingDrag === 'new' ? `${hire > 1 ? 'They work' : 'It works'} at ${Math.round(c.onboardingFactor * 100)}% for ${c.onboardingWeeks} weeks while ${hire > 1 ? 'they are' : 'it is'} brought up to speed.` : `The line runs slower while ${hire > 1 ? 'they are' : 'it is'} brought up to speed.`}`);
     } else if (hire < 0) {
       this.crews += hire;
       events.push(`Released ${-hire} crew${hire < -1 ? 's' : ''}.`);

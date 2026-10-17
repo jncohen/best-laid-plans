@@ -9,7 +9,9 @@
  *   2. The outside view works: the past contracts' p10-p90 contains the outcome
  *      in >= 70% of runs across strategies.
  *   3. Naive play fails: building flat out with the opening crew is never on time.
- *   4. The game is hard but winnable: the best strategy is on time 40-60%.
+ *   4. Set-and-forget loses: the screen-only adaptive reference is on time at least as
+ *      often as the best static plan, and every static plan on time >= 30% goes bankrupt
+ *      >= 20% of the time while the adaptive reference stays <= 5%.
  *   5. No dominant recipe: at least three strategies within 6 points of the best
  *      mean delivery score.
  *   6. Inspection matters both ways: some inspection beats none for the same
@@ -153,15 +155,28 @@ const vals = Object.values(rows);
 const common = vals.filter((r) => r.plan);
 const byPlan = (k) => vals.find((r) => r.plan === k);
 const best = Math.max(...vals.map((r) => r.deliv));
-const bestOnTime = Math.max(...vals.map((r) => r.onTime));
 const ho = byPlan('hands-off'), c3i = byPlan('crews3-inspect');
 const matchOf = (k) => matchContracts(COMMON_PLANS.find((cp) => cp.key === k));
 const width = (s) => s.p90 - s.p10;
+// The screen-only adaptive reference (tools/adaptive-policy.mjs), on the same codes as the strategies.
+const ADAPT = (() => {
+  const ps = Array.from({ length: N }, (_, i) => { const p = new Project(20000 + i); p.commit({ week: 13, low: 11, high: 15, onTimeChance: 40 }); while (!p.done) p.play(adaptivePolicy(p, p.week + 1)); return p; });
+  const sc = ps.map((p) => p.scores());
+  return { onTime: mean(sc.map((x) => +x.onTime)), deliv: mean(sc.map((x) => x.delivery)), broke: mean(ps.map((p) => +(p.result === 'BANKRUPT'))), spent: mean(ps.map((p) => p.spent)) / 1e6 };
+})();
+const statics = Object.entries(rows).filter(([k]) => k !== 'Adaptive');
+const [bestStaticName, bestStaticRow] = statics.sort((a, b) => b[1].onTime - a[1].onTime)[0];
+const bestStaticOnTime = bestStaticRow.onTime;
+console.log(`
+Adaptive reference (screen-only, tools/adaptive-policy.mjs): on time ${pct(ADAPT.onTime)}, delivery ${ADAPT.deliv.toFixed(1)}, bankrupt ${pct(ADAPT.broke)}, spent $${ADAPT.spent.toFixed(2)}M`);
 const checks = [
   ['1. Dashboard projection runs late for every strategy (100% of runs)', Math.min(...vals.map((r) => r.dashLate)) === 1, `min ${pct(Math.min(...vals.map((r) => r.dashLate)))}`],
   ['2. Outside view contains the outcome (>= 70% overall)', mean(vals.map((r) => r.ovHit)) >= 0.7, pct(mean(vals.map((r) => r.ovHit)))],
   ['3. Hands-off is never on time', ho.onTime === 0, `on time ${pct(ho.onTime)}`],
-  ['4. Best on-time rate between 40% and 60%', bestOnTime >= 0.4 && bestOnTime <= 0.6, pct(bestOnTime)],
+  // 4. Set-and-forget loses (Joe, Oct 17, option a): adaptation keeps up on time and stays solvent; every static plan that wins often goes broke often.
+  ['4a. The adaptive reference is on time at least as often as the best static plan', ADAPT.onTime >= bestStaticOnTime, `adaptive ${pct(ADAPT.onTime)}, best static ${pct(bestStaticOnTime)} (${bestStaticName})`],
+  ['4b. Every static plan on time >= 30% goes bankrupt >= 20%; adaptive <= 5%', statics.filter(([, r]) => r.onTime >= 0.3).every(([, r]) => r.broke >= 0.2) && ADAPT.broke <= 0.05,
+    statics.filter(([, r]) => r.onTime >= 0.3).map(([k, r]) => `${k.trim()} ${pct(r.onTime)} on time, ${pct(r.broke)} bankrupt`).join('; ') + ` · adaptive ${pct(ADAPT.broke)} bankrupt`],
   ['5. No dominant recipe (>= 3 within 6 pts of best)', vals.filter((r) => r.deliv >= best - 6).length >= 3, `${vals.filter((r) => r.deliv >= best - 6).length} within 6 of ${best.toFixed(1)}`],
   ['6. Some inspection beats none; most is not best', Math.max(rows['+2 crews, inspect 10%'].deliv, rows['+2 crews, inspect 20%'].deliv) > Math.max(rows['+2 crews'].deliv, rows['+2 crews, inspect 30%'].deliv),
     `0%: ${rows['+2 crews'].deliv.toFixed(1)}  10%: ${rows['+2 crews, inspect 10%'].deliv.toFixed(1)}  20%: ${rows['+2 crews, inspect 20%'].deliv.toFixed(1)}  30%: ${rows['+2 crews, inspect 30%'].deliv.toFixed(1)}`],

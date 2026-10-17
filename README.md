@@ -3,9 +3,11 @@
 A classroom game about forecasting. Students run a 200-unit production contract with
 a 12-week deadline and forecast the week the customer accepts it.
 
-The dashboard counts units built, so its pace (19.1 a week, about 10.5 weeks) looks
-precise. The customer counts units that pass inspection, and the record of 40 past
-contracts on the same line says the work usually takes 12 to 17 weeks. The lesson:
+The dashboard counts units built, so its pace looks precise: on the live 1.1.0 build,
+19.1 a week (about 10.5 weeks); on this branch, 20.6 a week (about 9.7). The customer
+counts units that pass inspection, and the record of 40 past contracts on the same
+line says the work takes longer: 12 to 17 weeks on 1.1.0, 11 to 23 here, where some
+past contracts ran out of money. The lesson:
 start from the record of similar cases, then adjust only for differences the record
 supports.
 
@@ -89,9 +91,9 @@ for projecting a tab in class.
 
 ## The rules students are told
 
-- 200 units by week 12, with 4 crews and a $5.00M budget. Each crew costs $50k a week.
-- **Crews.** Add up to 3 a week ($100k each, 9 at most) or release one ($50k). A new
-  crew slows the whole line to 70% for 2 weeks. Each crew beyond 4 costs every crew 4%.
+- 200 units by week 12, with 4 crews and a $4.60M budget. Each crew costs $50k a week.
+- **Crews.** Add up to 3 a week ($100k each, 9 at most) or release one ($50k). New
+  crews work at 50% for their first 2 weeks. Each crew beyond 4 costs every crew 4%.
 - **Second shift.** +30% output for $20k per crew. From the second straight week,
   tired crews make more defects.
 - **Inspection.** Move 0–30% of the line from building to checking. Defects found
@@ -101,6 +103,13 @@ for projecting a tab in class.
 - Customers add to the requirement once, partway through, at a week and by an amount
   nobody knows in advance.
 - The customer terminates the contract if it is not accepted by the end of week 22.
+- **Contracts differ.** Some lines build faster or slower and turn out more or fewer
+  defects; each week's output and inspection finds show how this one runs.
+- **Events.** About half of contracts lose a crew for 2 weeks (still paid), somewhere
+  in weeks 3–9. About 40% hit a parts delay that idles half the line for a week, in
+  weeks 4–10. Both are drawn from the scenario code before play.
+- **Attention.** 5 free tool checks before week 1, then 2 a week; each extra check
+  costs about a quarter of one crew's output that week.
 - **Bankruptcy.** The company can overspend the budget by up to $0.5M on credit. If a
   week's payroll would take it past that, it can't pay its crews: it goes bankrupt
   and the contract ends. During play, a warning appears before a week that would do
@@ -166,7 +175,15 @@ Colours:
 | **Your Record** | | |
 | Your Track Record | personal stats from earlier plays on this device | Your past forecasts on this device · anything, if you haven't kept score |
 
-`npm run plan` pins the desk's hold rates across 1,000 codes:
+`npm run plan` also checks that set-and-forget loses:
+- a screen-only adaptive manager (`tools/adaptive-policy.mjs`) is on time at least as
+  often as the best static plan;
+- every static plan on time 30% or more goes bankrupt at least 20% of the time,
+  while the adaptive manager stays at or under 5%;
+- four scripted student types (anchor, record-and-coast, AI-and-coast, adaptive)
+  compare on the Updating and Delivery scores.
+
+It pins the desk's hold rates across 1,000 codes:
 - the tools that use the record (Records, Analytics, Mabel) hold at least 80% of the
   time;
 - the pace and the plan on paper (Status Report, Schedule, Cost Management, Sam, the
@@ -189,12 +206,17 @@ the record is the same for everyone and on every scenario code. Each manager pla
 same engine week by week and reacts only to what their screen shows: the reported
 backlog, crews and week.
 
-The record has:
-- a median of week 14, a 10th–90th percentile range of weeks 12–17, and 6 of 40 on
-  time, the same figures as the fixed record in 1.1.0;
-- 24 distinct plans;
-- no manager who went bankrupt. A contract that was never accepted would count as
-  later than any delivered one.
+With the desk build's rules (a $4.60M budget, new-crew onboarding, wider contract
+differences and the events) the record has:
+- a median of week 15 and a 10th–90th percentile range of weeks 11–23;
+- 8 of 40 on time;
+- 8 of 40 bankrupt. A contract never accepted counts as later than any delivered
+  one: week 23.
+
+The last contract (#40) read 100% in week 12 and was accepted in week 16, with 20
+units rejected. Its first six weeks averaged 20.6 a week. Live 1.1.0 and Monday's
+lecture keep the earlier figures: 19.1 a week; 13 → 17 with 19 rejected; median 14;
+12–17; 6 of 40.
 
 The Records table shows, for each contract:
 - what the manager did: crews added and when, inspection, second-shift weeks;

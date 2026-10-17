@@ -52,10 +52,10 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
   const C3I = { crews: 3, inspect: 0.1, shift: 'none' }, HO = { crews: 0, inspect: 0, shift: 'none' };
   const pace = { week: 11, low: 10, high: 12, onTimeChance: 75 };
   const cases = [
-    ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, ['>Held<', 'You changed plan'], false],
+    ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, ['Missed, 1 wk late', 'You changed plan'], false],
     ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, ['>Held<', 'You played the plan you stated'], false],
-    ['all 40, hands-off stated and played', { week: 14, low: 12, high: 17, onTimeChance: 15 }, HO, {}, ['>Held<', 'You played the plan you stated'], true],
-    ['pace, hands-off stated and played', pace, HO, {}, ['Missed, 5 wk late', 'You played the plan you stated', 'Sees '], true],
+    ['all 40, hands-off stated and played', { week: 15, low: 11, high: 23, onTimeChance: 20 }, HO, {}, ['>Held<', 'You played the plan you stated'], true],
+    ['pace, hands-off stated and played', pace, HO, {}, ['Missed, 6 wk late', 'You played the plan you stated', 'Sees '], true],
   ];
   for (const [i, [label, f, plan, pol, verdict, coaster]] of cases.entries()) {
     const p = new Project('ledger');
@@ -91,17 +91,17 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
   const strip = (h) => h.replace(/<!-- -->/g, '').replace(/&#x27;/g, "'").replace(/<\/?(strong|span)[^>]*>/g, '');
   ok('Before week 1, The Contract states every rule and both scores', () => {
     const h = strip(before('contract'));
-    for (const s of ['200', '12', '4', '$5.00M', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Forecast', 'Delivery', 'costs double']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    for (const s of ['200', '12', '4', '$4.60M', '$500k', 'New crews work at 50%', 'lose a crew', 'parts delay', 'free tool checks', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Forecast', 'Delivery', 'costs double']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     return h;
   });
   ok('Before week 1, Last 5 Contracts gives the pace and the last contract’s story', () => {
     const h = strip(before('last5'));
-    for (const s of ['19.1 a week', '10.5 weeks', '100% in week 13', 'Accepted in week 17', '19 units']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    for (const s of ['20.6 a week', '9.7 weeks', '100% in week 12', 'Accepted in week 16', '20 units']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     return h;
   });
   ok('Before week 1, Records gives the 40 contracts, their dot strip and summary', () => {
     const h = strip(before('records'));
-    for (const s of ['All 40 contracts', 'median week 14', 'percentile weeks 12–17', '15% made week 12']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    for (const s of ['All 40 contracts', 'median week 15', 'percentile weeks 11–23', '20% made week 12']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     if ((before('records').match(/rounded-full/g) || []).length < 40) throw new Error('dot strip missing');
     return h;
   });
