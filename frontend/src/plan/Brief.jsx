@@ -1,7 +1,24 @@
 import { useState } from 'react';
 import { CONFIG, pastContracts, lastContract, historyMean } from './engine';
-import { Card, Slider, DotStrip } from './ui';
+import { Card, Slider } from './ui';
 import { money } from './format';
+import Records from './Records';
+
+function Choice({ label, options, value, onChange }) {
+  return (
+    <div role="radiogroup" aria-label={label}>
+      <div className="text-sm text-slate-300 mb-1">{label}</div>
+      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+        {options.map(([v, l]) => (
+          <button key={String(v)} type="button" role="radio" aria-checked={value === v} onClick={() => onChange(v)}
+            className={`py-2 px-1 rounded-lg text-sm border ${value === v ? 'bg-slate-700 border-slate-300 text-white font-semibold' : 'bg-slate-950 border-slate-700 text-slate-300'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function Brief({ onCommit, initialSeed = '' }) {
   const c = CONFIG;
@@ -16,6 +33,10 @@ export default function Brief({ onCommit, initialSeed = '' }) {
   const [chance, setChance] = useState(50);
   const [seed, setSeed] = useState(initialSeed);
   const [name, setName] = useState('');
+  // The plan comes first: crews added at the start, inspection share, second shift.
+  const [plan, setPlan] = useState({ crews: null, inspect: null, shift: null });
+  const planReady = plan.crews !== null && plan.inspect !== null && plan.shift !== null;
+  const setPlanPart = (k) => (v) => setPlan((p) => ({ ...p, [k]: v }));
 
   const setPoint = (v) => {
     setWeek(v);
@@ -45,40 +66,46 @@ export default function Brief({ onCommit, initialSeed = '' }) {
           <div><div className="text-lg font-bold text-white">{money(c.budget)}</div><div className="text-[11px] text-slate-500">budget</div></div>
         </div>
         <p className="text-xs text-slate-400 mt-3">
-          The contract is done when the customer's acceptance test passes every unit. The customer may change the
-          requirement once, at a week and by an amount nobody knows in advance.
+          The contract is done when the customer's acceptance test passes every unit. If it has not passed by the end
+          of week {c.horizon}, the customer terminates the contract.
+        </p>
+        <p className="text-xs text-slate-400 mt-2">
+          Customers on this line add to the requirement partway through: every past contract below had a scope change.
+          Nobody knows in advance which week it comes or how many units it adds.
+        </p>
+        <p className="text-xs text-slate-400 mt-2">
+          Some built units turn out defective. The dashboard counts them complete until inspection or the customer's
+          acceptance test finds them.
         </p>
       </Card>
 
-      <div className="grid sm:grid-cols-2 gap-4">
-        <Card title="Your line's last contract" tone="sky">
-          <p className="text-xs text-slate-400 mb-2">Same line, same {c.crews} crews. Units completed each week, from its dashboard:</p>
-          <div className="grid grid-cols-6 gap-1 font-mono text-sm text-center text-white">
-            {last.history.map((v, i) => <div key={i} className="bg-slate-950 rounded py-1">{Math.round(v)}</div>)}
-          </div>
-          <p className="text-sm text-slate-300 mt-3">
-            About <strong className="text-sky-300">{pace} a week</strong>. At that pace, {c.scope} units takes{' '}
-            <strong className="text-sky-300">{insideWeeks} weeks</strong>.
-          </p>
-          <p className="text-xs text-slate-400 mt-2">
-            How it ended: the dashboard read 100% in week {last.dashboardFullWeek}. The customer accepted it in
-            week {last.deliveredWeek}.
-          </p>
-        </Card>
+      <Card title="Your line's last contract" tone="sky">
+        <p className="text-xs text-slate-400 mb-2">Same line, same {c.crews} crews. Units completed each week, from its dashboard:</p>
+        <div className="grid grid-cols-6 gap-1 font-mono text-sm text-center text-white">
+          {last.history.map((v, i) => <div key={i} className="bg-slate-950 rounded py-1">{Math.round(v)}</div>)}
+        </div>
+        <p className="text-sm text-slate-300 mt-3">
+          About <strong className="text-sky-300">{pace} a week</strong>. At that pace, {c.scope} units takes{' '}
+          <strong className="text-sky-300">{insideWeeks} weeks</strong>.
+        </p>
+        <p className="text-xs text-slate-400 mt-2">
+          How it ended: the dashboard read 100% in week {last.dashboardFullWeek}. The customer accepted it in
+          week {last.deliveredWeek}.
+        </p>
+      </Card>
 
-        <Card title={`${past.weeks.length} past contracts on this line`} tone="amber">
-          <p className="text-xs text-slate-400 mb-2">The week each one was finally accepted. Green made week {c.deadline}.</p>
-          <DotStrip weeks={past.weeks} deadline={c.deadline} />
-          <p className="text-sm text-slate-300 mt-1">
-            Median <strong className="text-amber-300">week {past.median}</strong>. Most landed between week {past.p10} and
-            week {past.p90}. {Math.round(past.onTimeShare * 100)}% made week {c.deadline}.
-          </p>
-        </Card>
-      </div>
+      <Card title={`${past.weeks.length} past contracts on this line`} tone="amber">
+        <p className="text-xs text-slate-400 mb-2">
+          What each manager did, and the week the customer finally accepted it. Green dots made week {c.deadline}.
+          Tap a column to sort it.
+        </p>
+        <Records past={past} plan={planReady ? plan : null} />
+      </Card>
 
       <Card title="What you decide each week">
         <ul className="space-y-2 text-sm text-slate-300">
-          <li><strong className="text-white">Crews.</strong> Add up to 3 a week ({money(c.hireFee)} each) or release one. A new crew slows the
+          <li><strong className="text-white">Crews.</strong> Add up to 3 a week ({money(c.hireFee)} each, {c.maxCrews} crews at most) or
+            release one ({money(c.releaseFee)}). A new crew slows the
             whole line for {c.onboardingWeeks} weeks, and every crew beyond {c.crews} makes all of them a little less efficient.</li>
           <li><strong className="text-white">Second shift.</strong> +{Math.round((c.shiftBoost - 1) * 100)}% output for{' '}
             {money(c.shiftPremiumPerCrew)} per crew. From the second straight week, tired crews make more defects.</li>
@@ -88,12 +115,24 @@ export default function Brief({ onCommit, initialSeed = '' }) {
         </ul>
         <p className="text-xs text-slate-500 mt-3">
           Each crew costs {money(c.crewWeek)} a week. Two scores, kept apart: <strong className="text-emerald-300">Forecast</strong> (how
-          right you were about your own project) and <strong className="text-slate-300">Delivery</strong> (on time, on budget).
+          right you were about your own project) and <strong className="text-slate-300">Delivery</strong> (on time, on budget:
+          −{c.latePenaltyPerWeek} a week late, −{c.overspendPenaltyPer50k} per $50k over budget, 0 if the contract is terminated).
         </p>
       </Card>
 
-      <Card title="Your prediction — commit before week 1" tone="emerald">
+      <Card title="Your plan and prediction — commit before week 1" tone="emerald">
         <div className="space-y-5">
+          <div className="space-y-3">
+            <div className="text-xs font-bold uppercase tracking-wider text-slate-400">1 · Your plan</div>
+            <p className="text-xs text-slate-400 -mt-1">How you intend to run the line. You can still change course during play.</p>
+            <Choice label="Crews to add at the start" value={plan.crews} onChange={setPlanPart('crews')}
+              options={[[0, 'None'], [1, '+1'], [2, '+2'], [3, '+3']]} />
+            <Choice label="Inspection" value={plan.inspect} onChange={setPlanPart('inspect')}
+              options={c.inspectionOptions.map((o) => [o, `${Math.round(o * 100)}%`])} />
+            <Choice label="Second shift" value={plan.shift} onChange={setPlanPart('shift')}
+              options={[['none', 'None'], ['late', 'Late weeks'], ['every', 'Every week']]} />
+          </div>
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-1">2 · Your forecast</div>
           <Slider label="Week the customer accepts it" value={week} min={8} max={22} onChange={setPoint} format={(v) => `week ${v}`} />
           <div>
             <div className="text-sm text-slate-300 mb-1">80% range: you are 80% sure it lands between</div>
@@ -120,12 +159,13 @@ export default function Brief({ onCommit, initialSeed = '' }) {
           </div>
           <button
             type="button"
-            disabled={!intervalOk}
-            onClick={() => onCommit({ week, low, high, onTimeChance: chance }, seed.trim(), name.trim())}
+            disabled={!intervalOk || !planReady}
+            onClick={() => onCommit({ week, low, high, onTimeChance: chance, plan }, seed.trim(), name.trim())}
             className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold"
           >
-            Commit forecast and start week 1
+            Commit plan and forecast, start week 1
           </button>
+          {!planReady && <p className="text-xs text-slate-500 text-center -mt-2">Choose all three parts of your plan first.</p>}
         </div>
       </Card>
     </div>

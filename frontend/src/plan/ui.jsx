@@ -43,26 +43,34 @@ export function Slider({ label, value, min, max, step = 1, onChange, format = (v
   );
 }
 
-/** A strip of dots: one per past contract, on a week axis, with the deadline marked. */
-export function DotStrip({ weeks, deadline, min = 8, max = 22, highlight = [] }) {
+/**
+ * A strip of dots: one per past contract, on a week axis, with the deadline marked.
+ * `active` (one flag per week) dims the contracts a filter leaves out; `band` shades
+ * the 10th–90th percentile of the ones left in.
+ */
+export function DotStrip({ weeks, deadline, min = 8, max = 22, highlight = [], active = null, band = null }) {
   const span = max - min;
   const x = (w) => `${((Math.min(max, Math.max(min, w)) - min) / span) * 100}%`;
   // Stack dots that share a week so every contract is visible.
   const counts = {};
-  const dots = [...weeks].sort((a, b) => a - b).map((w) => {
-    const key = Math.round(w * 2) / 2;
+  const dots = weeks.map((w, i) => ({ w, on: !active || active[i] })).sort((a, b) => a.w - b.w || b.on - a.on).map((d) => {
+    const key = Math.round(d.w * 2) / 2;
     counts[key] = (counts[key] || 0) + 1;
-    return { w, level: counts[key] - 1 };
+    return { ...d, level: counts[key] - 1 };
   });
   const height = Math.max(...Object.values(counts), 1) * 9 + 12;
   return (
     <div>
       <div className="relative" style={{ height }}>
+        {band && (
+          <div className="absolute top-0 bottom-3 bg-amber-500/15 border-x border-amber-400/50"
+            style={{ left: x(band[0] - 0.5), width: `calc(${x(band[1] + 0.5)} - ${x(band[0] - 0.5)})` }} />
+        )}
         <div className="absolute top-0 bottom-3 border-l-2 border-dashed border-rose-400/70" style={{ left: x(deadline) }} />
         {dots.map((d, i) => (
           <span
             key={i}
-            className={`absolute w-2 h-2 rounded-full -translate-x-1/2 ${d.w <= deadline ? 'bg-emerald-400' : 'bg-slate-400'}`}
+            className={`absolute w-2 h-2 rounded-full -translate-x-1/2 ${!d.on ? 'bg-slate-700' : d.w <= deadline ? 'bg-emerald-400' : 'bg-slate-300'}`}
             style={{ left: x(d.w), bottom: 12 + d.level * 9 }}
           />
         ))}
