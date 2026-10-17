@@ -16,13 +16,23 @@ Written for DATA 790, Module 05: Imagining, Modeling, and Prediction.
 1. Give the room one scenario code (for example `ledger`). Everyone on the same code
    faces the same contract and the same scope change. A link with `?seed=ledger`
    fills it in.
-2. Each student reads the briefing, commits a forecast before week 1 (the acceptance
-   week, an 80% range, and the chance of week 12) and plays week by week.
+2. Each student reads the briefing, states a plan (crews added at the start,
+   inspection, second shift), commits a forecast before week 1 (the acceptance week,
+   an 80% range, and the chance of week 12) and plays week by week. The briefing's
+   table of past contracts shows what each manager did; "Contracts run like my plan"
+   finds the ones like the student's.
 3. At the end the game holds the result until the class reveals together. Each
-   student then has a result code.
+   student then has a result code, and a verdict: Reasoned (range held, plan kept,
+   forecast built on contracts run like it), Lucky (range held for another reason) or
+   Missed. The verdict never changes a score.
 4. Open `#room` on the projector (for example `…/index.html#room`) and enter the
    codes. It shows how many ranges held, how many forecasts ran late, and each
-   student's range against the past contracts.
+   student's range against the past contracts, whether each kept their plan, and how
+   many held ranges were reasoned or lucky.
+
+Result codes (`BLP2|…`) carry the stated plan in three characters (`31n`: +3 crews,
+10% inspection, no second shift), plus the plan played if it differed. Older `BLP1`
+codes still parse.
 
 ## Development
 
