@@ -262,12 +262,18 @@ console.log('The Decision Desk sees only the screen');
   for (const seed of ['ledger', 'compass', 'desk-x']) playPolicy(new Project(seed), { hire: 3, inspect: 0.1 });
   t('playing any scenario leaves every tool unchanged', JSON.stringify(plans.map((p) => allForecasts(screenData(), p))) === before);
   t('every tool gives low <= week <= high and a chance in 0-100', plans.every((p) => allForecasts(S, p).every((f) => f.low <= f.week && f.week <= f.high && f.chance >= 0 && f.chance <= 100)));
-  const prompt = aiPrompt(S, COMMON_PLANS[4]);
-  t(`Ask an AI: the prompt holds the rules, the last six weeks, all 40 contracts and the plan (${prompt.length} chars, under 4,000)`, prompt.length < 4000
-    && ['terminates', 'bankrupt', '2× to fix', 'slows the whole line', 'tired crews', '19.1'].every((x) => prompt.toLowerCase().includes(x.toLowerCase()) || prompt.includes(x))
-    && screenData().contracts.every((r) => prompt.includes(`\n${r.id},`)) && prompt.includes('MY PLAN: add 3 crews'));
-  t('Ask an AI is even-handed: it asks for the forecast and reasoning, and names no theory', /forecast of the week the customer accepts the contract, an 80% range, and the chance of making week 12, with your reasoning/.test(prompt)
-    && !/reference class|outside view|inside view|anchor|base rate|hidden|planning fallacy|bias|calibrat/i.test(prompt));
+  const prompt = aiPrompt(S, COMMON_PLANS[4], null, ['records', 'last5']);
+  t(`Ask an AI with Records and Last 5 opened: the rules, the last six weeks, all 40 contracts and the plan (${prompt.length} chars, under 4,000)`, prompt.length < 4000
+    && ['terminates', 'bankrupt', '2× to fix', 'slows the whole line', 'tired crews', '19.1'].every((x) => prompt.includes(x))
+    && screenData().contracts.every((r) => prompt.includes(`
+${r.id},`)) && prompt.includes('MY PLAN: add 3 crews'));
+  const bare = aiPrompt(S, COMMON_PLANS[4], null, []);
+  t('Ask an AI with nothing opened holds the contract and rules only', bare.includes('RULES') && !bare.includes('PAST CONTRACTS') && !bare.includes('19.1') && !bare.includes('STATUS REPORT'));
+  t('Ask an AI adds each opened tab and only those', aiPrompt(S, COMMON_PLANS[4], null, ['status']).includes('STATUS REPORT') && !aiPrompt(S, COMMON_PLANS[4], null, ['status']).includes('TEAM CHAT')
+    && aiPrompt(S, COMMON_PLANS[4], null, ['chat']).includes('Mabel'));
+  const full = aiPrompt(S, COMMON_PLANS[4]);
+  t('Ask an AI is even-handed: it asks for the forecast and reasoning, and names no theory', /forecast of the week the customer accepts the contract, an 80% range, and the chance of making week 12, with your reasoning/.test(full)
+    && !/reference class|outside view|inside view|anchor|base rate|hidden|planning fallacy|bias|calibrat/i.test(full));
   t('Ask an AI has no forecast of its own, so Consensus and the sweep leave it out', !TABS.find((x) => x.id === 'ai').forecasts && !Object.keys(FORECASTERS).includes('ai'));
   t('every Team Chat colleague names the desk frame they reason from', teamChat(S, COMMON_PLANS[0]).every((c) => c.frame && c.reasoning && c.forecast));
   t('Team Chat runs Dana, Sam, Kim, Mabel, Priya (the record\'s voice fourth), and Mabel quotes the real record', (() => { const c = teamChat(S, COMMON_PLANS[0]); const all = records(S).all; return c.map((x) => x.name).join() === 'Dana,Sam,Kim,Mabel,Priya' && c[3].says.includes('fourteen weeks') && c[3].says.includes('one in seven') && all.week === 14 && all.chance === 15; })());
@@ -420,6 +426,20 @@ console.log('How you played');
   const d = new Project('ledger'); d.commit({ week: 9, low: 8, high: 10, onTimeChance: 99, plan: { crews: 0, inspect: 0, shift: 'none' } });
   while (!d.done) { const w = d.week + 1; d.play({ hire: w === 1 ? 3 : 0, inspect: 0.1 }); }
   t('tracking (tabs, times, forecast touches) never changes an outcome', JSON.stringify(b.history) === JSON.stringify(d.history) && b.outcomeWeek() === d.outcomeWeek());
+}
+
+console.log('Attention budget');
+{
+  const play = (notes, desk = null) => { const p = new Project('ledger'); p.commit({ week: 13, low: 11, high: 14, onTimeChance: 40, desk }); notes(p); for (let w = 0; w < 3; w++) p.play({}); return p; };
+  const free = play((p) => { p.noteDesk(2, 'status'); p.noteDesk(2, 'records'); p.noteDesk(2, 'contract'); p.noteDesk(2, 'ai'); });
+  const none = play(() => {});
+  t('two tool checks a week, The Contract and Ask an AI are free', JSON.stringify(free.history.map((h) => h.built)) === JSON.stringify(none.history.map((h) => h.built)));
+  const extra = play((p) => { ['status', 'records', 'schedule'].forEach((t) => p.noteDesk(2, t)); });
+  const ratio = extra.history[1].built / none.history[1].built;
+  t(`a third check costs a quarter of one crew's output that week (${ratio.toFixed(3)} of the week's build with 4 crews; built is stored to 0.1 unit)`, Math.abs(ratio - (4 - CONFIG.checkCost) / 4) < 0.006 && extra.history[1].events.some((e) => /extra tool check/.test(e)));
+  t('rechecking a tab the same week is not a new check', play((p) => { ['status', 'status', 'records', 'records'].forEach((t) => p.noteDesk(2, t)); }).history[1].built === none.history[1].built);
+  const before = play(() => {}, { tool: '', tabs: 6, minutes: 3, edited: true, order: ['status', 'records', 'last5', 'chat', 'cost', 'schedule', 'contract'] });
+  t('before week 1 five checks are free; the sixth costs output in week 1', before.extraChecks(1) === 1 && before.history[0].built < none.history[0].built && before.history[1].built === none.history[1].built);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

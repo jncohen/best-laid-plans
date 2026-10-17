@@ -33,7 +33,10 @@ favour of a show of hands. It is not live until it is merged into
    - **The Contract** (second) has the terms, every disclosure and both scores;
    - **Last 5 Contracts** has the last contract's six-week pace and its story;
    - **Records** has all 40 past contracts.
-3. Before committing they may open any of the tool tabs (below), or none. Each
+3. Before committing they may open any of the tool tabs (below), or none. Attention
+   is budgeted: 5 free tool checks before week 1, then 2 a week. Each extra check
+   takes the manager off the floor and costs about a quarter of one crew's output
+   that week. The Contract and Ask an AI are always free. Each
    tool computes a forecast from what the briefing shows and nothing else. Like real
    tools, the tabs carry no labels about what they can and can't see; the reveal
    lists that for each one. "Use this on my prediction" copies a tool's numbers
@@ -103,7 +106,10 @@ for projecting a tab in class.
   and the contract ends. During play, a warning appears before a week that would do
   this.
 - Scores: **Forecast** = 100 − 8 × |outcome − point| − 20 if the range missed − 40 ×
-  Brier score of the week-12 chance. **Delivery** = 100 − 12 per week late − 1 per
+  Brier score of the week-12 chance, for the forecast committed before week 1.
+  **Updating** scores each forecast in force during play the same way (the Brier
+  term only while week 12 is still possible), averaged with week w weighted w + 1,
+  so later forecasts count more. **Delivery** = 100 − 12 per week late − 1 per
   $50k over budget, or 0 if the contract was terminated or the company went bankrupt.
   A terminated or bankrupt contract's outcome is the week it would have taken at the
   final pace.
@@ -147,7 +153,7 @@ Colours:
 | Schedule | Gantt chart: task bars, milestones, finish diamond | Your plan, week by week, under the stated rules · defects or scope changes |
 | **People** | | |
 | Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap), updated each week. In order: Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan re-planned from now; Kim (sales) from the promise; Mabel, a veteran on the line, from the record; Priya (quality) from rework, the last contract's or this one's | Five colleagues, each from where they sit · which view to weigh most |
-| Ask an AI | a plain-text prompt to copy into any AI assistant. It holds everything on screen: the contract and every rule, the last six weeks, the last 5 contracts, all 40 contracts, the stated plan and, during play, the week-by-week status. It asks for a forecast, an 80% range and the chance of week 12 with reasoning, and says nothing about which information matters (about 3,000 characters before week 1, 3,500 during play). The tab gives no forecast of its own, and whether the prompt was copied is recorded | Whatever you paste in · anything not on screen |
+| Ask an AI | a plain-text prompt to copy into any AI assistant. It always holds the contract and its rules, the stated plan and, during play, the dashboard week by week. It adds only the tool tabs the student has opened (this week, or before commit): their content, such as the last six weeks, the last 5 contracts or all 40 contracts. The tab lists what's included: "Your AI knows only what you've looked at."  It asks for a forecast, an 80% range and the chance of week 12 with reasoning, and says nothing about which information matters (about 3,000 characters before week 1, 3,500 during play). The tab gives no forecast of its own, and whether the prompt was copied is recorded | Whatever you paste in · anything not on screen |
 | **History** | | |
 | Last 5 Contracts | the last contract's first six weeks and its pace (19.1 a week, 10.5 weeks to 200 units), an after-action review of it, and a list of the five newest contracts. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |
 | Records | historical-project database: a dot strip of the 40 past contracts with its summary (median, 10th–90th, on-time share), above a sortable, filterable table with "Contracts run like my plan" | What actually happened, defects and scope changes included · plans no past manager tried |

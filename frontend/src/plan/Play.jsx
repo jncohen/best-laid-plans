@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CONFIG, pastContracts, describePlan } from './engine';
+import { CONFIG, pastContracts, describePlan, onboardingRule, isCheck } from './engine';
 import { TABS, screenData, liveScreen } from './desk.js';
 import DeskTab from './DeskTabs';
 import TabStrip from './DeskStrip';
@@ -76,12 +76,13 @@ export default function Play({ project, onPlay }) {
         </span>
       </header>
 
-      <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} front={DECIDE} tabs={TABS.slice(1)} />
+      <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} front={DECIDE} tabs={TABS.slice(1)}
+        checks={{ left: Math.max(0, c.freeChecks - seenTabs.filter(isCheck).length), when: 'this week', cost: Math.round(c.checkCost * 100) }} />
 
       {deskTab !== 'decide' ? (
         <>
           <DeskTab id={deskTab} S={S} plan={p.plan || { crews: 0, inspect: 0, shift: 'none' }} planReady={!!p.plan} onUse={useTool} live={live}
-            onCopyPrompt={() => p.noteDesk(nextWeek, 'ai-copy')} />
+            onCopyPrompt={() => p.noteDesk(nextWeek, 'ai-copy')} opened={seenTabs} />
           <button type="button" onClick={() => openTab('decide')} className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
             Back to This Week's Decisions
           </button>
@@ -152,7 +153,7 @@ export default function Play({ project, onPlay }) {
               <button type="button" onClick={() => setHire((h) => Math.min(maxHire, h + 1))} disabled={hire >= maxHire}
                 className="flex-1 py-2 rounded-lg bg-slate-800 disabled:opacity-40 text-white">+ Add</button>
             </div>
-            {hire > 0 && <p className="text-xs text-amber-300 mt-1">{money(hire * c.hireFee)} fee. The whole line runs at {Math.round(c.onboardingFactor * 100)}% for {c.onboardingWeeks} weeks.</p>}
+            {hire > 0 && <p className="text-xs text-amber-300 mt-1">{money(hire * c.hireFee)} fee. {onboardingRule(c)}</p>}
           </div>
 
           <button

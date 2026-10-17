@@ -21,6 +21,13 @@ function HowYouPlayed({ p }) {
   const name = (id) => tabById(id)?.name || id;
   const secs = (n) => (n === null || n === undefined ? '' : n >= 90 ? `${Math.round(n / 60)} min` : `${n} s`);
   const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  const outcome = p.scores().outcome;
+  const off = (e) => { const d = Math.round(Math.abs(e.forecast - outcome) * 10) / 10; return d === 0 ? 'was right' : `missed by ${d}`; };
+  const at = (w) => [...p.forecastLog].filter((e) => e.week <= w).pop();
+  const mid = Math.max(1, Math.ceil(h.played / 2)), lastLog = p.forecastLog[p.forecastLog.length - 1];
+  const misses = p.forecastLog.length > 1
+    ? `Your forecast before week 1 ${off(p.forecastLog[0])}; in week ${mid} it ${off(at(mid))}; in week ${lastLog.week} it ${off(lastLog)}.`
+    : null;
   return (
     <Card title="How you played">
       <div className="overflow-x-auto -mx-1 px-1">
@@ -53,6 +60,7 @@ function HowYouPlayed({ p }) {
             : h.autopilotAfter === 0 ? 'After you committed, you changed nothing and checked no tools.'
               : `After week ${h.autopilotAfter} you changed nothing and checked no tools.`}
         </li>
+        {misses && <li>{misses}</li>}
         {h.topTools.length > 0 && <li>Most checked: {h.topTools.map((t) => `${name(t.tab)} (${t.n})`).join(', ')}.</li>}
         {(h.secondsBeforeCommit !== null || h.secondsPlaying > 0) && (
           <li className="text-slate-400">Time: about {secs(h.secondsBeforeCommit ?? 0)} before committing, {secs(h.secondsPlaying)} playing.</li>
@@ -160,10 +168,14 @@ export default function Reveal({ project, onReplay }) {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-3">
         <Card title="Forecast score" tone="emerald">
           <div className="text-4xl font-bold font-mono text-white">{s.forecast}</div>
-          <div className="text-xs text-slate-500 mt-1">How right you were about your own project</div>
+          <div className="text-xs text-slate-500 mt-1">Your forecast before week 1</div>
+        </Card>
+        <Card title="Updating score" tone="emerald">
+          <div className="text-4xl font-bold font-mono text-white">{s.updating}</div>
+          <div className="text-xs text-slate-500 mt-1">Your forecasts week by week; later weeks count more</div>
         </Card>
         <Card title="Delivery score">
           <div className="text-3xl font-bold font-mono text-slate-300">{s.delivery}</div>

@@ -5,7 +5,7 @@ import {
   statusReport, costManagement, schedule, lastFive, teamChat, aiPrompt,
   scenarios, riskRegister, analytics, riskSimulator, consensus, FORECASTERS, FORECASTER_NAMES, tabById,
 } from './desk.js';
-import { CONFIG, pastContracts, describePlan } from './engine';
+import { CONFIG, pastContracts, describePlan, onboardingRule, eventRules, attentionRule } from './engine';
 import { Card } from './ui';
 import { money } from './format';
 import Records from './Records';
@@ -78,12 +78,15 @@ function ContractTab() {
         <p>Your company can overspend the budget by up to {money(c.creditLine)} on credit. Past that, it can't make payroll: the company goes bankrupt and the contract ends.</p>
         <p>Customers on this line add to the requirement partway through: every past contract on record had a scope change. Nobody knows in advance which week it comes or how many units it adds.</p>
         <p>Some built units turn out defective. The dashboard counts them complete until inspection or the customer's acceptance test finds them.</p>
+        <p>Contracts differ: some lines build faster or slower than others, and some turn out more defects. Each week's output and inspection finds show how this one runs.</p>
+        {eventRules(c).map((e) => <p key={e}>{e}</p>)}
+        <p>{attentionRule(c)}</p>
       </div>
       <div className="mt-4 pt-3 border-t border-slate-800">
         <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">What you decide each week</div>
         <ul className="space-y-2 text-sm text-slate-300">
           <li><strong className="text-white">Crews.</strong> Add up to {c.maxHirePerWeek} a week ({money(c.hireFee)} each, {c.maxCrews} crews at most) or
-            release one ({money(c.releaseFee)}). A new crew slows the whole line for {c.onboardingWeeks} weeks, and every crew beyond {c.crews} makes all of them a little less efficient.</li>
+            release one ({money(c.releaseFee)}). {onboardingRule(c)} Every crew beyond {c.crews} makes all of them a little less efficient.</li>
           <li><strong className="text-white">Second shift.</strong> +{Math.round((c.shiftBoost - 1) * 100)}% output for {money(c.shiftPremiumPerCrew)} per crew. From the second straight week, tired crews make more defects.</li>
           <li><strong className="text-white">Inspection.</strong> Move 0–30% of the line from building to checking. You build less, but you find defects while they are cheap. Any defect the customer's test finds costs double to fix.</li>
           <li><strong className="text-white">Your forecast.</strong> Each week you may move your finish-week estimate.</li>
@@ -133,6 +136,11 @@ function StatusTab({ S, plan, onUse, live }) {
         <text x={x(st.eacWeeks) + 4} y={y(R.scope) + 14} fill="#7dd3fc" fontSize="11">forecast wk {st.eacWeeks}</text>
         {Array.from({ length: Math.floor(end / 2) + 1 }, (_, i) => i * 2).map((w) => <text key={w} x={x(w)} y={h - 6} textAnchor="middle" {...svgText}>{w}</text>)}
       </svg>
+      {live && (() => { const r = live.rows[live.rows.length - 1]; return (
+        <p className="text-sm text-slate-300 mt-1">Built last week: <span className="font-mono">{Math.round(r.built)}</span> units with {r.crews} crews
+          ({(r.built / Math.max(1, r.crews * (1 - r.inspect))).toFixed(1)} a crew building; the last contract: {(S.history.reduce((a, b) => a + b, 0) / S.history.length / S.rules.crews).toFixed(1)}).
+          {r.found > 0.5 ? ` Defects found: ${Math.round(r.found)}.` : ''}</p>
+      ); })()}
       <p className="text-[11px] text-slate-500">
         Standard earned-value forecasting: estimate at completion = planned duration ÷ SPI. The range is that estimate as of each week shown
         (weeks {st.forecast.low}–{st.forecast.high}). Earned value counts units reported complete.
@@ -283,8 +291,9 @@ function ChatTab({ S, plan, onUse, planNote, live }) {
   );
 }
 
-function AiTab({ S, plan, planNote, live, onCopyPrompt }) {
-  const text = aiPrompt(S, plan, live);
+function AiTab({ S, plan, planNote, live, onCopyPrompt, opened = [] }) {
+  const looked = opened.filter((id) => id !== 'ai' && id !== 'contract' && tabById(id));
+  const text = aiPrompt(S, plan, live, looked);
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -299,9 +308,13 @@ function AiTab({ S, plan, planNote, live, onCopyPrompt }) {
   };
   return (
     <Frame id="ai" kind="prompt for your AI assistant" planNote={planNote}>
-      <p className="text-sm text-slate-300 mb-2">
-        Copy this into whatever AI assistant you use and read what it says. It holds everything on this screen{live ? `, including your status after week ${live.week}` : ''}.
+      <p className="text-sm text-slate-300 mb-1">
+        Copy this into whatever AI assistant you use and read what it says.
       </p>
+      <p className="text-xs text-slate-400 mb-1">
+        The prompt includes: The Contract{live ? `, your dashboard after week ${live.week}` : ''}{looked.length ? `, ${looked.map((id) => tabById(id).name).join(', ')}` : ''}.
+      </p>
+      <p className="text-xs text-violet-200 mb-2">Your AI knows only what you've looked at. Open more tabs to tell it more.</p>
       <button type="button" onClick={copy} className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">
         {copied ? 'Copied' : 'Copy the prompt'}
       </button>
@@ -508,11 +521,11 @@ function TrackTab() {
 }
 
 /** One tool tab. `plan` is the stated plan, or hands-off until one is stated. */
-export default function DeskTab({ id, S, plan, planReady, onUse, live = null, onCopyPrompt = null }) {
+export default function DeskTab({ id, S, plan, planReady, onUse, live = null, onCopyPrompt = null, opened = [] }) {
   const planNote = !planReady
     ? <p className="text-xs text-violet-200 mb-3">Assuming a hands-off plan until you state yours on the front tab.</p>
     : <p className="text-xs text-slate-500 mb-3">For your plan: {describePlan(plan)}.</p>;
-  const props = { S, plan, onUse, planNote, live, onCopyPrompt };
+  const props = { S, plan, onUse, planNote, live, onCopyPrompt, opened };
   switch (id) {
     case 'contract': return <ContractTab />;
     case 'status': return <StatusTab {...props} />;

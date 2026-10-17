@@ -117,7 +117,7 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
         if (t.id === 'simulator' && !h.includes('Include rework')) throw new Error('rework switch missing');
         if (t.id === 'last5' && !/#(<!-- -->)?40/.test(h)) throw new Error('last contract not record #40');
         if (t.id === 'risks' && !h.includes('Premortem')) throw new Error('premortem missing');
-        if (t.id === 'ai' && (!h.includes('Copy the prompt') || !h.includes('PAST CONTRACTS'))) throw new Error('AI prompt missing');
+        if (t.id === 'ai' && (!h.includes('Copy the prompt') || !h.includes('knows only what you') || h.includes('PAST CONTRACTS'))) throw new Error('AI prompt should hold only the rules until tabs are opened');
         return h;
       });
     }

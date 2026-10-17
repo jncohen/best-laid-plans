@@ -42,6 +42,7 @@ export const CONFIG = {
   // Hiring drag: while a new crew is onboarded, the whole line runs slower
   onboardingWeeks: 2,
   onboardingFactor: 0.7,
+  onboardingDrag: 'line',    // 'line': the whole line runs at onboardingFactor; 'new': only the new crews do
 
   // Second shift
   shiftBoost: 1.3,
@@ -65,6 +66,21 @@ export const CONFIG = {
   shockUnits: [10, 25],
   shockTailChance: 0.1,
   shockTailUnits: [40, 55],
+
+  // Mid-game events, disclosed as possibilities and drawn per contract before play.
+  // Off (0) until Joe's set-and-forget decision; the code and disclosures are ready.
+  crewOutChance: 0,          // a crew is out for crewOutWeeks, starting in a week in crewOutWeekRange
+  crewOutWeeks: 2,
+  crewOutWeekRange: [3, 9],
+  delayChance: 0,            // a parts delay idles part of the line for one week
+  delayShare: 0.5,
+  delayWeekRange: [4, 10],
+
+  // Attention: tool checks are free up to a weekly allowance; each extra one takes the manager
+  // off the floor and costs checkCost of one crew's output that week.
+  freeChecks: 2,
+  freeChecksBeforeWeek1: 5,
+  checkCost: 0.25,
 
   // Delivery score
   latePenaltyPerWeek: 12,
@@ -122,10 +138,16 @@ export class Project {
     // Production noise is drawn per week from a separate stream, so one player's
     // choices cannot shift another player's luck on the same seed.
     this._noise = Array.from({ length: cfg.horizon + 1 }, () => 1 + cfg.noise * (r() + r() + r() - 1.5) * 1.15);
+    // Mid-game events, drawn after everything above so earlier draws keep their values.
+    const crewOut = r() < cfg.crewOutChance, crewOutAt = cfg.crewOutWeekRange[0] + Math.floor(r() * (cfg.crewOutWeekRange[1] - cfg.crewOutWeekRange[0] + 1));
+    const delay = r() < cfg.delayChance, delayAt = cfg.delayWeekRange[0] + Math.floor(r() * (cfg.delayWeekRange[1] - cfg.delayWeekRange[0] + 1));
+    this.crewOutWeek = crewOut ? crewOutAt : null;
+    this.delayWeek = delay ? delayAt : null;
 
     this.week = 0;
     this.crews = cfg.crews;
     this.onboarding = 0;
+    this.newCrews = 0;         // crews still being brought up to speed
     this.shiftStreak = 0;
     this.budget = cfg.budget;
     this.totalScope = cfg.scope;
@@ -176,6 +198,21 @@ export class Project {
     this.deskLog.push({ week: +week, tab: String(tab) });
   }
 
+  /** Tool checks counted against a week's allowance: distinct tool tabs opened (not The Contract, not Ask an AI). */
+  checksFor(week) {
+    return [...new Set(this.deskLog.filter((d) => d.week === week).map((d) => d.tab))].filter(isCheck).length;
+  }
+
+  /** Checks beyond the allowance before a week is played; before week 1, beyond the briefing's larger allowance (charged to week 1). */
+  extraChecks(week) {
+    const c = this.cfg;
+    if (week === 1) {
+      const before = this.desk ? [...new Set(this.desk.order)].filter(isCheck).length : 0;
+      return Math.max(0, before - c.freeChecksBeforeWeek1) + Math.max(0, this.checksFor(1) - c.freeChecks);
+    }
+    return Math.max(0, this.checksFor(week) - c.freeChecks);
+  }
+
   /** Records roughly how many seconds a week took before it was played. Never read by play(). */
   noteTime(week, seconds) {
     this.weekSeconds[+week] = Math.max(0, Math.round(+seconds || 0));
@@ -221,6 +258,7 @@ export class Project {
     if (hire > 0) {
       this.crews += hire;
       this.onboarding = c.onboardingWeeks;
+      this.newCrews = (this.onboarding > 0 && c.onboardingDrag === 'new' ? this.newCrews : 0) + hire;
       events.push(`${hire} new crew${hire > 1 ? 's' : ''} joined. The line runs slower while ${hire > 1 ? 'they are' : 'it is'} brought up to speed.`);
     } else if (hire < 0) {
       this.crews += hire;
@@ -231,9 +269,19 @@ export class Project {
 
     // Capacity, split between building and inspecting
     inspect = c.inspectionOptions.includes(+inspect) ? +inspect : 0;
-    const capacity = this.crews * c.unitsPerCrew * this.productivity
+    const out = this.crewOutWeek !== null && this.week >= this.crewOutWeek && this.week < this.crewOutWeek + c.crewOutWeeks && this.crews > 1 ? 1 : 0;
+    if (out && this.week === this.crewOutWeek) events.push(`A crew is out for ${c.crewOutWeeks} weeks. You still pay it; the line has one crew fewer.`);
+    const delayed = this.week === this.delayWeek;
+    if (delayed) events.push(`A parts delay idles ${Math.round(c.delayShare * 100)}% of the line this week.`);
+    const lineCrews = c.onboardingDrag === 'new' && this.onboarding > 0
+      ? this.crews - out - this.newCrews * (1 - c.onboardingFactor)
+      : this.crews - out;
+    const extraChecks = this.extraChecks(this.week);
+    if (extraChecks > 0) events.push(`You spent time on ${extraChecks} extra tool check${extraChecks === 1 ? '' : 's'}: about ${Math.round(extraChecks * c.checkCost * 100)}% of a crew's output this week.`);
+    const capacity = Math.max(0, lineCrews - extraChecks * c.checkCost) * c.unitsPerCrew * this.productivity
+      * (delayed ? 1 - c.delayShare : 1)
       * (1 - c.coordinationLoss * Math.max(0, this.crews - c.crews))
-      * (this.onboarding > 0 ? c.onboardingFactor : 1)
+      * (c.onboardingDrag !== 'new' && this.onboarding > 0 ? c.onboardingFactor : 1)
       * (shift ? c.shiftBoost : 1)
       * this._noise[this.week];
     const built = Math.min(this.backlog, capacity * (1 - inspect));
@@ -312,6 +360,7 @@ export class Project {
       events,
     };
     if (this.onboarding > 0) this.onboarding--;
+    if (this.onboarding === 0) this.newCrews = 0;
     this.history.push(row);
     return row;
   }
@@ -346,7 +395,7 @@ export class Project {
     const brier = (p - (onTime ? 1 : 0)) ** 2;
     const forecastScore = Math.max(0, Math.round(100 - 8 * Math.abs(outcome - f.week) - (held ? 0 : 20) - 40 * brier));
 
-    return { delivery, forecast: forecastScore, outcome, held, missBy, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
+    return { delivery, forecast: forecastScore, updating: updatingScore(this.forecastLog, outcome, onTime, c), outcome, held, missBy, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
   }
 
 }
@@ -406,6 +455,43 @@ export function playSummary(p) {
     secondsPlaying: weeks.reduce((a, w) => a + (w.seconds || 0), 0),
   };
 }
+
+/**
+ * The Updating score: each forecast in force during play (the commitment, then each
+ * week's running forecast), scored as the commitment is (100 − 8 × |error| − 20 if the
+ * range missed − 40 × Brier of the week-12 chance, the Brier only while week 12 was still
+ * possible), averaged with week w weighted w + 1, so later forecasts count more.
+ */
+export function updatingScore(log, outcome, onTime, cfg = CONFIG) {
+  if (!log || !log.length) return null;
+  let total = 0, weight = 0;
+  for (const e of log) {
+    const low = e.low ?? e.forecast, high = e.high ?? e.forecast;
+    const held = outcome >= low && outcome <= high;
+    const brier = e.week < cfg.deadline && e.chance !== undefined ? (Math.max(0, Math.min(1, e.chance / 100)) - (onTime ? 1 : 0)) ** 2 : 0;
+    const s = Math.max(0, 100 - 8 * Math.abs(outcome - e.forecast) - (held ? 0 : 20) - 40 * brier);
+    total += (e.week + 1) * s;
+    weight += e.week + 1;
+  }
+  return Math.round(total / weight);
+}
+
+/** A tool check: opening a tool tab. The Contract and Ask an AI don't count, nor using a tool's numbers. */
+export const isCheck = (tab) => !!tab && tab !== 'contract' && tab !== 'ai' && tab !== 'ai-copy' && !tab.startsWith('use:');
+
+/** The attention rule, in the briefing's words. */
+export const attentionRule = (c = CONFIG) => `Each week you have ${c.freeChecks} free tool checks (${c.freeChecksBeforeWeek1} before week 1, to read the briefing). Each extra check takes you off the floor: about ${Math.round(c.checkCost * 100)}% of one crew's output that week. The Contract and Ask an AI are always free.`;
+
+/** The onboarding rule, in the briefing's words. */
+export const onboardingRule = (c = CONFIG) => (c.onboardingDrag === 'new'
+  ? `New crews work at ${Math.round(c.onboardingFactor * 100)}% for their first ${c.onboardingWeeks} weeks.`
+  : `A new crew slows the whole line to ${Math.round(c.onboardingFactor * 100)}% for ${c.onboardingWeeks} weeks.`);
+
+/** The mid-game events a contract may face, in the briefing's words. */
+export const eventRules = (c = CONFIG) => [
+  c.crewOutChance > 0 && `About ${Math.round(c.crewOutChance * 100)}% of contracts lose a crew for ${c.crewOutWeeks} weeks, starting somewhere in weeks ${c.crewOutWeekRange[0]}–${c.crewOutWeekRange[1]}. You still pay it.`,
+  c.delayChance > 0 && `About ${Math.round(c.delayChance * 100)}% of contracts hit a parts delay that idles ${Math.round(c.delayShare * 100)}% of the line for one week, somewhere in weeks ${c.delayWeekRange[0]}–${c.delayWeekRange[1]}.`,
+].filter(Boolean);
 
 // ── The Decision Desk, as recorded ───────────────────────────────────────────
 // What the student looked at before committing: the tool whose numbers they used (a

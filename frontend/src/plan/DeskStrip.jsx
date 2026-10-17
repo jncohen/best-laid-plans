@@ -14,7 +14,7 @@ const TAB_TONE = {
  * the left edge while the tools scroll sideways, so it stays in view and never reads
  * as one more tool.
  */
-export default function TabStrip({ tab, opened, onOpen, front = TABS[0], tabs = TABS.slice(1), sticky = true }) {
+export default function TabStrip({ tab, opened, onOpen, front = TABS[0], tabs = TABS.slice(1), sticky = true, checks = null }) {
   const groups = [];
   for (const t of tabs) {
     const g = t.group || '';
@@ -53,6 +53,11 @@ export default function TabStrip({ tab, opened, onOpen, front = TABS[0], tabs = 
           </div>
         ))}
       </div>
+      {checks && (
+        <div className={`text-[11px] mt-1 ${checks.left > 0 ? 'text-slate-400' : 'text-amber-300'}`}>
+          {checks.left > 0 ? `${checks.left} free check${checks.left === 1 ? '' : 's'} left ${checks.when}` : `No free checks left ${checks.when}: each new tool tab costs about ${checks.cost}% of a crew's output`}
+        </div>
+      )}
     </nav>
   );
 }

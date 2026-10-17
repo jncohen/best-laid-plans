@@ -15,7 +15,8 @@ import { CONFIG, lastContract, pastContracts, matchContracts, summarizeContracts
 
 // ── What the screen shows ────────────────────────────────────────────────────
 const DISCLOSED = ['scope', 'deadline', 'horizon', 'crews', 'budget', 'creditLine', 'maxCrews', 'maxHirePerWeek', 'coordinationLoss', 'crewWeek', 'hireFee',
-  'releaseFee', 'shiftPremiumPerCrew', 'onboardingWeeks', 'onboardingFactor', 'shiftBoost', 'inspectionOptions', 'lateFixMultiplier'];
+  'releaseFee', 'shiftPremiumPerCrew', 'onboardingWeeks', 'onboardingFactor', 'onboardingDrag', 'shiftBoost', 'inspectionOptions', 'lateFixMultiplier',
+  'crewOutChance', 'crewOutWeeks', 'crewOutWeekRange', 'delayChance', 'delayShare', 'delayWeekRange'];
 
 /** Everything the desk may use. The rules are only those the briefing states. */
 export function screenData(cfg = CONFIG) {
@@ -63,9 +64,13 @@ function observedPerCrew(S, L) {
   L.rows.forEach((r, i) => {
     const prev = i ? L.rows[i - 1].crews : R.crews, prev2 = i > 1 ? L.rows[i - 2].crews : R.crews;
     const onboarding = r.crews > prev || (i > 0 && prev > prev2);
-    if (r.built <= 0 || r.backlog < 0.5) return; // a finishing or bankrupt week says nothing about the rate
+    // A finishing, bankrupt or disturbed week (a crew out, a parts delay) says little about the rate.
+    const disturbed = r.events.some((e) => /crew is out|parts delay/.test(e)) || (i > 0 && L.rows[i - 1].events.some((e) => /crew is out/.test(e)));
+    if (r.built <= 0 || r.backlog < 0.5 || disturbed) return;
+    const added = Math.max(0, r.crews - prev, prev - prev2);
+    const crewsAtWork = onboarding && R.onboardingDrag === 'new' ? r.crews - added * (1 - R.onboardingFactor) : r.crews;
     built += r.built;
-    effort += r.crews * (1 - R.coordinationLoss * Math.max(0, r.crews - R.crews)) * (1 - r.inspect) * (onboarding ? R.onboardingFactor : 1) * (r.shift ? R.shiftBoost : 1);
+    effort += crewsAtWork * (1 - R.coordinationLoss * Math.max(0, r.crews - R.crews)) * (1 - r.inspect) * (onboarding && R.onboardingDrag !== 'new' ? R.onboardingFactor : 1) * (r.shift ? R.shiftBoost : 1);
   });
   return effort > 0 ? built / effort : pace(S) / R.crews;
 }
@@ -83,15 +88,16 @@ const foundSoFar = (L) => (L ? L.rows.reduce((a, r) => a + r.found, 0) : 0);
  */
 export function planModel(S, plan, { noise = () => 1, scope = null, trace = false, live = null } = {}) {
   const R = S.rules, p = asPlan(plan), perCrew = observedPerCrew(S, live);
-  let left = live ? live.backlog : R.scope, crews = live ? live.crews : R.crews, onboard = live && live.onboarding ? 1 : 0, w = live ? live.week : 0;
+  let left = live ? live.backlog : R.scope, crews = live ? live.crews : R.crews, onboard = live && live.onboarding ? 1 : 0, w = live ? live.week : 0, adding = 0;
   const add = live ? Math.max(0, p.crews - (live.crews - R.crews)) : p.crews;
   const start = w;
   const weeks = [];
   while (left > 0.5 && w < 40) {
     w++;
-    if (w === start + 1 && add > 0) { crews = Math.min(R.maxCrews, crews + Math.min(add, R.maxHirePerWeek)); onboard = R.onboardingWeeks; }
+    if (w === start + 1 && add > 0) { adding = Math.min(add, R.maxHirePerWeek, R.maxCrews - crews); crews += adding; onboard = R.onboardingWeeks; }
     const shift = shiftIn(p, w);
-    const cap = crews * perCrew * (1 - R.coordinationLoss * Math.max(0, crews - R.crews)) * (onboard > 0 ? R.onboardingFactor : 1) * (shift ? R.shiftBoost : 1) * noise();
+    const atWork = R.onboardingDrag === 'new' && onboard > 0 ? crews - adding * (1 - R.onboardingFactor) : crews;
+    const cap = atWork * perCrew * (1 - R.coordinationLoss * Math.max(0, crews - R.crews)) * (R.onboardingDrag !== 'new' && onboard > 0 ? R.onboardingFactor : 1) * (shift ? R.shiftBoost : 1) * noise();
     left -= cap * (1 - p.inspect);
     if (scope && w === scope.week) left += scope.units;
     if (trace) weeks.push({ week: w, crews, onboarding: onboard > 0, shift, built: cap * (1 - p.inspect), left: Math.max(0, left) });
@@ -258,7 +264,7 @@ export function riskRegister(S, plan) {
       risk('defects', 'Acceptance test rejects units', rej.length / c.length, (q(rej.map((r) => r.rejected), 0.5) * R.lateFixMultiplier) / v,
         `${rej.length} of ${c.length} past contracts had units rejected (median ${q(rej.map((r) => r.rejected), 0.5)}). Each costs ${R.lateFixMultiplier}× to fix that late. The last contract: ${S.last.rejected} rejected.`),
       risk('onboarding', 'New crews slow the line', p.crews > 0 ? 1 : 0, p.crews > 0 ? (R.onboardingWeeks * (1 - R.onboardingFactor) * (R.crews + p.crews)) / R.crews : 0,
-        `Every hire: the whole line runs at ${Math.round(R.onboardingFactor * 100)}% for ${R.onboardingWeeks} weeks.`, p.crews > 0),
+        R.onboardingDrag === 'new' ? `Every hire: new crews work at ${Math.round(R.onboardingFactor * 100)}% for their first ${R.onboardingWeeks} weeks.` : `Every hire: the whole line runs at ${Math.round(R.onboardingFactor * 100)}% for ${R.onboardingWeeks} weeks.`, p.crews > 0),
       risk('coordination', 'Coordination loss', R.crews + p.crews > R.crews ? 1 : 0, 0.3 * Math.max(0, p.crews),
         `Each crew beyond ${R.crews} costs every crew ${Math.round(R.coordinationLoss * 100)}%.`, p.crews > 0),
       risk('fatigue', 'Tired crews make more defects', p.shift === 'none' ? 0 : 1, p.shift === 'every' ? 3 : p.shift === 'late' ? 1 : 0,
@@ -389,13 +395,13 @@ export function teamChat(S, plan, L = null) {
   } else {
     const rw = p.inspect > 0 ? Math.max(1, Math.round(gap / 2)) : gap;
     priya = { forecast: clampF({ week: sc.week + rw, low: sc.week + rw - 1, high: sc.week + rw + 2, chance: sc.week + rw <= R.deadline ? 50 : 15 }),
-      says: `${found > 0 ? `Inspection has caught ${found} bad unit${found === 1 ? '' : 's'} so far. ` : ''}Last time ${S.last.rejected} units bounced at acceptance, and it took ${word(gap)} more weeks after the dashboard said done. Budget ${gap > 1 ? `${word(gap - 1)} or ${word(gap)}` : word(gap)} weeks for rework${p.inspect > 0 ? ', maybe half that if you keep inspecting' : ''}.`,
+      says: `${found > 0 ? `${lastRow && lastRow.inspect > 0 ? `Inspection found ${Math.round(lastRow.found)} last week, ${Math.round((100 * lastRow.found) / Math.max(1, lastRow.built))}% of what we built. ` : ''}We've caught ${found} bad unit${found === 1 ? '' : 's'} so far. ` : ''}Last time ${S.last.rejected} units bounced at acceptance, and it took ${word(gap)} more weeks after the dashboard said done. Budget ${gap > 1 ? `${word(gap - 1)} or ${word(gap)}` : word(gap)} weeks for rework${p.inspect > 0 ? ', maybe half that if you keep inspecting' : ''}.`,
       reasoning: `The plan from here (week ${sc.week}) plus the rework the last contract needed after its dashboard read 100% (${gap} weeks${p.inspect > 0 ? ', halved for inspection' : ''}).` };
   }
   return [
     { key: 'supervisor', name: 'Dana', role: 'Line supervisor', frame: 'The pace', confidence: 65, forecast: { week: atPace, low: Math.max(now + 1, atPace - 1), high: atPace + 1, chance: atPace <= R.deadline ? 75 : 30 },
       says: L
-        ? `We built ${Math.round(lastRow.built)} last week.${scopeNews} At this pace that's ${word(atPace - now)} more week${atPace - now === 1 ? '' : 's'}: week ${atPace}, if nothing goes wrong.`
+        ? `We built ${Math.round(lastRow.built)} last week, about ${observedPerCrew(S, L).toFixed(1)} a crew; the last contract did ${(pace(S) / R.crews).toFixed(1)}.${scopeNews} At this pace that's ${word(atPace - now)} more week${atPace - now === 1 ? '' : 's'}: week ${atPace}, if nothing goes wrong.`
         : `At this pace, ${word(atPace)} weeks, if nothing goes wrong.`,
       reasoning: `${Math.round(left)} units left at ${v.toFixed(1)} a week${L ? ' (the last few weeks built)' : " (the last six weeks' pace)"}.` },
     { key: 'planner', name: 'Sam', role: 'Planner', frame: 'The plan on paper', confidence: 70, forecast: sc,
@@ -419,13 +425,15 @@ const k$ = (n) => (Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : `$${Math.r
  * into whatever assistant they use. It asks for a forecast and the reasoning, and
  * says nothing about which information matters.
  */
-export function aiPrompt(S, plan, L = null) {
+export function aiPrompt(S, plan, L = null, opened = null) {
   const R = S.rules, p = asPlan(plan);
+  // The contract and its rules always; then only what the student has looked at (null: everything).
+  const has = (id) => opened === null || opened.includes(id);
   const c = S.contracts;
   const planText = `${p.crews ? `add ${p.crews} crew${p.crews > 1 ? 's' : ''} at the start` : 'add no crews'}, ${p.inspect ? `${pct(p.inspect)} of the line on inspection` : 'no inspection'}, ${p.shift === 'none' ? 'no second shift' : p.shift === 'late' ? 'a second shift in the late weeks (9–11)' : 'a second shift every week'}`;
   const row = (r) => [r.id, r.crewsAdded, r.hires.map((h) => h.week).join('/') || '-', Math.round(r.inspect * 100), r.shiftWeeks, r.scopeWeek, r.scopeUnits, r.dashboardFullWeek, r.rejected, r.delivered ? r.accepted : r.bankrupt ? `bankrupt wk${r.endedWeek}` : `terminated wk${r.endedWeek}`].join(',');
   const lines = [
-    'I am managing a production contract and need a forecast. Here is everything I know.',
+    'I am managing a production contract and need a forecast. Here is what I know.',
     '',
     'CONTRACT',
     `- Build ${R.scope} units. The customer wants them by week ${R.deadline}. I start with ${R.crews} crews and a budget of ${k$(R.budget)}.`,
@@ -435,27 +443,44 @@ export function aiPrompt(S, plan, L = null) {
     '',
     'RULES',
     `- Each crew costs ${k$(R.crewWeek)} a week. Adding a crew costs ${k$(R.hireFee)} (up to ${R.maxHirePerWeek} a week, ${R.maxCrews} crews at most); releasing one costs ${k$(R.releaseFee)}.`,
-    `- A new crew slows the whole line to ${pct(R.onboardingFactor)} for ${R.onboardingWeeks} weeks. Each crew beyond ${R.crews} makes every crew ${pct(R.coordinationLoss)} less productive.`,
+    `- ${R.onboardingDrag === 'new' ? `New crews work at ${pct(R.onboardingFactor)} for their first ${R.onboardingWeeks} weeks.` : `A new crew slows the whole line to ${pct(R.onboardingFactor)} for ${R.onboardingWeeks} weeks.`} Each crew beyond ${R.crews} makes every crew ${pct(R.coordinationLoss)} less productive.`,
+    ...(R.crewOutChance > 0 || R.delayChance > 0 ? [`- About ${pct(R.crewOutChance)} of contracts lose a crew for ${R.crewOutWeeks} weeks (still paid), starting in weeks ${R.crewOutWeekRange[0]}–${R.crewOutWeekRange[1]}. About ${pct(R.delayChance)} hit a parts delay idling ${pct(R.delayShare)} of the line for a week, in weeks ${R.delayWeekRange[0]}–${R.delayWeekRange[1]}.`] : []),
+    '- Contracts differ in how fast the line builds and how many defects it turns out.',
     `- Second shift: +${pct(R.shiftBoost - 1)} output for ${k$(R.shiftPremiumPerCrew)} per crew per week. From the second straight week, tired crews make more defects.`,
     `- Inspection: move 0–30% of the line from building to checking. Defects found early cost one unit to fix; any the acceptance test finds cost ${R.lateFixMultiplier}× to fix.`,
     `- The company can overspend the budget by up to ${k$(R.creditLine)} on credit. If a week's payroll would go past that, it goes bankrupt and the contract ends.`,
-    '',
-    `THIS LINE'S LAST CONTRACT (same line, same ${R.crews} crews)`,
-    `- Units completed each week on its dashboard, weeks 1–${S.history.length}: ${S.history.map((v) => v.toFixed(1)).join(', ')}.`,
-    `- Its dashboard read 100% in week ${S.last.dashboardFullWeek}; it was accepted in week ${S.last.deliveredWeek}; ${S.last.rejected} units were rejected at acceptance.`,
-    '',
-    `PAST CONTRACTS ON THIS LINE (oldest first; the last 5 are #${c[c.length - 5].id}–#${c[c.length - 1].id}, and #${c[c.length - 1].id} is the last contract above)`,
-    'id,crews_added,hire_weeks,inspection_pct,second_shift_weeks,scope_change_week,scope_change_units,dashboard_100pct_week,units_rejected,accepted_week',
-    ...c.map(row),
-    '',
-    `MY PLAN: ${planText}.`,
   ];
+  const header = 'id,crews_added,hire_weeks,inspection_pct,second_shift_weeks,scope_change_week,scope_change_units,dashboard_100pct_week,units_rejected,accepted_week';
+  if (has('last5')) {
+    lines.push('', `THIS LINE'S LAST CONTRACT (#${c[c.length - 1].id}; same line, same ${R.crews} crews)`,
+      `- Units completed each week on its dashboard, weeks 1–${S.history.length}: ${S.history.map((v) => v.toFixed(1)).join(', ')}.`,
+      `- Its dashboard read 100% in week ${S.last.dashboardFullWeek}; it was accepted in week ${S.last.deliveredWeek}; ${S.last.rejected} units were rejected at acceptance.`);
+    if (!has('records')) lines.push('', 'THE LAST 5 CONTRACTS ON THIS LINE (oldest first)', header, ...c.slice(-5).map(row));
+  }
+  if (has('records')) lines.push('', `PAST CONTRACTS ON THIS LINE (oldest first; #${c[c.length - 1].id} is the latest)`, header, ...c.map(row));
+  if (has('status')) {
+    const st = statusReport(S, L, p);
+    lines.push('', `STATUS REPORT (earned value${L ? `, week ${st.weeksShown} of this contract` : ", the last contract's first six weeks"})`,
+      `- Earned ${pct(st.earnedPct)} vs planned ${pct(st.plannedPct)}; SPI ${st.spi}; CPI ${st.cpi}; status ${st.light}; estimate at completion week ${st.eacWeeks}.`);
+  }
+  if (has('cost')) {
+    const cm = costManagement(S, p, L);
+    lines.push('', 'COST MANAGEMENT', `- Plan cost baseline ${k$(cm.cost.bac)}; estimate at completion ${k$(cm.cost.eac)}; CPI ${cm.cost.cpi}; spent ${k$(cm.spent)}; headroom to budget ${k$(cm.headroom)}, with the credit line ${k$(cm.headroomCredit)}; cash runway ${cm.runwayWeeks} weeks.`);
+  }
+  if (has('schedule')) { const sc = schedule(S, p, L); lines.push('', 'SCHEDULE', `- Planned finish week ${sc.forecast.week}${L ? `, re-planned from week ${sc.from}` : ''}.`); }
+  if (has('chat')) lines.push('', 'TEAM CHAT ("When will we be done?")', ...teamChat(S, p, L).map((x) => `- ${x.name} (${x.role.toLowerCase()}): ${x.says}`));
+  if (has('scenarios')) lines.push('', 'SCENARIOS', ...scenarios(S, p).rows.map((r) => `- ${r.label}: week ${r.week}. ${r.assumptions}`));
+  if (has('risks')) lines.push('', 'RISK REGISTER', ...riskRegister(S, p).risks.filter((x) => x.applies).map((x) => `- ${x.title}: ${x.note}`));
+  if (has('analytics')) { const a = analytics(S, p); lines.push('', 'ANALYTICS', `- Regression of week accepted on the plan across the ${a.n} past contracts: predicted week ${a.predicted} for this plan, 80% interval weeks ${a.forecast.low}–${a.forecast.high}.`); }
+  if (has('simulator')) { const m = riskSimulator(S, p, { live: L }); lines.push('', 'RISK SIMULATOR (1,000 runs, with historical rework)', `- P10 week ${m.p[10]}, P50 week ${m.p[50]}, P90 week ${m.p[90]}.`); }
+  lines.push('', `MY PLAN: ${planText}.`);
   if (L) {
     const lastRow = L.rows[L.rows.length - 1];
     lines.push('', `STATUS AFTER WEEK ${L.week}`,
       `- Dashboard: ${pct(lastRow.reported)} reported complete; ${Math.round(L.backlog)} units left of ${L.totalScope}; ${L.crews} crews${L.onboarding ? ' (new crews still onboarding)' : ''}; spent ${k$(L.spent)}, budget left ${k$(L.budget)}.`,
-      'week,units_built,crews,inspection_pct,second_shift,defects_found_by_inspection,units_rejected_at_acceptance,scope_added,reported_complete_pct',
-      ...L.rows.map((r) => [r.week, Math.round(r.built), r.crews, Math.round(r.inspect * 100), r.shift ? 'yes' : 'no', Math.round(r.found), Math.round(r.rejected), r.shock, Math.round(r.reported * 100)].join(',')));
+      'week,units_built,crews,inspection_pct,second_shift,defects_found,units_rejected_at_acceptance,scope_added,crew_out,parts_delay,reported_complete_pct',
+      ...L.rows.map((r) => [r.week, Math.round(r.built), r.crews, Math.round(r.inspect * 100), r.shift ? 'yes' : 'no', Math.round(r.found), Math.round(r.rejected), r.shock,
+        r.events.some((e) => /crew is out/.test(e)) ? 'yes' : 'no', r.events.some((e) => /parts delay/.test(e)) ? 'yes' : 'no', Math.round(r.reported * 100)].join(',')));
   }
   lines.push('', `Please give a forecast of the week the customer accepts the contract, an 80% range, and the chance of making week ${R.deadline}, with your reasoning.`);
   return lines.join('\n');

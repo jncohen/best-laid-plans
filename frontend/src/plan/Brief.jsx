@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CONFIG } from './engine';
+import { CONFIG, isCheck } from './engine';
 import { tabById, screenData } from './desk.js';
 import TabStrip from './DeskStrip';
 import { Card, Slider } from './ui';
@@ -82,11 +82,12 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
         </p>
       </header>
 
-      <TabStrip tab={tab} opened={opened} onOpen={open} />
+      <TabStrip tab={tab} opened={opened} onOpen={open}
+        checks={{ left: Math.max(0, c.freeChecksBeforeWeek1 - opened.filter(isCheck).length), when: 'before week 1', cost: Math.round(c.checkCost * 100) }} />
 
       {tab !== 'commit' ? (
         <>
-          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} onCopyPrompt={() => setCopied(true)} />
+          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} onCopyPrompt={() => setCopied(true)} opened={opened} />
           <button type="button" onClick={() => open('commit')} className="w-full py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
             Back to Your Plan and Prediction
           </button>
