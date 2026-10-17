@@ -31,7 +31,7 @@ function Select({ label, value, onChange, options }) {
  * The record of past contracts as a table: what each manager did and how it ended.
  * Filter by plan, or ask for the contracts run like the plan you've chosen.
  */
-export default function Records({ past, plan = null }) {
+export default function Records({ past, plan = null, onUse = null }) {
   const c = CONFIG;
   const [filters, setFilters] = useState({ crews: ANY, inspect: ANY, shift: ANY });
   const [match, setMatch] = useState(null); // the matchContracts() result, while in use
@@ -90,6 +90,12 @@ export default function Records({ past, plan = null }) {
           All {past.contracts.length}
         </button>
       </div>
+      {onUse && sum.n > 0 && (
+        <button type="button" onClick={() => onUse({ week: sum.median, low: sum.p10, high: sum.p90, chance: Math.round(100 * sum.onTimeShare) }, match ? 'contracts run like my plan' : all ? 'all 40' : 'filtered')}
+          className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">
+          Use these {sum.n} contracts on my prediction (week {sum.median}, {sum.p10}–{sum.p90}, {Math.round(100 * sum.onTimeShare)}%)
+        </button>
+      )}
       {!plan && <p className="text-[11px] text-slate-500 -mt-1">Choose your plan at the bottom of the page to find contracts run like it.</p>}
 
       <div className="overflow-x-auto max-h-96 overflow-y-auto rounded-lg border border-slate-800">

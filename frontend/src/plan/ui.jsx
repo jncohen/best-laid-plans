@@ -7,6 +7,7 @@ export function Card({ title, children, tone = 'slate', className = '' }) {
     sky: 'border-sky-500/40',
     emerald: 'border-emerald-500/40',
     rose: 'border-rose-500/40',
+    violet: 'border-violet-500/40',
   }[tone];
   return (
     <section className={`bg-slate-900 border ${border} rounded-2xl p-4 sm:p-5 ${className}`}>

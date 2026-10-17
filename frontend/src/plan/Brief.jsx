@@ -1,8 +1,50 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CONFIG, pastContracts, lastContract, historyMean } from './engine';
-import { Card, Slider } from './ui';
+import { TABS, tabById, screenData } from './desk.js';
+import { Card, Slider, DotStrip } from './ui';
 import { money } from './format';
-import Records from './Records';
+import DeskTab from './DeskTabs';
+
+const DEFAULTS = { week: 12, low: 11, high: 13, chance: 50 };
+const TAB_TONE = {
+  inside: ['text-sky-300', 'border-sky-400'],
+  record: ['text-amber-300', 'border-amber-400'],
+  people: ['text-violet-300', 'border-violet-400'],
+  front: ['text-white', 'border-white'],
+};
+
+/** The tab strip: the front tab, then the tools in their groups. Scrolls sideways on a phone. */
+function TabStrip({ tab, opened, onOpen }) {
+  const groups = [];
+  for (const t of TABS) {
+    const g = t.group || '';
+    if (!groups.length || groups[groups.length - 1].name !== g) groups.push({ name: g, tabs: [] });
+    groups[groups.length - 1].tabs.push(t);
+  }
+  return (
+    <nav aria-label="Briefing tabs" className="sticky top-0 z-10 -mx-4 px-4 py-2 bg-slate-950/95 backdrop-blur border-b border-slate-800">
+      <div className="flex gap-4 gap-y-2 overflow-x-auto sm:flex-wrap pb-1" role="tablist">
+        {groups.map((g) => (
+          <div key={g.name} className="shrink-0">
+            <div className="text-[9px] uppercase tracking-wider text-slate-500 h-3 whitespace-nowrap">{g.name}</div>
+            <div className="flex gap-1 mt-1">
+              {g.tabs.map((t) => {
+                const active = tab === t.id;
+                const [txt, bd] = TAB_TONE[t.tone];
+                return (
+                  <button key={t.id} type="button" role="tab" aria-selected={active} onClick={() => onOpen(t.id)}
+                    className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs border ${active ? `bg-slate-800 ${bd} ${txt} font-semibold` : `border-slate-800 ${opened.includes(t.id) ? 'text-slate-300' : 'text-slate-400'}`}`}>
+                    {t.id === 'commit' ? t.short : t.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </nav>
+  );
+}
 
 function Choice({ label, options, value, onChange }) {
   return (
@@ -20,21 +62,28 @@ function Choice({ label, options, value, onChange }) {
   );
 }
 
-export default function Brief({ onCommit, initialSeed = '' }) {
+export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit', initialPlan = null }) {
   const c = CONFIG;
   const past = pastContracts();
   const last = lastContract();
   const pace = historyMean();
   const insideWeeks = (c.scope / pace).toFixed(1);
 
-  const [week, setWeek] = useState(12);
-  const [low, setLow] = useState(11);
-  const [high, setHigh] = useState(13);
-  const [chance, setChance] = useState(50);
+  const S = useMemo(() => screenData(), []);
+  const [week, setWeek] = useState(DEFAULTS.week);
+  const [low, setLow] = useState(DEFAULTS.low);
+  const [high, setHigh] = useState(DEFAULTS.high);
+  const [chance, setChance] = useState(DEFAULTS.chance);
+  // The desk: which tab is showing, the tool tabs opened (in order), when the briefing
+  // opened, and the numbers last copied in from a tool.
+  const [tab, setTab] = useState(initialTab);
+  const [opened, setOpened] = useState([]);
+  const [startedAt] = useState(() => Date.now());
+  const [loaded, setLoaded] = useState(null);
   const [seed, setSeed] = useState(initialSeed);
   const [name, setName] = useState('');
   // The plan comes first: crews added at the start, inspection share, second shift.
-  const [plan, setPlan] = useState({ crews: null, inspect: null, shift: null });
+  const [plan, setPlan] = useState(initialPlan || { crews: null, inspect: null, shift: null });
   const planReady = plan.crews !== null && plan.inspect !== null && plan.shift !== null;
   const setPlanPart = (k) => (v) => setPlan((p) => ({ ...p, [k]: v }));
 
@@ -44,6 +93,27 @@ export default function Brief({ onCommit, initialSeed = '' }) {
     if (high < v) setHigh(v);
   };
   const intervalOk = low <= week && week <= high;
+
+  const open = (id) => {
+    setTab(id);
+    if (id !== 'commit') setOpened((o) => (o.includes(id) ? o : [...o, id]));
+    window.scrollTo(0, 0);
+  };
+  const applyNumbers = (id, f, label = null) => {
+    const n = { week: Math.max(8, Math.min(22, f.week)), chance: Math.max(0, Math.min(100, Math.round(f.chance / 5) * 5)) };
+    n.low = Math.max(6, Math.min(n.week, f.low));
+    n.high = Math.min(24, Math.max(n.week, f.high));
+    setWeek(n.week); setLow(n.low); setHigh(n.high); setChance(n.chance);
+    setLoaded({ id, label, numbers: n });
+    open('commit');
+  };
+  const commit = () => {
+    const given = loaded ? loaded.numbers : DEFAULTS;
+    const edited = given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
+    const desk = { tool: loaded ? tabById(loaded.id).letter : '', tabs: opened.length, minutes: (Date.now() - startedAt) / 60000, edited, order: opened };
+    onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim(), name.trim());
+  };
+  const deskPlan = planReady ? plan : { crews: 0, inspect: 0, shift: 'none' };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
@@ -57,6 +127,19 @@ export default function Brief({ onCommit, initialSeed = '' }) {
           now, run the line week by week, and find out how right you were. The forecast score is the one that counts most.
         </p>
       </header>
+
+      <TabStrip tab={tab} opened={opened} onOpen={open} />
+
+      {tab !== 'commit' ? (
+        <>
+          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} />
+          <button type="button" onClick={() => open('commit')} className="w-full py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
+            Back to Your Plan and Prediction
+          </button>
+        </>
+      ) : (<>
+      <h2 className="text-lg font-bold text-white text-center">Your Plan and Prediction · Commit Before Week 1</h2>
+      <p className="text-xs text-slate-400 text-center -mt-2">The tabs above are tools a project office uses. Open any of them, or none, before you commit.</p>
 
       <Card title="The contract">
         <div className="grid grid-cols-4 gap-2 text-center">
@@ -95,11 +178,15 @@ export default function Brief({ onCommit, initialSeed = '' }) {
       </Card>
 
       <Card title={`${past.weeks.length} past contracts on this line`} tone="amber">
-        <p className="text-xs text-slate-400 mb-2">
-          What each manager did, and the week the customer finally accepted it. Green dots made week {c.deadline}.
-          Tap a column to sort it.
+        <p className="text-xs text-slate-400 mb-2">The week each one was finally accepted. Green made week {c.deadline}.</p>
+        <DotStrip weeks={past.weeks} deadline={c.deadline} />
+        <p className="text-sm text-slate-300 mt-1">
+          Median <strong className="text-amber-300">week {past.median}</strong>. Most landed between week {past.p10} and
+          week {past.p90}. {Math.round(past.onTimeShare * 100)}% made week {c.deadline}.
         </p>
-        <Records past={past} plan={planReady ? plan : null} />
+        <button type="button" onClick={() => open('records')} className="mt-2 text-xs text-amber-200 underline">
+          What each manager did: open the Records tab
+        </button>
       </Card>
 
       <Card title="What you decide each week">
@@ -133,6 +220,12 @@ export default function Brief({ onCommit, initialSeed = '' }) {
               options={[['none', 'None'], ['late', 'Late weeks'], ['every', 'Every week']]} />
           </div>
           <div className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-1">2 · Your forecast</div>
+          {loaded && (
+            <p className="text-xs text-slate-300 bg-slate-950 rounded-lg px-3 py-2 -mt-2">
+              Loaded from <strong className="text-white">{tabById(loaded.id).name}{loaded.label ? ` (${loaded.label})` : ''}</strong>: week {loaded.numbers.week},{' '}
+              {loaded.numbers.low}–{loaded.numbers.high}, {loaded.numbers.chance}%. You can still change them.
+            </p>
+          )}
           <Slider label="Week the customer accepts it" value={week} min={8} max={22} onChange={setPoint} format={(v) => `week ${v}`} />
           <div>
             <div className="text-sm text-slate-300 mb-1">80% range: you are 80% sure it lands between</div>
@@ -160,7 +253,7 @@ export default function Brief({ onCommit, initialSeed = '' }) {
           <button
             type="button"
             disabled={!intervalOk || !planReady}
-            onClick={() => onCommit({ week, low, high, onTimeChance: chance, plan }, seed.trim(), name.trim())}
+            onClick={commit}
             className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold"
           >
             Commit plan and forecast, start week 1
@@ -168,6 +261,7 @@ export default function Brief({ onCommit, initialSeed = '' }) {
           {!planReady && <p className="text-xs text-slate-500 text-center -mt-2">Choose all three parts of your plan first.</p>}
         </div>
       </Card>
+      </>)}
     </div>
   );
 }

@@ -1,16 +1,22 @@
 import { useState } from 'react';
-import { Project } from './engine';
+import { Project, decodePlan } from './engine';
+import { tabById } from './desk.js';
 import Brief from './Brief';
 import Play from './Play';
 import Reveal from './Reveal';
 
-function seedFromUrl() {
+const param = (k) => {
   try {
-    return new URLSearchParams(window.location.search).get('seed') || '';
+    return new URLSearchParams(window.location.search).get(k) || '';
   } catch {
     return '';
   }
-}
+};
+const seedFromUrl = () => param('seed');
+// ?tab=analytics opens the briefing on a tool tab, and ?plan=31n pre-states a plan:
+// handy for projecting one tab in class.
+const tabFromUrl = () => (tabById(param('tab')) ? param('tab') : 'commit');
+const planFromUrl = () => decodePlan(param('plan'));
 
 export default function PlanApp() {
   const [phase, setPhase] = useState('brief'); // brief | play | stop | reveal
@@ -18,6 +24,7 @@ export default function PlanApp() {
   const [name, setName] = useState('');
   const [, setTick] = useState(0);
   const [lastSeed, setLastSeed] = useState(seedFromUrl);
+  const [first, setFirst] = useState(true);
 
   const commit = (forecast, seed, who) => {
     const p = new Project(seed || null);
@@ -25,6 +32,7 @@ export default function PlanApp() {
     setProject(p);
     setName(who);
     setLastSeed(seed);
+    setFirst(false);
     setPhase('play');
     window.scrollTo(0, 0);
   };
@@ -38,7 +46,7 @@ export default function PlanApp() {
     }
   };
 
-  if (phase === 'brief' || !project) return <Brief onCommit={commit} initialSeed={lastSeed} />;
+  if (phase === 'brief' || !project) return <Brief onCommit={commit} initialSeed={lastSeed} initialTab={first ? tabFromUrl() : 'commit'} initialPlan={first ? planFromUrl() : null} />;
   if (phase === 'play') return <Play project={project} onPlay={play} />;
   if (phase === 'stop') {
     return (
