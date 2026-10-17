@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { CONFIG, pastContracts, parseResultCode, judgeForecast, planKept } from './engine';
+import { tabByLetter } from './desk.js';
 import { Card } from './ui';
 
 /**
@@ -29,6 +30,17 @@ export default function Room({ initialText = '' }) {
   const reasoned = rows.filter((r) => r.verdict === 'reasoned').length;
   const lucky = rows.filter((r) => r.verdict === 'lucky').length;
   const changed = withPlan.filter((r) => !r.kept).length;
+  // The desk (BLP3 codes): ranges held by the tool used, and by how much was looked at.
+  const withDesk = rows.filter((r) => r.desk);
+  const byTool = Object.values(withDesk.reduce((acc, r) => {
+    const k = r.desk.tool || '';
+    acc[k] ||= { name: k ? tabByLetter(k)?.name || k : 'No tool', n: 0, held: 0 };
+    acc[k].n++;
+    if (r.outcome >= r.low && r.outcome <= r.high) acc[k].held++;
+    return acc;
+  }, {})).sort((a, b) => b.n - a.n);
+  const avg = (xs) => (xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(1) : '–');
+  const heldDesk = withDesk.filter((r) => r.outcome >= r.low && r.outcome <= r.high), missedDesk = withDesk.filter((r) => !(r.outcome >= r.low && r.outcome <= r.high));
   const gaps = rows.filter((r) => r.ninetyWeek).map((r) => r.outcome - r.ninetyWeek);
 
   const min = 6;
@@ -46,7 +58,7 @@ export default function Room({ initialText = '' }) {
 
       <textarea
         value={text} onChange={(e) => setText(e.target.value)} rows={5}
-        placeholder="BLP2|…"
+        placeholder="BLP3|…"
         className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 font-mono text-xs text-slate-200"
       />
       {bad > 0 && <p className="text-xs text-rose-400">{bad} line{bad > 1 ? 's' : ''} not recognised.</p>}
@@ -68,6 +80,25 @@ export default function Room({ initialText = '' }) {
                 contracts run like it) · <strong className="text-white">{lucky} lucky</strong>
                 {held - reasoned - lucky > 0 && <> · {held - reasoned - lucky} from codes with no plan</>}.
                 {' '}{changed} of {withPlan.length} changed their plan during play.
+              </p>
+            </Card>
+          )}
+
+          {withDesk.length > 0 && (
+            <Card title="Ranges that held, by the tool used">
+              <ul className="divide-y divide-slate-800">
+                {byTool.map((t) => (
+                  <li key={t.name} className="flex items-center gap-3 py-1.5 text-sm">
+                    <span className="w-40 shrink-0 text-slate-200">{t.name}</span>
+                    <span className="flex-1 h-2 bg-slate-950 rounded-full overflow-hidden"><span className="block h-full bg-slate-300" style={{ width: `${(100 * t.held) / t.n}%` }} /></span>
+                    <span className="font-mono text-xs text-slate-300 w-20 text-right">{t.held} of {t.n}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-slate-400 mt-3">
+                Ranges that held: {avg(heldDesk.map((r) => r.desk.tabs))} tabs opened, {avg(heldDesk.map((r) => r.desk.minutes))} min on the briefing (average).
+                Ranges that missed: {avg(missedDesk.map((r) => r.desk.tabs))} tabs, {avg(missedDesk.map((r) => r.desk.minutes))} min.
+                {' '}{withDesk.filter((r) => r.desk.edited).length} of {withDesk.length} changed the numbers they were given.
               </p>
             </Card>
           )}

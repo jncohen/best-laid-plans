@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, planKept } from './engine';
+import { screenData, allForecasts, tabById, tabByLetter } from './desk.js';
+import { addToTrack } from './track';
 import { Card } from './ui';
 import { money } from './format';
 import { RevealChart, ForecastChart } from './charts';
@@ -50,6 +52,18 @@ export default function Reveal({ project, name, onReplay }) {
   const ninety = p.ninetyWeek();
   const outsideHeld = outcome >= past.p10 && outcome <= past.p90;
   const code = p.resultCode(name);
+  // How every tool on the desk would have done, for the plan the student stated.
+  const tools = allForecasts(screenData(), p.plan || playedPlan(p)).map((t) => ({
+    ...t, verdict: outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
+  }));
+  const usedTool = p.desk?.tool ? tabByLetter(p.desk.tool) : null;
+
+  // Keep score on this device, once per contract, for the Your Track Record tab.
+  useEffect(() => {
+    if (p.tracked) return;
+    p.tracked = true;
+    addToTrack({ seed: p.seedInput || p.seed.toString(36), week: f.week, low: f.low, high: f.high, outcome, held: outcome >= f.low && outcome <= f.high });
+  }, [p, f, outcome]);
   const [copied, setCopied] = useState(false);
   const delivered = p.result === 'DELIVERED';
   const played = playedPlan(p);
@@ -158,6 +172,28 @@ export default function Reveal({ project, name, onReplay }) {
           <div className="text-xs text-slate-500 mt-1">{s.late > 0 ? `${s.late} wk late` : 'On time'} · spent {money(p.spent)} of {money(c.budget)}</div>
         </Card>
       </div>
+
+      <Card title="How each tool on the desk would have done">
+        {p.desk && (
+          <p className="text-xs text-slate-400 mb-3">
+            You opened {p.desk.tabs} tool tab{p.desk.tabs === 1 ? '' : 's'}
+            {p.desk.order.length > 0 && <> ({p.desk.order.map((id) => tabById(id)?.name).filter(Boolean).join(' → ')})</>} and spent about {p.desk.minutes} minute{p.desk.minutes === 1 ? '' : 's'} before committing.{' '}
+            {usedTool ? <>You used the numbers from <strong className="text-white">{usedTool.name}</strong>{p.desk.edited ? ' and then changed them' : ''}.</> : p.desk.edited ? 'You set your own numbers.' : 'You kept the numbers the form started with.'}
+          </p>
+        )}
+        <ul className="divide-y divide-slate-800">
+          {tools.map((t) => (
+            <li key={t.key} className="flex items-baseline justify-between gap-2 py-1.5 text-sm">
+              <span className="text-slate-200 min-w-0">{t.name}</span>
+              <span className="font-mono text-xs text-slate-400 whitespace-nowrap">wk {t.week} ({t.low}–{t.high})</span>
+              <span className={`text-xs font-semibold w-20 text-right ${t.verdict === 'held' ? 'text-slate-100' : 'text-rose-300'}`}>
+                {t.verdict === 'held' ? 'held' : `missed ${t.verdict}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[11px] text-slate-500 mt-2">Each tool's 80% range for the plan you stated, against week {outcome}. The tools never knew this scenario.</p>
+      </Card>
 
       <Card title="Why: what your dashboard told you">
         <RevealChart
