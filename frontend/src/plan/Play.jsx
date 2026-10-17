@@ -53,6 +53,8 @@ export default function Play({ project, onPlay }) {
     setDeskTab('decide');
   };
   const openTab = (id) => {
+    // At most viewsPerWeek tool tabs a week; tabs already viewed this week stay open.
+    if (isCheck(id) && !seenTabs.includes(id) && seenTabs.filter(isCheck).length >= c.viewsPerWeek) return;
     setDeskTab(id);
     if (id !== 'decide' && !seenTabs.includes(id)) { setSeenTabs((t) => [...t, id]); p.noteDesk(nextWeek, id); }
     window.scrollTo(0, 0);
@@ -77,7 +79,7 @@ export default function Play({ project, onPlay }) {
       </header>
 
       <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} front={DECIDE} tabs={TABS.slice(1)}
-        checks={{ left: Math.max(0, c.freeChecks - seenTabs.filter(isCheck).length), when: 'this week', cost: Math.round(c.checkCost * 100) }} />
+        checks={{ left: Math.max(0, c.viewsPerWeek - seenTabs.filter(isCheck).length), limit: c.viewsPerWeek, when: 'this week', counts: isCheck }} />
 
       {deskTab !== 'decide' ? (
         <>

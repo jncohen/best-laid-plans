@@ -15,6 +15,8 @@ const TAB_TONE = {
  * as one more tool.
  */
 export default function TabStrip({ tab, opened, onOpen, front = TABS[0], tabs = TABS.slice(1), sticky = true, checks = null }) {
+  // A tab is locked once the week's views are used, unless it was already viewed (or doesn't count).
+  const locked = (t) => !!checks && checks.left <= 0 && checks.counts(t.id) && !opened.includes(t.id);
   const groups = [];
   for (const t of tabs) {
     const g = t.group || '';
@@ -42,10 +44,12 @@ export default function TabStrip({ tab, opened, onOpen, front = TABS[0], tabs = 
               {g.tabs.map((t) => {
                 const active = tab === t.id;
                 const [txt, bd] = TAB_TONE[t.tone] || ['text-white', 'border-white'];
+                const lock = locked(t);
                 return (
-                  <button key={t.id} type="button" role="tab" aria-selected={active} onClick={() => onOpen(t.id)}
-                    className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs border ${active ? `bg-slate-800 ${bd} ${txt} font-semibold` : `border-slate-800 ${opened.includes(t.id) ? 'text-slate-300' : 'text-slate-400'}`}`}>
-                    {t.name}
+                  <button key={t.id} type="button" role="tab" aria-selected={active} aria-disabled={lock} disabled={lock} onClick={() => onOpen(t.id)}
+                    title={lock ? `You've used your ${checks.limit} views ${checks.when}` : undefined}
+                    className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs border ${active ? `bg-slate-800 ${bd} ${txt} font-semibold` : lock ? 'border-slate-900 text-slate-600 line-through cursor-not-allowed' : `border-slate-800 ${opened.includes(t.id) ? 'text-slate-300' : 'text-slate-400'}`}`}>
+                    {lock ? '🔒 ' : ''}{t.name}
                   </button>
                 );
               })}
@@ -55,7 +59,7 @@ export default function TabStrip({ tab, opened, onOpen, front = TABS[0], tabs = 
       </div>
       {checks && (
         <div className={`text-[11px] mt-1 ${checks.left > 0 ? 'text-slate-400' : 'text-amber-300'}`}>
-          {checks.left > 0 ? `${checks.left} free check${checks.left === 1 ? '' : 's'} left ${checks.when}` : `No free checks left ${checks.when}: each new tool tab costs about ${checks.cost}% of a crew's output`}
+          {checks.left > 0 ? `${checks.left} view${checks.left === 1 ? '' : 's'} left ${checks.when}` : `You've used your ${checks.limit} views ${checks.when}. The tabs you've viewed stay open.`}
         </div>
       )}
     </nav>

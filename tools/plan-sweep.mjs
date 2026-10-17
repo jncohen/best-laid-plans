@@ -33,7 +33,7 @@
  *   12. Bankruptcy (past the credit line) never hits a plan that wins: no strategy
  *      on time >= 40% of the time goes bankrupt in more than 5% of runs.
  */
-import { Project, CONFIG, COMMON_PLANS, pastContracts, historyMean, lastContract, matchContracts, planFromProject } from '../frontend/src/plan/engine.js';
+import { Project, CONFIG, COMMON_PLANS, pastContracts, historyMean, lastContract, matchContracts, planFromProject, playedPlan } from '../frontend/src/plan/engine.js';
 import { screenData, allForecasts, statusReport, records } from '../frontend/src/plan/desk.js';
 import { adaptive as adaptivePolicy } from './adaptive-policy.mjs';
 // SWEEP_CFG='{"budget":4600000,...}' tries candidate CONFIG values (exploration only; the game uses CONFIG as committed).
@@ -252,9 +252,10 @@ function playStudent(type, seed, i) {
       p.noteDesk(w, 'records'); p.noteDesk(w, 'status');
       const d = adaptivePolicy(p, w);
       if (d.projected !== null) {
-        const done = p.reportedPct(), rec = records(SCREEN, PLAN).matched;
-        const mid = (1 - done) * rec.week + done * d.projected;
-        const half = Math.max(1, ((rec.high - rec.low) / 2) * (1 - 0.6 * done));
+        const done = p.reportedPct(), rec = records(SCREEN, playedPlan(p)).matched;
+        const trust = Math.min(1, Math.sqrt(done) * FC.trust);
+        const mid = (1 - trust) * rec.week + trust * d.projected;
+        const half = Math.max(FC.minHalf, (Math.max(FC.baseHalf, (rec.high - rec.low) / 2) + Math.abs(d.projected - rec.week) * FC.spread) * (1 - FC.shrink * done));
         const week = Math.round(mid);
         f = { week, low: Math.floor(mid - half), high: Math.ceil(mid + half), chance: mid <= CONFIG.deadline - 0.5 ? 70 : mid <= CONFIG.deadline + 0.5 ? 40 : 10 };
       }
@@ -265,7 +266,8 @@ function playStudent(type, seed, i) {
   }
   return p;
 }
-const STUDENTS = { anchor: 'Anchor (pace, plays the plan)', 'record-coast': 'Record and coast', 'ai-coast': 'AI and coast', adaptive: 'Adaptive (2 checks a week)' };
+const FC = { trust: 1, minHalf: 1, baseHalf: 1.5, spread: 0.3, shrink: 0.5, ...JSON.parse(process.env.FC || '{}') };
+const STUDENTS = { anchor: 'Anchor (pace, plays the plan)', 'record-coast': 'Record and coast', 'ai-coast': 'AI and coast (3 tabs)', adaptive: 'Adaptive (2 views a week)' };
 const studentRows = {};
 for (const type of Object.keys(STUDENTS)) {
   const ps = Array.from({ length: STUDENT_N }, (_, i) => playStudent(type, 50000 + i, i));
@@ -286,7 +288,7 @@ checks.push(
     `adaptive ${A.delivery.toFixed(1)}, record-coast ${RC.delivery.toFixed(1)}, AI-coast ${AC.delivery.toFixed(1)}`],
   ['15. Neither coasting type is best on both Updating and Delivery', !['record-coast', 'ai-coast'].some((k) => bestOn('updating') === k && bestOn('delivery') === k),
     `best Updating: ${STUDENTS[bestOn('updating')]}; best Delivery: ${STUDENTS[bestOn('delivery')]}`],
-  ['16. A careful player is calibrated within the check budget (adaptive weekly ranges hold >= 70%)', A.weeklyHeld >= 0.7, `adaptive weekly ranges held ${pct(A.weeklyHeld)}; week-1 range held ${pct(A.held)}`],
+  ['16. A careful player is calibrated within 3 views a week (adaptive weekly ranges hold >= 70%)', A.weeklyHeld >= 0.7, `adaptive weekly ranges held ${pct(A.weeklyHeld)}; week-1 range held ${pct(A.held)}`],
 );
 
 console.log('\n=== TARGETS ===');

@@ -35,10 +35,10 @@ favour of a show of hands. It is not live until it is merged into
    - **The Contract** (second) has the terms, every disclosure and both scores;
    - **Last 5 Contracts** has the last contract's six-week pace and its story;
    - **Records** has all 40 past contracts.
-3. Before committing they may open any of the tool tabs (below), or none. Attention
-   is budgeted: 5 free tool checks before week 1, then 2 a week. Each extra check
-   takes the manager off the floor and costs about a quarter of one crew's output
-   that week. The Contract and Ask an AI are always free. Each
+3. Before committing they may open up to 3 tool tabs (below), or none. Attention is
+   limited: at most 3 tool tabs a week, the same before week 1. Once 3 are used, the
+   other tabs lock until the next week. The Contract, Ask an AI and re-opening a tab
+   already viewed that week don't count. Each
    tool computes a forecast from what the briefing shows and nothing else. Like real
    tools, the tabs carry no labels about what they can and can't see; the reveal
    lists that for each one. "Use this on my prediction" copies a tool's numbers
@@ -108,17 +108,19 @@ for projecting a tab in class.
 - **Events.** About half of contracts lose a crew for 2 weeks (still paid), somewhere
   in weeks 3–9. About 40% hit a parts delay that idles half the line for a week, in
   weeks 4–10. Both are drawn from the scenario code before play.
-- **Attention.** 5 free tool checks before week 1, then 2 a week; each extra check
-  costs about a quarter of one crew's output that week.
+- **Attention.** At most 3 tool tabs a week (3 before week 1). It costs nothing; the
+  rest simply lock until next week.
 - **Bankruptcy.** The company can overspend the budget by up to $0.5M on credit. If a
   week's payroll would take it past that, it can't pay its crews: it goes bankrupt
   and the contract ends. During play, a warning appears before a week that would do
   this.
 - Scores: **Forecast** = 100 − 8 × |outcome − point| − 20 if the range missed − 40 ×
   Brier score of the week-12 chance, for the forecast committed before week 1.
-  **Updating** scores each forecast in force during play the same way (the Brier
-  term only while week 12 is still possible), averaged with week w weighted w + 1,
-  so later forecasts count more. **Delivery** = 100 − 12 per week late − 1 per
+  **Updating** scores each forecast in force during play as 100 − 8 × |error| − 3 ×
+  the interval score of its 80% range − 40 × Brier (the Brier only while week 12 is
+  still possible), averaged with week w weighted w + 1, so later forecasts count more.
+  The interval (Winkler) score is the range's width plus 10 × how far the outcome
+  falls outside it: narrow ranges that hold score best. **Delivery** = 100 − 12 per week late − 1 per
   $50k over budget, or 0 if the contract was terminated or the company went bankrupt.
   A terminated or bankrupt contract's outcome is the week it would have taken at the
   final pace.
@@ -208,10 +210,15 @@ backlog, crews and week.
 
 With the desk build's rules (a $4.60M budget, new-crew onboarding, wider contract
 differences and the events) the record has:
-- a median of week 15 and a 10th–90th percentile range of weeks 11–23;
-- 8 of 40 on time;
-- 8 of 40 bankrupt. A contract never accepted counts as later than any delivered
-  one: week 23.
+- 8 of 40 never delivered (8 bankrupt, none terminated), listed and counted as such;
+- among the 32 delivered, a median of week 14 and a 10th–90th percentile range of
+  weeks 11–19;
+- 8 of 40 on time.
+
+Every median, range and percentile on the desk is computed from delivered
+contracts only. This covers the Records summary, the dot strip, Last 5, Mabel,
+Analytics, the matching and the simulator's historical slip. On-time shares are out
+of all contracts, with a failure counting as not on time. The screen says so.
 
 The last contract (#40) read 100% in week 12 and was accepted in week 16, with 20
 units rejected. Its first six weeks averaged 20.6 a week. Live 1.1.0 and Monday's

@@ -6,6 +6,8 @@ import Play from './src/plan/Play.jsx';
 import Reveal from './src/plan/Reveal.jsx';
 import { TABS, screenData, liveScreen } from './src/plan/desk.js';
 import DeskTab from './src/plan/DeskTabs.jsx';
+import TabStrip from './src/plan/DeskStrip.jsx';
+import { isCheck } from './src/plan/engine.js';
 
 let fails = 0;
 const ok = (n, fn) => {
@@ -15,6 +17,11 @@ const ok = (n, fn) => {
 
 console.log('Render checks');
 ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
+ok('Tab strip: with 3 views used, unviewed tool tabs are locked and say so', () => {
+  const h = renderToString(<TabStrip tab="status" opened={['status', 'records', 'last5']} onOpen={() => {}} checks={{ left: 0, limit: 3, when: 'this week', counts: isCheck }} />);
+  if (!h.includes('used your 3 views this week') || (h.match(/disabled=""/g) || []).length < 8 || /disabled=""[^>]*>[^<]*The Contract/.test(h)) throw new Error('locking wrong');
+  return h;
+});
 {
   // Every desk tab during play, recomputed from the week's dashboard.
   const p = new Project('ledger');
@@ -91,7 +98,7 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
   const strip = (h) => h.replace(/<!-- -->/g, '').replace(/&#x27;/g, "'").replace(/<\/?(strong|span)[^>]*>/g, '');
   ok('Before week 1, The Contract states every rule and both scores', () => {
     const h = strip(before('contract'));
-    for (const s of ['200', '12', '4', '$4.60M', '$500k', 'New crews work at 50%', 'lose a crew', 'parts delay', 'free tool checks', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Forecast', 'Delivery', 'costs double']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    for (const s of ['200', '12', '4', '$4.60M', '$500k', 'New crews work at 50%', 'lose a crew', 'parts delay', 'tool tabs each week', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Forecast', 'Delivery', 'costs double']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     return h;
   });
   ok('Before week 1, Last 5 Contracts gives the pace and the last contract’s story', () => {
@@ -101,8 +108,8 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
   });
   ok('Before week 1, Records gives the 40 contracts, their dot strip and summary', () => {
     const h = strip(before('records'));
-    for (const s of ['All 40 contracts', 'median week 15', 'percentile weeks 11–23', '20% made week 12']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
-    if ((before('records').match(/rounded-full/g) || []).length < 40) throw new Error('dot strip missing');
+    for (const s of ['All 40 contracts', 'median week 14', 'percentile weeks 11–19', 'of the 32 delivered', '20% made week 12', '8 of 40 never delivered (8 bankrupt)', 'counts as not on time']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    if ((before('records').match(/rounded-full/g) || []).length < 32) throw new Error('dot strip missing (one dot per delivered contract)');
     return h;
   });
   const C3 = { crews: 3, inspect: 0.1, shift: 'none' };

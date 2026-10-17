@@ -5,7 +5,7 @@ import {
   statusReport, costManagement, schedule, lastFive, teamChat, aiPrompt,
   scenarios, riskRegister, analytics, riskSimulator, consensus, FORECASTERS, FORECASTER_NAMES, tabById,
 } from './desk.js';
-import { CONFIG, pastContracts, describePlan, onboardingRule, eventRules, attentionRule } from './engine';
+import { CONFIG, pastContracts, describePlan, onboardingRule, eventRules, attentionRule, failuresLine } from './engine';
 import { Card } from './ui';
 import { money } from './format';
 import Records from './Records';
@@ -259,7 +259,10 @@ function Last5Tab({ S, onUse }) {
           </li>
         ))}
       </ul>
-      <p className="text-[11px] text-slate-500 mt-2">These are records #{L.rows[0].id}–#{N.id}, the newest in the Records tab. "Use this" takes their median, with the earliest and latest of the five as the range.</p>
+      <p className="text-[11px] text-slate-500 mt-2">
+        These are records #{L.rows[0].id}–#{N.id}, the newest in the Records tab.{L.summary.failed.total ? ` ${failuresLine(L.summary)}; weeks are from the delivered ones.` : ''}
+        {' '}"Use this" takes their median, with the earliest and latest delivered as the range.
+      </p>
     </Frame>
   );
 }
@@ -425,7 +428,7 @@ function AnalyticsTab({ S, plan, onUse, planNote }) {
         <circle cx={x(plan.crews)} cy={y(a.predicted)} r="7" fill="none" stroke="#fff" strokeWidth="2" />
         {[0, 1, 2, 3].map((c) => <text key={c} x={x(c)} y={h - 6} textAnchor="middle" {...svgText}>+{c} crews</text>)}
       </svg>
-      <p className="text-[11px] text-slate-500">OLS: week accepted on crews added, inspection (any, and share) and second shift, across the 40. Line: fitted for your inspection and shift. 80% prediction interval ±{(1.306 * a.se).toFixed(1)} weeks.</p>
+      <p className="text-[11px] text-slate-500">OLS: week accepted on crews added, inspection (any, and share) and second shift, across the {a.n} delivered past contracts. Line: fitted for your inspection and shift. 80% prediction interval ±{(1.306 * a.se).toFixed(1)} weeks.</p>
     </Frame>
   );
 }

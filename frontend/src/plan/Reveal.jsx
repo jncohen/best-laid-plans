@@ -175,7 +175,7 @@ export default function Reveal({ project, onReplay }) {
         </Card>
         <Card title="Updating score" tone="emerald">
           <div className="text-4xl font-bold font-mono text-white">{s.updating}</div>
-          <div className="text-xs text-slate-500 mt-1">Your forecasts week by week; later weeks count more</div>
+          <div className="text-xs text-slate-500 mt-1">Your forecasts week by week, later weeks counting more. Narrow ranges that hold score best.</div>
         </Card>
         <Card title="Delivery score">
           <div className="text-3xl font-bold font-mono text-slate-300">{s.delivery}</div>

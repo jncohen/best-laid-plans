@@ -4,8 +4,9 @@
 // It reads only what the play screen shows: each week's units built, defects found,
 // units rejected, crews, inspection, shift, scope added, events, budget and units left.
 export function adaptive(p, w, k = {}) {
+  k = { ...JSON.parse((typeof process !== 'undefined' && process.env.ADAPT) || '{}'), ...k };
   const c = p.cfg, h = p.history;
-  const A = { open: 3, inspect: 0.1, target: 11.6, scope: 17, rework: 3.5, reworkInspected: 1.8, findsTypical: 0.07, findsHigh: 0.11, findsLow: 0.04, lastHire: 8, releaseFrom: 4, release: 1.2, cash: 0.9, ...k };
+  const A = { open: 3, inspect: 0.1, target: 11.6, scope: 17, rework: 3.5, reworkInspected: 1.8, findsTypical: 0.07, findsHigh: 0.11, findsLow: 0.04, lastHire: 8, releaseFrom: 4, release: 1.2, cash: 0.55, ...k };
   if (w === 1) return { hire: A.open, inspect: A.inspect, projected: null };
   // The line's rate per crew-week, from clean weeks: no onboarding, no crew out, no parts delay.
   let built = 0, effort = 0;
@@ -47,7 +48,8 @@ export function adaptive(p, w, k = {}) {
   // Near the end, keep only the crews the last of the work needs.
   const needed = Math.max(1, Math.ceil(p.backlog / Math.max(1, perCrew * (1 - inspect))));
   if (hire <= 0 && tested && p.crews > needed) hire = -Math.min(p.crews - needed, p.crews - 1);
-  if (hire === 0 && p.crews > 1 && !affordable(p.crews, 0)) hire = -1;
+  // Shed a crew to stay solvent only if the smaller line still finishes before the customer would terminate.
+  if (hire === 0 && p.crews > 1 && !affordable(p.crews, 0) && finish(p.crews - 1, inspect, 0).at <= c.horizon - 1) hire = -1;
   const now = finish(p.crews + hire, inspect, Math.max(0, hire));
   const shift = w >= 9 && now.at > c.deadline && now.at < c.deadline + 2 && cashFor(p.crews, now.weeks, 0) + p.crews * c.shiftPremiumPerCrew * 3 <= limit;
   // The projected acceptance week, for a forecaster who uses the same reading of the screen.

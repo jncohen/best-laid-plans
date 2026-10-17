@@ -53,6 +53,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const intervalOk = forecastSet && low <= week && week <= high;
 
   const open = (id) => {
+    // At most viewsBeforeWeek1 tool tabs before week 1; tabs already viewed stay open.
+    if (isCheck(id) && !opened.includes(id) && opened.filter(isCheck).length >= c.viewsBeforeWeek1) return;
     setTab(id);
     if (id !== 'commit') setOpened((o) => (o.includes(id) ? o : [...o, id]));
     window.scrollTo(0, 0);
@@ -68,7 +70,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const commit = () => {
     const given = loaded ? loaded.numbers : null;
     const edited = !given || given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
-    const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', tabs: opened.length, minutes: (Date.now() - startedAt) / 60000, edited, copied, order: opened };
+    const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', tabs: opened.filter(isCheck).length, minutes: (Date.now() - startedAt) / 60000, edited, copied, order: opened };
     onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim());
   };
   const deskPlan = planReady ? plan : { crews: 0, inspect: 0, shift: 'none' };
@@ -83,7 +85,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
       </header>
 
       <TabStrip tab={tab} opened={opened} onOpen={open}
-        checks={{ left: Math.max(0, c.freeChecksBeforeWeek1 - opened.filter(isCheck).length), when: 'before week 1', cost: Math.round(c.checkCost * 100) }} />
+        checks={{ left: Math.max(0, c.viewsBeforeWeek1 - opened.filter(isCheck).length), limit: c.viewsBeforeWeek1, when: 'before week 1', counts: isCheck }} />
 
       {tab !== 'commit' ? (
         <>

@@ -75,11 +75,13 @@ export const CONFIG = {
   delayShare: 0.5,
   delayWeekRange: [4, 10],
 
-  // Attention: tool checks are free up to a weekly allowance; each extra one takes the manager
-  // off the floor and costs checkCost of one crew's output that week.
-  freeChecks: 2,
-  freeChecksBeforeWeek1: 5,
-  checkCost: 0.25,
+  // Attention: at most this many tool tabs can be viewed each week (and before week 1).
+  // The front tab, The Contract and Ask an AI don't count; re-opening a tab that week is free.
+  viewsPerWeek: 3,
+  viewsBeforeWeek1: 3,
+
+  // Updating score: weight on the interval score of each weekly 80% range
+  updatingIntervalWeight: 3,
 
   // Delivery score
   latePenaltyPerWeek: 12,
@@ -197,19 +199,9 @@ export class Project {
     this.deskLog.push({ week: +week, tab: String(tab) });
   }
 
-  /** Tool checks counted against a week's allowance: distinct tool tabs opened (not The Contract, not Ask an AI). */
+  /** Tool views used in a week: distinct tool tabs opened (not The Contract, not Ask an AI). Never read by play(). */
   checksFor(week) {
     return [...new Set(this.deskLog.filter((d) => d.week === week).map((d) => d.tab))].filter(isCheck).length;
-  }
-
-  /** Checks beyond the allowance before a week is played; before week 1, beyond the briefing's larger allowance (charged to week 1). */
-  extraChecks(week) {
-    const c = this.cfg;
-    if (week === 1) {
-      const before = this.desk ? [...new Set(this.desk.order)].filter(isCheck).length : 0;
-      return Math.max(0, before - c.freeChecksBeforeWeek1) + Math.max(0, this.checksFor(1) - c.freeChecks);
-    }
-    return Math.max(0, this.checksFor(week) - c.freeChecks);
   }
 
   /** Records roughly how many seconds a week took before it was played. Never read by play(). */
@@ -275,9 +267,7 @@ export class Project {
     const lineCrews = c.onboardingDrag === 'new' && this.onboarding > 0
       ? this.crews - out - this.newCrews * (1 - c.onboardingFactor)
       : this.crews - out;
-    const extraChecks = this.extraChecks(this.week);
-    if (extraChecks > 0) events.push(`You spent time on ${extraChecks} extra tool check${extraChecks === 1 ? '' : 's'}: about ${Math.round(extraChecks * c.checkCost * 100)}% of a crew's output this week.`);
-    const capacity = Math.max(0, lineCrews - extraChecks * c.checkCost) * c.unitsPerCrew * this.productivity
+    const capacity = lineCrews * c.unitsPerCrew * this.productivity
       * (delayed ? 1 - c.delayShare : 1)
       * (1 - c.coordinationLoss * Math.max(0, this.crews - c.crews))
       * (c.onboardingDrag !== 'new' && this.onboarding > 0 ? c.onboardingFactor : 1)
@@ -456,19 +446,24 @@ export function playSummary(p) {
 }
 
 /**
+ * The interval (Winkler) score of an 80% range: its width, plus 2/0.2 = 10 times how
+ * far the outcome falls outside it. Lower is better: narrow ranges that hold score best.
+ */
+export const intervalScore = (low, high, outcome) => (high - low) + 10 * Math.max(0, low - outcome) + 10 * Math.max(0, outcome - high);
+
+/**
  * The Updating score: each forecast in force during play (the commitment, then each
- * week's running forecast), scored as the commitment is (100 − 8 × |error| − 20 if the
- * range missed − 40 × Brier of the week-12 chance, the Brier only while week 12 was still
- * possible), averaged with week w weighted w + 1, so later forecasts count more.
+ * week's running forecast) scored as 100 − 8 × |error| − updatingIntervalWeight ×
+ * interval score − 40 × Brier of the week-12 chance (the Brier only while week 12 was
+ * still possible), floored at 0 and averaged with week w weighted w + 1.
  */
 export function updatingScore(log, outcome, onTime, cfg = CONFIG) {
   if (!log || !log.length) return null;
   let total = 0, weight = 0;
   for (const e of log) {
     const low = e.low ?? e.forecast, high = e.high ?? e.forecast;
-    const held = outcome >= low && outcome <= high;
     const brier = e.week < cfg.deadline && e.chance !== undefined ? (Math.max(0, Math.min(1, e.chance / 100)) - (onTime ? 1 : 0)) ** 2 : 0;
-    const s = Math.max(0, 100 - 8 * Math.abs(outcome - e.forecast) - (held ? 0 : 20) - 40 * brier);
+    const s = Math.max(0, 100 - 8 * Math.abs(outcome - e.forecast) - cfg.updatingIntervalWeight * intervalScore(low, high, outcome) - 40 * brier);
     total += (e.week + 1) * s;
     weight += e.week + 1;
   }
@@ -479,7 +474,7 @@ export function updatingScore(log, outcome, onTime, cfg = CONFIG) {
 export const isCheck = (tab) => !!tab && tab !== 'contract' && tab !== 'ai' && tab !== 'ai-copy' && !tab.startsWith('use:');
 
 /** The attention rule, in the briefing's words. */
-export const attentionRule = (c = CONFIG) => `Each week you have ${c.freeChecks} free tool checks (${c.freeChecksBeforeWeek1} before week 1, to read the briefing). Each extra check takes you off the floor: about ${Math.round(c.checkCost * 100)}% of one crew's output that week. The Contract and Ask an AI are always free.`;
+export const attentionRule = (c = CONFIG) => `You can view at most ${c.viewsPerWeek} tool tabs each week (${c.viewsBeforeWeek1} before week 1). Re-opening a tab you've already viewed that week is free, and so are The Contract and Ask an AI.`;
 
 /** The onboarding rule, in the briefing's words. */
 export const onboardingRule = (c = CONFIG) => (c.onboardingDrag === 'new'
@@ -491,6 +486,14 @@ export const eventRules = (c = CONFIG) => [
   c.crewOutChance > 0 && `About ${Math.round(c.crewOutChance * 100)}% of contracts lose a crew for ${c.crewOutWeeks} weeks, starting somewhere in weeks ${c.crewOutWeekRange[0]}–${c.crewOutWeekRange[1]}. You still pay it.`,
   c.delayChance > 0 && `About ${Math.round(c.delayChance * 100)}% of contracts hit a parts delay that idles ${Math.round(c.delayShare * 100)}% of the line for one week, somewhere in weeks ${c.delayWeekRange[0]}–${c.delayWeekRange[1]}.`,
 ].filter(Boolean);
+
+/** "3 of 40 never delivered (2 bankrupt, 1 terminated)", or null when all were delivered. */
+export function failuresLine(sum) {
+  const f = sum.failed;
+  if (!f || !f.total) return null;
+  const parts = [f.bankrupt && `${f.bankrupt} bankrupt`, f.terminated && `${f.terminated} terminated`].filter(Boolean).join(', ');
+  return `${f.total} of ${sum.n} never delivered (${parts})`;
+}
 
 // ── The Decision Desk, as recorded ───────────────────────────────────────────
 // What the student looked at before committing: the tool whose numbers they used (a
@@ -686,23 +689,25 @@ const rank = (sorted, q) => sorted[Math.max(0, Math.ceil(q * sorted.length) - 1)
 
 /** Count, median, 10-90 range, full range and on-time share for any set of contracts. */
 /**
- * The week a past contract counts as finishing, for the record's statistics. A contract
- * that was never accepted (bankrupt or terminated) counts as later than any delivered
- * one: the week after the customer's deadline for termination.
+ * Count, median, 10-90 range, full range and on-time share for any set of contracts.
+ * Weeks are taken from the contracts that were delivered; those never delivered
+ * (bankrupt or terminated) are counted separately. The on-time share is out of all of
+ * them, with a failure counting as not on time.
  */
-export const recordWeek = (r, cfg = CONFIG) => (r.delivered === false ? cfg.horizon + 1 : r.accepted);
-
 export function summarizeContracts(rows, cfg = CONFIG) {
-  const sorted = rows.map((r) => recordWeek(r, cfg)).sort((a, b) => a - b);
-  if (!sorted.length) return { n: 0, median: null, p10: null, p90: null, min: null, max: null, onTimeShare: null };
+  const delivered = rows.filter((r) => r.delivered !== false);
+  const failed = { total: rows.length - delivered.length, bankrupt: rows.filter((r) => r.bankrupt).length, terminated: rows.filter((r) => r.delivered === false && !r.bankrupt).length };
+  const sorted = delivered.map((r) => r.accepted).sort((a, b) => a - b);
+  const onTimeShare = rows.length ? rows.filter((r) => r.accepted <= cfg.deadline && r.delivered !== false).length / rows.length : null;
+  if (!sorted.length) return { n: rows.length, delivered: 0, failed, median: null, p10: null, p90: null, min: null, max: null, onTimeShare };
   return {
-    n: sorted.length,
+    n: rows.length, delivered: sorted.length, failed,
     median: rank(sorted, 0.5),
     p10: rank(sorted, 0.1),
     p90: rank(sorted, 0.9),
     min: sorted[0],
     max: sorted[sorted.length - 1],
-    onTimeShare: rows.filter((r) => r.accepted <= cfg.deadline && r.delivered !== false).length / rows.length,
+    onTimeShare,
   };
 }
 
@@ -711,7 +716,7 @@ export function pastContracts(cfg = CONFIG) {
   if (_past && cfg === CONFIG) return _past;
   const contracts = pastManagers(cfg.pastContracts)
     .map((m, i) => ({ ...contractRow(playManager(new Project(contractSeed(i, cfg.pastContracts), cfg), m), i + 1), habit: m.arch }));
-  const res = { contracts, weeks: contracts.map((r) => recordWeek(r, cfg)), ...summarizeContracts(contracts, cfg) };
+  const res = { contracts, weeks: contracts.filter((r) => r.delivered).map((r) => r.accepted), ...summarizeContracts(contracts, cfg) };
   if (cfg === CONFIG) _past = res;
   return res;
 }
@@ -728,7 +733,7 @@ export function planFromProject(p) {
 
 /**
  * The past contracts run like a plan ({crews, inspect, shift}). Tries the closest
- * match first and widens only until at least `min` contracts qualify:
+ * match first and widens only until at least `min` delivered contracts qualify:
  *   1. same crews added, inspection or not, second shift or not
  *   2. crews added within one
  *   3. inspection or not, second shift or not
@@ -748,7 +753,8 @@ export function matchContracts(plan, { min = 5, cfg = CONFIG } = {}) {
   ];
   for (const [rule, f] of rules) {
     const contracts = all.filter(f);
-    if (contracts.length >= min || rule === 'all contracts') return { rule, contracts, ...summarizeContracts(contracts, cfg) };
+    // Widen until at least `min` of the matches were delivered, so the weeks quoted rest on real outcomes.
+    if (contracts.filter((r) => r.delivered !== false).length >= min || rule === 'all contracts') return { rule, contracts, ...summarizeContracts(contracts, cfg) };
   }
   return null;
 }

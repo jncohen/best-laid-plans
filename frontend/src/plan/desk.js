@@ -11,7 +11,7 @@
  * The tools compute honestly. The inside-view ones are early because they cannot see
  * defects or the scope change, and each one says so on its face.
  */
-import { CONFIG, lastContract, pastContracts, matchContracts, summarizeContracts, normalizePlan, recordWeek } from './engine.js';
+import { CONFIG, lastContract, pastContracts, matchContracts, summarizeContracts, normalizePlan } from './engine.js';
 
 // ── What the screen shows ────────────────────────────────────────────────────
 const DISCLOSED = ['scope', 'deadline', 'horizon', 'crews', 'budget', 'creditLine', 'maxCrews', 'maxHirePerWeek', 'coordinationLoss', 'crewWeek', 'hireFee',
@@ -200,7 +200,7 @@ export function lastFive(S) {
   const sum = summarizeContracts(rows);
   return {
     forecast: { week: sum.median, low: sum.min, high: sum.max, chance: Math.round(100 * sum.onTimeShare) },
-    rows, newest: { ...rows[rows.length - 1], ...S.last, pace: +pace(S).toFixed(1) }, n: rows.length, deadline: R.deadline,
+    rows, summary: sum, newest: { ...rows[rows.length - 1], ...S.last, pace: +pace(S).toFixed(1) }, n: rows.length, deadline: R.deadline,
   };
 }
 
@@ -269,7 +269,7 @@ export function riskRegister(S, plan) {
         `Each crew beyond ${R.crews} costs every crew ${Math.round(R.coordinationLoss * 100)}%.`, p.crews > 0),
       risk('fatigue', 'Tired crews make more defects', p.shift === 'none' ? 0 : 1, p.shift === 'every' ? 3 : p.shift === 'late' ? 1 : 0,
         'From the second straight week of a second shift, more defects.', p.shift !== 'none'),
-      risk('late', 'Finishing after week 12', late / c.length, Math.max(0, q(c.map((r) => recordWeek(r)), 0.5) - R.deadline),
+      risk('late', 'Finishing after week 12', late / c.length, Math.max(0, q(c.filter((r) => r.delivered).map((r) => r.accepted), 0.5) - R.deadline),
         `${late} of ${c.length} past contracts missed week ${R.deadline}.`),
       risk('termination', 'Contract terminated', term / c.length, R.horizon - R.deadline,
         `After week ${R.horizon}. ${term} of ${c.length} past contracts were terminated.`),
@@ -292,12 +292,12 @@ function invert(M) {
   return m.map((r) => r.slice(n));
 }
 
-/** Analytics: OLS of week accepted on the plan's terms across the 40, with an 80% prediction interval. */
+/** Analytics: OLS of week accepted on the plan's terms across the delivered past contracts, with an 80% prediction interval. */
 export function analytics(S, plan) {
-  const R = S.rules, p = asPlan(plan), rows = S.contracts;
+  const R = S.rules, p = asPlan(plan), rows = S.contracts.filter((r) => r.delivered);
   const xOf = (crews, insp, shift) => [1, crews, insp > 0 ? 1 : 0, insp, shift ? 1 : 0];
   const X = rows.map((r) => xOf(r.crewsAdded, r.inspect, r.shiftWeeks > 0));
-  const y = rows.map((r) => recordWeek(r));
+  const y = rows.map((r) => r.accepted);
   const k = X[0].length, n = X.length;
   const XtXi = invert(Array.from({ length: k }, (_, i) => Array.from({ length: k }, (_, j) => X.reduce((a, r) => a + r[i] * r[j], 0))));
   const Xty = Array.from({ length: k }, (_, i) => X.reduce((a, r, m) => a + r[i] * y[m], 0));
@@ -315,7 +315,7 @@ export function analytics(S, plan) {
   return {
     forecast: { week: Math.round(yhat), low: Math.round(yhat - t * se), high: Math.round(yhat + t * se), chance: Math.round(100 * Phi((R.deadline + 0.5 - yhat) / se)) },
     coef: { intercept: b[0], crews: b[1], inspectAny: b[2], inspectShare: b[3], shift: b[4] }, predicted: +yhat.toFixed(1), se: +se.toFixed(2), r2: +r2.toFixed(2), n,
-    points: rows.map((r) => ({ crews: r.crewsAdded, accepted: recordWeek(r), inspect: r.inspect, shift: r.shiftWeeks > 0, fitted: fit(xOf(r.crewsAdded, r.inspect, r.shiftWeeks > 0)) })),
+    points: rows.map((r) => ({ crews: r.crewsAdded, accepted: r.accepted, inspect: r.inspect, shift: r.shiftWeeks > 0, fitted: fit(xOf(r.crewsAdded, r.inspect, r.shiftWeeks > 0)) })),
     line: [0, 1, 2, 3].map((c) => ({ crews: c, week: fit(xOf(c, p.inspect, p.shift !== 'none')) })),
   };
 }
@@ -332,10 +332,11 @@ export function analytics(S, plan) {
  */
 export function historicalSlips(S, plan) {
   const p = asPlan(plan);
-  const like = S.contracts.filter((c) => (c.inspect > 0) === (p.inspect > 0));
-  return (like.length >= 5 ? like : S.contracts).map((c) => {
+  const ok = S.contracts.filter((c) => c.delivered);
+  const like = ok.filter((c) => (c.inspect > 0) === (p.inspect > 0));
+  return (like.length >= 5 ? like : ok).map((c) => {
     const own = { crews: c.crewsAdded, inspect: c.inspect, shift: c.shiftWeeks > 0 ? 'late' : 'none' };
-    return recordWeek(c) - planModel(S, own, { scope: { week: c.scopeWeek, units: c.scopeUnits } });
+    return c.accepted - planModel(S, own, { scope: { week: c.scopeWeek, units: c.scopeUnits } });
   });
 }
 

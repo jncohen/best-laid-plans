@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CONFIG, matchContracts, summarizeContracts, describePlan } from './engine';
+import { CONFIG, matchContracts, summarizeContracts, describePlan, failuresLine } from './engine';
 import { DotStrip } from './ui';
 import { ANY, filterContracts, sortContracts } from './table.js';
 
@@ -52,17 +52,19 @@ export default function Records({ past, plan = null, onUse = null }) {
   return (
     <div className="space-y-3">
       <DotStrip
-        weeks={past.contracts.map((r) => r.accepted)} active={past.contracts.map((r) => ids.has(r.id))}
-        band={sum.n ? [sum.p10, sum.p90] : null} deadline={c.deadline}
+        weeks={past.contracts.filter((r) => r.delivered).map((r) => r.accepted)} active={past.contracts.filter((r) => r.delivered).map((r) => ids.has(r.id))}
+        band={sum.delivered ? [sum.p10, sum.p90] : null} deadline={c.deadline}
       />
 
       <p className="text-sm text-slate-300" aria-live="polite">
         {all ? `All ${sum.n} contracts` : `${sum.n} of ${past.contracts.length} contracts`}
-        {sum.n > 0 && <>: median <strong className="text-amber-300">week {sum.median}</strong>, 10th–90th percentile weeks{' '}
-          <strong className="text-amber-300">{sum.p10}–{sum.p90}</strong>, {Math.round(sum.onTimeShare * 100)}% made week {c.deadline}.</>}
+        {sum.delivered > 0 && <>: median <strong className="text-amber-300">week {sum.median}</strong>, 10th–90th percentile weeks{' '}
+          <strong className="text-amber-300">{sum.p10}–{sum.p90}</strong>{sum.failed.total ? ` (of the ${sum.delivered} delivered)` : ''}, {Math.round(sum.onTimeShare * 100)}% made week {c.deadline}.</>}
+        {failuresLine(sum) && <> <span className="text-rose-300">{failuresLine(sum)}.</span></>}
       </p>
-      {sum.n > 0 && sum.n < 5 && (
-        <p className="text-xs text-amber-200">Only {sum.n} contract{sum.n > 1 ? 's' : ''} match. That is too few to lean on: widen the filters.</p>
+      {sum.failed.total > 0 && <p className="text-[11px] text-slate-500 -mt-2">Weeks are from delivered contracts only. The on-time share is out of all {sum.n}; a contract never delivered counts as not on time.</p>}
+      {sum.n > 0 && sum.delivered < 5 && (
+        <p className="text-xs text-amber-200">Only {sum.delivered} delivered contract{sum.delivered === 1 ? '' : 's'} match. That is too few to lean on: widen the filters.</p>
       )}
       {sum.n === 0 && <p className="text-xs text-amber-200">No past contract was run this way.</p>}
       {match && (
@@ -90,7 +92,7 @@ export default function Records({ past, plan = null, onUse = null }) {
           All {past.contracts.length}
         </button>
       </div>
-      {onUse && sum.n > 0 && (
+      {onUse && sum.delivered > 0 && (
         <button type="button" onClick={() => onUse({ week: sum.median, low: sum.p10, high: sum.p90, chance: Math.round(100 * sum.onTimeShare) }, match ? 'contracts run like my plan' : all ? 'all 40' : 'filtered')}
           className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">
           Use these {sum.n} contracts on my prediction (week {sum.median}, {sum.p10}–{sum.p90}, {Math.round(100 * sum.onTimeShare)}%)
