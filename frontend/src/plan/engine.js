@@ -463,31 +463,62 @@ export function judgeForecast({ forecast: f, outcome, stated, played }, cfg = CO
   let coaster = null;
   if (isHandsOff(played)) {
     const rows = matched.contracts;
-    coaster = { n: rows.length, late: rows.filter((r) => !r.onTime).length, median: matched.median, min: matched.min, max: matched.max };
+    // Only contracts the record shows as run hands-off, whatever rule the match widened to.
+    const coasters = pastContracts(cfg).contracts.filter((r) => r.crewsAdded === 0 && r.inspect === 0 && r.shiftWeeks === 0);
+    const s = summarizeContracts(coasters, cfg);
+    coaster = { n: s.n, late: coasters.filter((r) => !r.onTime).length, median: s.median, min: s.min, max: s.max, matched: rows.length !== s.n ? { n: rows.length, late: rows.filter((r) => !r.onTime).length, median: matched.median, rule: matched.rule } : null };
   }
   return { held, kept, onRecord, verdict, why, matched, statedMatch, coaster };
 }
 
 // ── The outside view ─────────────────────────────────────────────────────────
-// Past contracts on the same line, run by managers with a spread of habits. Fixed
-// across seeds so the whole room sees the same record. Each common plan has enough
-// contracts (six or seven) that a student can find the ones run like their own.
-// [count, plan]: crews added in hireWeek, inspection share, second shift in weeks shiftFrom-shiftTo.
-const PAST_POLICIES = [
-  [7, { hire: 0, inspect: 0 }],                         // hands-off
-  [4, { hire: 0, inspect: 0.1 }],                       // inspection only
-  [3, { hire: 0, inspect: 0.2 }],
-  [5, { hire: 2, inspect: 0 }],                         // +2 crews
-  [2, { hire: 2, hireWeek: 2, inspect: 0 }],
-  [6, { hire: 3, inspect: 0 }],                         // +3 crews
-  [6, { hire: 3, inspect: 0.1 }],                       // +3 crews, 10% inspection
-  [1, { hire: 3, hireWeek: 2, inspect: 0.1 }],
-  [3, { hire: 0, inspect: 0, shiftFrom: 9, shiftTo: 11 }], // second shift
-  [2, { hire: 0, inspect: 0, shiftFrom: 8, shiftTo: 11 }],
-  [1, { hire: 0, inspect: 0, shiftFrom: 10, shiftTo: 11 }],
+// Past contracts on the same line, each run by a manager with habits of their own.
+// A manager is one of eight archetypes, with parameters drawn from a fixed seed, so
+// the record is the same for the whole room and on every scenario code. Managers
+// play week by week and react only to what their screen shows (reported backlog,
+// crews, the week), never to the hidden defects.
+const PAST_SEED = 476;
+const ARCHETYPES = [
+  ['coaster', 0.15], ['early hirer', 0.17], ['reactive hirer', 0.17], ['staged hirer', 0.08],
+  ['inspector', 0.13], ['shift runner', 0.15], ['hire + shift', 0.08], ['quality-first', 0.07],
 ];
 
-// The six plans the record is built to cover, in the terms the commit screen asks for.
+function makeManager(r) {
+  let u = r(), arch = ARCHETYPES[0][0];
+  for (const [k, w] of ARCHETYPES) { if ((u -= w) <= 0) { arch = k; break; } }
+  const pick = (a) => a[Math.floor(r() * a.length)];
+  const m = { arch, hire: 0, hireWeek: 1, react: false, stage: false, inspect: 0, inspectUntil: 99, shiftFrom: 99, shiftTo: 99 };
+  if (arch === 'early hirer') { m.hire = pick([1, 2, 2, 3, 3]); m.hireWeek = pick([1, 1, 2]); m.inspect = pick([0, 0, 0.1]); }
+  if (arch === 'reactive hirer') { m.react = true; m.hire = pick([1, 2, 3]); m.inspect = pick([0, 0, 0.1]); }
+  if (arch === 'staged hirer') { m.stage = true; m.hire = pick([2, 3]); m.inspect = pick([0, 0.1]); }
+  if (arch === 'inspector') { m.inspect = pick([0.1, 0.2, 0.3]); m.inspectUntil = pick([99, 8, 10]); }
+  if (arch === 'shift runner') { m.shiftFrom = pick([7, 8, 9, 10]); m.shiftTo = 11; m.inspect = pick([0, 0.1]); }
+  if (arch === 'hire + shift') { m.hire = pick([1, 2]); m.hireWeek = pick([1, 2, 3]); m.shiftFrom = pick([9, 10]); m.shiftTo = 11; }
+  if (arch === 'quality-first') { m.hire = pick([2, 3]); m.inspect = pick([0.1, 0.2]); m.inspectUntil = pick([9, 99]); }
+  return m;
+}
+
+/** One past manager runs a contract. A reactive hirer hires once, from week 4, when the reported backlog says the deadline will slip. */
+export function playManager(p, m) {
+  const c = p.cfg;
+  let reacted = false;
+  while (!p.done) {
+    const w = p.week + 1;
+    let hire = 0;
+    if (!m.react && !m.stage && w === m.hireWeek) hire = m.hire;
+    if (m.stage && (w === 1 || w === 4)) hire = Math.ceil(m.hire / 2);
+    if (m.react && !reacted && w >= 4 && w - 1 + p.backlog / Math.max(1, p.crews * c.unitsPerCrew) > c.deadline) { hire = m.hire; reacted = true; }
+    p.play({ hire, inspect: w <= m.inspectUntil ? m.inspect : 0, shift: w >= m.shiftFrom && w <= m.shiftTo });
+  }
+  return p;
+}
+
+export function pastManagers(n = CONFIG.pastContracts) {
+  const r = mulberry32(PAST_SEED);
+  return Array.from({ length: n }, () => makeManager(r));
+}
+
+// Six common plans, in the terms the commit screen asks for.
 export const COMMON_PLANS = [
   { key: 'hands-off', label: 'Hands-off', crews: 0, inspect: 0, shift: false },
   { key: 'inspect', label: 'Inspection only', crews: 0, inspect: 0.1, shift: false },
@@ -496,17 +527,6 @@ export const COMMON_PLANS = [
   { key: 'crews3-inspect', label: '+3 crews, 10% inspection', crews: 3, inspect: 0.1, shift: false },
   { key: 'shift', label: 'Second shift', crews: 0, inspect: 0, shift: true },
 ];
-
-// Round-robin over the plans, so neighbouring rows in the record differ.
-function pastPlanList(n) {
-  const left = PAST_POLICIES.map(([k]) => k);
-  const out = [];
-  while (out.length < n && left.some((k) => k > 0)) {
-    PAST_POLICIES.forEach(([, plan], k) => { if (left[k]-- > 0 && out.length < n) out.push(plan); });
-  }
-  while (out.length < n) out.push(PAST_POLICIES[out.length % PAST_POLICIES.length][1]);
-  return out;
-}
 
 export function playPolicy(project, { hire = 0, hireWeek = 1, shiftFrom = 99, shiftTo = 99, inspect = 0 }) {
   while (!project.done) {
@@ -568,8 +588,8 @@ export function summarizeContracts(rows, cfg = CONFIG) {
 let _past = null;
 export function pastContracts(cfg = CONFIG) {
   if (_past && cfg === CONFIG) return _past;
-  const contracts = pastPlanList(cfg.pastContracts)
-    .map((plan, i) => contractRow(playPolicy(new Project(`past-${i}`, cfg), plan), i + 1));
+  const contracts = pastManagers(cfg.pastContracts)
+    .map((m, i) => ({ ...contractRow(playManager(new Project(`past-${i}`, cfg), m), i + 1), habit: m.arch }));
   const res = { contracts, weeks: contracts.map((r) => r.accepted), ...summarizeContracts(contracts, cfg) };
   if (cfg === CONFIG) _past = res;
   return res;

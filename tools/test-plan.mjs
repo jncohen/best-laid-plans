@@ -2,7 +2,7 @@
 import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean, parseResultCode, playPolicy, matchContracts, planFromProject, summarizeContracts,
   encodePlan, decodePlan, normalizePlan, playedPlan, judgeForecast } from '../frontend/src/plan/engine.js';
 import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/plan/table.js';
-import { encodeDesk, decodeDesk } from '../frontend/src/plan/engine.js';
+import { encodeDesk, decodeDesk, pastManagers, playManager } from '../frontend/src/plan/engine.js';
 import { screenData, allForecasts, statusReport, schedule, lessonsLearned, records, analytics, riskSimulator, scenarios, consensus, aiAssistant, teamChat, budgetTracker, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
 
@@ -89,7 +89,8 @@ console.log('The numbers the lecture quotes');
   const past = pastContracts();
   t('all 40 past contracts: median 14', past.median === 14);
   t('all 40 past contracts: 10-90 range 12-17', past.p10 === 12 && past.p90 === 17);
-  t('all 40 past contracts: 6 on time', past.contracts.filter((r) => r.onTime).length === 6);
+  // 5 on time since the record became 40 seeded managers (decision-desk, Joe, Oct 17); 6 under the fixed recipes.
+  t('all 40 past contracts: 5 on time', past.contracts.filter((r) => r.onTime).length === 5);
 }
 
 console.log('The past contracts are a table');
@@ -116,8 +117,11 @@ console.log('Matching past contracts to a plan');
 {
   for (const cp of COMMON_PLANS) {
     const m = matchContracts(cp);
-    t(`${cp.label}: at least 5 contracts match closely`, m.rule === 'crews, inspection and shift' && m.n >= 5
-      && m.contracts.every((r) => r.crewsAdded === cp.crews && (r.inspect > 0) === (cp.inspect > 0) && (r.shiftWeeks > 0) === cp.shift));
+    // On the seeded-manager record no common plan has five exact matches; most match within one crew,
+    // and inspection-only widens to any crews with inspection.
+    const crewsOk = m.rule === 'inspection and shift' || m.contracts.every((r) => Math.abs(r.crewsAdded - cp.crews) <= 1);
+    t(`${cp.label}: at least 5 contracts match (n ${m.n}, ${m.rule})`, m.n >= 5 && m.rule !== 'all contracts'
+      && crewsOk && m.contracts.every((r) => (r.inspect > 0) === (cp.inspect > 0) && (r.shiftWeeks > 0) === cp.shift));
   }
   const odd = matchContracts({ crews: 5, inspect: 0.3, shift: true });
   t('an unusual plan still gets at least 5 contracts, under a wider rule', odd.n >= 5 && odd.rule !== 'crews, inspection and shift');
@@ -176,8 +180,11 @@ console.log('Fairness invariants');
   t('3. the past contracts are drawn by the same engine (their scope changes are the engine\'s own draws)', rebuilt);
   t('3. past scope changes come from the same distributions as the student\'s', past.contracts.every((r) => r.scopeWeek >= CONFIG.shockWeeks[0] && r.scopeWeek <= CONFIG.shockWeeks[1]
     && ((r.scopeUnits >= CONFIG.shockUnits[0] && r.scopeUnits <= CONFIG.shockUnits[1]) || (r.scopeUnits >= CONFIG.shockTailUnits[0] && r.scopeUnits <= CONFIG.shockTailUnits[1]))));
-  const fresh = playPolicy(new Project('past-0'), { hire: 0, inspect: 0 }).outcomeWeek();
-  t('3. a past contract replays to the same outcome in a fresh engine', fresh === past.contracts[0].accepted);
+  const managers = pastManagers();
+  t('3. every past contract replays to the same outcome in a fresh engine', managers.every((m, i) => playManager(new Project(`past-${i}`), m).outcomeWeek() === past.contracts[i].accepted));
+  t('3. the record’s managers are drawn from a fixed seed', JSON.stringify(pastManagers()) === JSON.stringify(managers) && new Set(managers.map((m) => m.arch)).size === 8);
+  t('3. the record has variety: at least 20 distinct plans, hires in week 1 and later', new Set(past.contracts.map((r) => `${r.crewsAdded}|${r.hires.map((h) => h.week)}|${r.inspect}|${r.shiftWeeks}`)).size >= 20
+    && past.contracts.some((r) => r.hires.some((h) => h.week >= 4)));
 }
 
 console.log('Plans in result codes');
@@ -210,7 +217,11 @@ console.log('The table summarises what matchContracts finds');
   const rows = pastContracts().contracts;
   for (const cp of COMMON_PLANS) {
     const m = matchContracts(cp);
-    const f = filterContracts(rows, filterForPlan(cp));
+    // The closest rule is the table's own filters; "crews within one" is three crew filters together.
+    const base = filterForPlan(cp);
+    const f = m.rule === 'crews, inspection and shift' ? filterContracts(rows, base)
+      : m.rule === 'inspection and shift' ? filterContracts(rows, { ...base, crews: 'any' })
+      : rows.filter((r) => [cp.crews - 1, cp.crews, cp.crews + 1].some((c) => filterContracts([r], { ...base, crews: c }).length));
     const s = summarizeContracts(f);
     t(`${cp.label}: table filter = matchContracts (n ${m.n}, median ${m.median}, ${m.p10}-${m.p90})`,
       JSON.stringify(f.map((r) => r.id)) === JSON.stringify(m.contracts.map((r) => r.id))
@@ -235,13 +246,16 @@ console.log('Verdicts on ledger');
   const pace = { week: 11, low: 10, high: 12, onTimeChance: 75 };
   const a = judge(pace, HANDS_OFF, { hire: 3, inspect: 0.1 });
   t('pace, stated hands-off, plays +3/10%: week 12, range held, Lucky (plan changed)', a.p.scores().outcome === 12 && a.j.held && a.j.verdict === 'lucky' && a.j.why === 'changed' && !a.j.coaster);
-  const b = judge({ week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 });
-  t('matched record for +3/10%, stated and played: Reasoned', b.j.verdict === 'reasoned' && b.j.matched.median === 13 && b.j.matched.p10 === 11 && b.j.matched.p90 === 14);
+  const mc = matchContracts(C3I);
+  const b = judge({ week: mc.median, low: mc.p10, high: mc.p90, onTimeChance: Math.round(100 * mc.onTimeShare) }, C3I, { hire: 3, inspect: 0.1 });
+  t(`matched record for +3/10% (${mc.median}, ${mc.p10}-${mc.p90}), stated and played: Reasoned`, b.j.held && b.j.verdict === 'reasoned' && b.j.matched.median === mc.median);
   const c = judge({ week: 14, low: 12, high: 17, onTimeChance: 15 }, HANDS_OFF, {});
   t('all-40 record, stated and played hands-off: week 17, held, Lucky (off the coasters\' record), coaster line', c.p.scores().outcome === 17 && c.j.held && c.j.verdict === 'lucky' && c.j.why === 'off-record'
-    && c.j.coaster && c.j.coaster.n === 7 && c.j.coaster.late === 7 && c.j.coaster.median === 17);
+    && c.j.coaster && c.j.coaster.n === 4 && c.j.coaster.late === 4 && c.j.coaster.median === 17);
+  const ho = pastContracts().contracts.filter((r) => r.crewsAdded === 0 && r.inspect === 0 && r.shiftWeeks === 0);
+  t('the coaster line counts only contracts the record shows as hands-off', c.j.coaster.n === ho.length && c.j.coaster.median === summarizeContracts(ho).median);
   const d = judge(pace, HANDS_OFF, {});
-  t('pace, stated and played hands-off: Missed, with the coaster line', d.j.verdict === 'missed' && d.j.coaster?.n === 7);
+  t('pace, stated and played hands-off: Missed, with the coaster line', d.j.verdict === 'missed' && d.j.coaster?.n === 4);
   const e = judge(pace, C3I, { hire: 3, inspect: 0.1 });
   t('pace with the best plan stated and played: still Lucky, not Reasoned', e.j.held && e.j.verdict === 'lucky');
   t('the verdict never changes a score', a.p.scores().forecast === 90 && judge(pace, C3I, { hire: 3, inspect: 0.1 }).p.scores().forecast === 90);
@@ -280,8 +294,9 @@ console.log('Desk numbers on ledger (work order, Oct 17)');
   t('Status Report: 10 (10-11) 95', f(statusReport(S).forecast) === '10 (10-11) 95');
   t('Schedule: hands-off 11 (10-12), +3/10% 9 (8-10)', f(schedule(S, HO).forecast).startsWith('11 (10-12)') && f(schedule(S, C3I).forecast).startsWith('9 (8-10)'));
   t('Lessons Learned: 17 (16-18) 10', f(lessonsLearned(S).forecast) === '17 (16-18) 10');
-  t('Records like my plan: hands-off 17 (15-20) 0, +3/10% 13 (11-14) 43', f(records(S, HO).matched) === '17 (15-20) 0' && f(records(S, C3I).matched) === '13 (11-14) 43');
-  t('Analytics: hands-off 17 (15-19) 0, +3/10% 13 (11-14) 45', f(analytics(S, HO).forecast) === '17 (15-19) 0' && f(analytics(S, C3I).forecast) === '13 (11-14) 45');
+  // On the seeded-manager record (Oct 17 lists had 17 (15-20) 0 / 13 (11-14) 43 and 17 (15-19) 0 / 13 (11-14) 45).
+  t('Records like my plan: hands-off 17 (15-19) 0, +3/10% 14 (12-15) 30', f(records(S, HO).matched) === '17 (15-19) 0' && f(records(S, C3I).matched) === '14 (12-15) 30');
+  t('Analytics: hands-off 17 (15-19) 0, +3/10% 13 (11-15) 39', f(analytics(S, HO).forecast) === '17 (15-19) 0' && f(analytics(S, C3I).forecast) === '13 (11-15) 39');
   t('Risk Simulator: hands-off 12 (11-12) 93, +3/10% 9 (9-10) 100', f(riskSimulator(S, HO).forecast) === '12 (11-12) 93' && f(riskSimulator(S, C3I).forecast) === '9 (9-10) 100');
   t('Scenarios: hands-off 11/12/15/17, +3/10% 9/9/10/12', scenarios(S, HO).rows.map((r) => r.week).join('/') === '11/12/15/17' && scenarios(S, C3I).rows.map((r) => r.week).join('/') === '9/9/10/12');
   t('Consensus of five, +3/10%: 12 (10-13)', f(consensus(S, C3I, ['records-all', 'records-plan', 'analytics', 'simulator', 'schedule']).forecast).startsWith('12 (10-13)'));

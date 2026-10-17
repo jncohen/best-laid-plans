@@ -143,6 +143,7 @@ export default function Reveal({ project, name, onReplay }) {
               <p className="text-sm text-amber-200 mt-3">
                 {j.coaster.n} past managers also ran it hands-off.{' '}
                 {j.coaster.late === j.coaster.n ? 'All were late' : `${j.coaster.late} of ${j.coaster.n} were late`}; median week {j.coaster.median}.
+                {j.coaster.matched && <> Counting managers who added at most one crew: {j.coaster.matched.n}, {j.coaster.matched.late === j.coaster.matched.n ? 'all' : j.coaster.matched.late} late, median week {j.coaster.matched.median}.</>}
               </p>
             )}
             <p className="text-[11px] text-slate-500 mt-3">The verdict is information. It does not change your scores.</p>
