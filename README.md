@@ -20,7 +20,11 @@ Written for DATA 790, Module 05: Imagining, Modeling, and Prediction.
    inspection, second shift), commits a forecast before week 1 (the acceptance week,
    an 80% range, and the chance of week 12) and plays week by week. The briefing's
    table of past contracts shows what each manager did; "Contracts run like my plan"
-   finds the ones like the student's.
+   finds the ones like the student's. The briefing is a tabbed Decision Desk: the
+   front tab is the plan and prediction, and 18 tool tabs (status report, Gantt,
+   team chat, AI assistant, records, Monte Carlo and so on) each compute a
+   forecast from what the briefing shows and nothing else, with what each can and
+   can't see on its face. "Use this" copies a tool's numbers into the prediction.
 3. At the end the game holds the result until the class reveals together. Each
    student then has a result code, and a verdict: Reasoned (range held, plan kept,
    forecast built on contracts run like it), Lucky (range held for another reason) or
@@ -30,9 +34,13 @@ Written for DATA 790, Module 05: Imagining, Modeling, and Prediction.
    student's range against the past contracts, whether each kept their plan, and how
    many held ranges were reasoned or lucky.
 
-Result codes (`BLP2|…`) carry the stated plan in three characters (`31n`: +3 crews,
-10% inspection, no second shift), plus the plan played if it differed. Older `BLP1`
-codes still parse.
+Result codes (`BLP3|…`) carry the stated plan in three characters (`31n`: +3 crews,
+10% inspection, no second shift), plus the plan played if it differed, and how the
+desk was used (`o7m6e`: took Analytics' numbers, opened 7 tool tabs, 6 minutes on the
+briefing, then edited the numbers). Older `BLP2` and `BLP1` codes still parse.
+
+`?tab=analytics` opens the briefing on one tab and `?plan=31n` pre-states a plan,
+for projecting a tab in class.
 
 ## Development
 
@@ -56,6 +64,7 @@ GitHub Pages.
 frontend/
   src/main.jsx          routes: the game, or #room
   src/plan/engine.js    the simulation; every tunable number is in CONFIG
+  src/plan/desk.js      the Decision Desk's tools, computed from the briefing alone
   src/plan/*.jsx        briefing, weekly play, reveal, room chart
   render-check.jsx      server-renders every screen
 tools/
