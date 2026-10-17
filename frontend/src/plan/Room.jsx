@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CONFIG, pastContracts, parseResultCode } from './engine';
+import { CONFIG, pastContracts, parseResultCode, judgeForecast, planKept } from './engine';
 import { Card } from './ui';
 
 /**
@@ -12,7 +12,9 @@ export default function Room({ initialText = '' }) {
   const past = pastContracts();
   const [text, setText] = useState(initialText);
 
-  const rows = useMemo(() => text.split(/\n+/).map(parseResultCode).filter(Boolean), [text]);
+  const rows = useMemo(() => text.split(/\n+/).map(parseResultCode).filter(Boolean).map((r) => (r.plan
+    ? { ...r, kept: planKept(r.plan, r.played), verdict: judgeForecast({ forecast: r, outcome: r.outcome, stated: r.plan, played: r.played }).verdict }
+    : { ...r, kept: null, verdict: null })), [text]);
   const bad = useMemo(() => text.split(/\n+/).filter((l) => l.trim() && !parseResultCode(l)).length, [text]);
 
   const n = rows.length;
@@ -23,6 +25,10 @@ export default function Room({ initialText = '' }) {
   const onTime = rows.filter((r) => r.delivered && r.outcome <= c.deadline).length;
   const outsideHeld = rows.filter((r) => r.outcome >= past.p10 && r.outcome <= past.p90).length;
   const med = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor((s.length - 1) / 2)] : null; };
+  const withPlan = rows.filter((r) => r.plan);
+  const reasoned = rows.filter((r) => r.verdict === 'reasoned').length;
+  const lucky = rows.filter((r) => r.verdict === 'lucky').length;
+  const changed = withPlan.filter((r) => !r.kept).length;
   const gaps = rows.filter((r) => r.ninetyWeek).map((r) => r.outcome - r.ninetyWeek);
 
   const min = 6;
@@ -40,7 +46,7 @@ export default function Room({ initialText = '' }) {
 
       <textarea
         value={text} onChange={(e) => setText(e.target.value)} rows={5}
-        placeholder="BLP1|…"
+        placeholder="BLP2|…"
         className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 font-mono text-xs text-slate-200"
       />
       {bad > 0 && <p className="text-xs text-rose-400">{bad} line{bad > 1 ? 's' : ''} not recognised.</p>}
@@ -55,7 +61,22 @@ export default function Room({ initialText = '' }) {
             <Card><div className="text-3xl font-bold font-mono text-amber-300">{Math.round((100 * outsideHeld) / n)}%</div><div className="text-xs text-slate-400">landed inside the past contracts' range</div></Card>
           </div>
 
+          {withPlan.length > 0 && (
+            <Card>
+              <p className="text-sm text-slate-300">
+                Of the {held} ranges that held: <strong className="text-white">{reasoned} reasoned</strong> (plan kept, forecast built on
+                contracts run like it) · <strong className="text-white">{lucky} lucky</strong>
+                {held - reasoned - lucky > 0 && <> · {held - reasoned - lucky} from codes with no plan</>}.
+                {' '}{changed} of {withPlan.length} changed their plan during play.
+              </p>
+            </Card>
+          )}
+
           <Card title={`Every forecast against what happened (n = ${n})`}>
+            <div className="grid grid-cols-[3.25rem_1fr] gap-x-2">
+            <div className="space-y-1.5 py-2 text-[10px] leading-4 text-slate-400">
+              {sorted.map((r, i) => <div key={i} className="h-4 truncate">{r.kept === null ? '' : r.kept ? 'kept' : 'changed'}</div>)}
+            </div>
             <div className="relative">
               <div className="absolute inset-y-0 bg-amber-500/10 border-x border-amber-500/30" style={{ left: x(past.p10), width: `calc(${x(past.p90)} - ${x(past.p10)})` }} />
               <div className="absolute inset-y-0 border-l-2 border-dashed border-rose-400/60" style={{ left: x(c.deadline) }} />
@@ -72,13 +93,15 @@ export default function Room({ initialText = '' }) {
                 })}
               </div>
             </div>
+            <div />
             <div className="relative h-4 text-[10px] text-slate-500 font-mono mt-1">
               {Array.from({ length: Math.floor((max - min) / 2) + 1 }, (_, i) => min + i * 2).map((w) => (
                 <span key={w} className="absolute -translate-x-1/2" style={{ left: x(w) }}>{w}</span>
               ))}
             </div>
+            </div>
             <p className="text-xs text-slate-500 mt-3">
-              Green bar: each student's 80% range. Dot: the week the customer accepted it (red if outside the range).
+              Left: whether each student kept the plan they stated. Green bar: each student's 80% range. Dot: the week the customer accepted it (red if outside the range).
               Amber band: where most past contracts landed. Dashed line: the deadline.
             </p>
           </Card>

@@ -1,8 +1,32 @@
 import { useState } from 'react';
-import { CONFIG, pastContracts } from './engine';
+import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, planKept } from './engine';
 import { Card } from './ui';
 import { money } from './format';
 import { RevealChart, ForecastChart } from './charts';
+
+const VERDICT = {
+  reasoned: ['Reasoned', 'Your range held because you forecast from contracts run like yours.'],
+  lucky: ['Lucky', 'Your range held, but not for the reason you gave.'],
+  missed: ['Missed', 'Your range missed.'],
+};
+
+/** One range on a shared week axis, with the outcome marked. */
+function RangeBar({ label, low, high, mid, outcome, tone, lo, hi }) {
+  const x = (w) => `${((Math.min(hi, Math.max(lo, w)) - lo) / (hi - lo)) * 100}%`;
+  const held = outcome >= low && outcome <= high;
+  return (
+    <div className="grid grid-cols-[7.5rem_1fr_3.5rem] items-center gap-2 py-1.5">
+      <div className="text-xs text-slate-300 leading-tight">{label}</div>
+      <div className="relative h-4">
+        <div className="absolute top-1.5 inset-x-0 h-px bg-slate-700" />
+        <div className={`absolute top-1 h-2 rounded ${tone}`} style={{ left: x(low), width: `calc(${x(high)} - ${x(low)})` }} />
+        {mid !== null && <div className="absolute top-0 w-0.5 h-4 bg-white/80" style={{ left: x(mid) }} />}
+        <div className="absolute inset-y-0 border-l-2 border-amber-200" style={{ left: x(outcome) }} />
+      </div>
+      <div className={`text-xs font-mono text-right ${held ? 'text-slate-200' : 'text-rose-300'}`}>{low}–{high}</div>
+    </div>
+  );
+}
 
 function Row({ label, children, verdict, good }) {
   return (
@@ -28,6 +52,12 @@ export default function Reveal({ project, name, onReplay }) {
   const code = p.resultCode(name);
   const [copied, setCopied] = useState(false);
   const delivered = p.result === 'DELIVERED';
+  const played = playedPlan(p);
+  const j = judgeForecast({ forecast: f, outcome, stated: p.plan, played });
+  const m = j.matched;
+  const [vTitle, vLine] = j.verdict ? VERDICT[j.verdict] : [null, null];
+  const lo = Math.floor(Math.min(f.low, past.p10, m.p10, outcome)) - 1;
+  const hi = Math.ceil(Math.max(f.high, past.p90, m.p90, outcome)) + 1;
 
   const end = Math.ceil(Math.max(outcome, c.deadline, past.p90)) + 1;
   const missText = s.held ? 'inside your 80% range' : s.missBy > 0 ? `${s.missBy} weeks past your 80% range` : `${-s.missBy} weeks before your 80% range`;
@@ -65,6 +95,46 @@ export default function Reveal({ project, name, onReplay }) {
           accepted. Amber band: where most past contracts landed — on your screen before week 1.
         </p>
       </Card>
+
+      {p.plan && (
+        <Card title="Your plan and your range" tone="amber">
+          <div className="text-sm text-slate-300 space-y-1">
+            <p><span className="text-slate-500">You said you would play:</span> {describePlan(p.plan)}.</p>
+            <p><span className="text-slate-500">You played:</span> {describePlan(played)}.{' '}
+              <strong className="text-white">{planKept(p.plan, played) ? 'Plan kept.' : 'Plan changed.'}</strong></p>
+          </div>
+          <div className="mt-3">
+            <RangeBar label="Your 80% range" low={f.low} high={f.high} mid={f.week} outcome={outcome} tone="bg-emerald-400/70" lo={lo} hi={hi} />
+            <RangeBar label={`All ${past.n} past contracts`} low={past.p10} high={past.p90} mid={past.median} outcome={outcome} tone="bg-amber-500/40" lo={lo} hi={hi} />
+            <RangeBar label={`${m.n} run like what you played`} low={m.p10} high={m.p90} mid={m.median} outcome={outcome} tone="bg-amber-400/80" lo={lo} hi={hi} />
+            <p className="text-[11px] text-slate-500 mt-1">Bars: 80% ranges (past contracts: 10th–90th percentile). White tick: point forecast or median. Gold line: week {outcome}, when it was accepted.</p>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-800">
+            <div className="text-[11px] uppercase tracking-wider text-slate-500">Verdict</div>
+            <div className="text-2xl font-bold text-white mt-0.5">{vTitle}</div>
+            <p className="text-sm text-slate-200 mt-1">{vLine}</p>
+            {j.why === 'changed' && (
+              <p className="text-xs text-slate-400 mt-1">You played a different plan from the one you stated. The contracts run like what you actually played said weeks {m.p10}–{m.p90}.</p>
+            )}
+            {j.why === 'off-record' && (
+              <p className="text-xs text-slate-400 mt-1">Contracts run like yours said week {m.median} (weeks {m.p10}–{m.p90}); your forecast of week {f.week} (weeks {f.low}–{f.high}) was not built on them.</p>
+            )}
+            {j.verdict === 'reasoned' && (
+              <p className="text-xs text-slate-400 mt-1">You kept your plan, and your forecast sat on the {m.n} contracts run like it: median week {m.median}, weeks {m.p10}–{m.p90}.</p>
+            )}
+            {j.verdict === 'missed' && (
+              <p className="text-xs text-slate-400 mt-1">The {m.n} past contracts run like what you played said week {m.median}, weeks {m.p10}–{m.p90}. They were on your screen before week 1.</p>
+            )}
+            {j.coaster && (
+              <p className="text-sm text-amber-200 mt-3">
+                {j.coaster.n} past managers also ran it hands-off.{' '}
+                {j.coaster.late === j.coaster.n ? 'All were late' : `${j.coaster.late} of ${j.coaster.n} were late`}; median week {j.coaster.median}.
+              </p>
+            )}
+            <p className="text-[11px] text-slate-500 mt-3">The verdict is information. It does not change your scores.</p>
+          </div>
+        </Card>
+      )}
 
       <Card>
         <Row label="Your 80% range" verdict={s.held ? 'Held' : 'Missed'} good={s.held}>

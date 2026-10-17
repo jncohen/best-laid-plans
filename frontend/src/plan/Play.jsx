@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CONFIG, pastContracts } from './engine';
+import { CONFIG, pastContracts, describePlan } from './engine';
 import { Card, Stat, Slider } from './ui';
 import { money, pct } from './format';
 import { ProgressSpark, ForecastChart } from './charts';
@@ -85,6 +85,7 @@ export default function Play({ project, onPlay }) {
 
       <Card title={`Decide week ${nextWeek}`}>
         <div className="space-y-5">
+          {p.plan && <p className="text-xs text-slate-400 -mb-2">Your stated plan: {describePlan(p.plan)}.</p>}
           <div>
             <div className="flex justify-between text-sm mb-1">
               <span className="text-slate-300">Crews</span>
