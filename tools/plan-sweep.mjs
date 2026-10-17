@@ -16,6 +16,8 @@
  *      staffing, and the most inspection is not the best.
  *   7. Reference-class matching works: for each common plan, the p10-p90 of the
  *      past contracts run like what was actually played holds the outcome >= 80%.
+ *      Exception: inspection-only needs >= 70%. Its match pools any crews with
+ *      inspection since record #40 became the hands-off last contract.
  *   8. Matching is as reliable as the whole record and sharper where the plan is far
  *      from typical: for hands-off and +3 crews with 10% inspection, the matched
  *      contracts' p10-p90 holds within 3 points as often as all 40, and is narrower.
@@ -159,7 +161,10 @@ const checks = [
   ['5. No dominant recipe (>= 3 within 6 pts of best)', vals.filter((r) => r.deliv >= best - 6).length >= 3, `${vals.filter((r) => r.deliv >= best - 6).length} within 6 of ${best.toFixed(1)}`],
   ['6. Some inspection beats none; most is not best', Math.max(rows['+2 crews, inspect 10%'].deliv, rows['+2 crews, inspect 20%'].deliv) > Math.max(rows['+2 crews'].deliv, rows['+2 crews, inspect 30%'].deliv),
     `0%: ${rows['+2 crews'].deliv.toFixed(1)}  10%: ${rows['+2 crews, inspect 10%'].deliv.toFixed(1)}  20%: ${rows['+2 crews, inspect 20%'].deliv.toFixed(1)}  30%: ${rows['+2 crews, inspect 30%'].deliv.toFixed(1)}`],
-  ['7. Matched p10-p90 holds >= 80% for each common plan', common.length === COMMON_PLANS.length && Math.min(...common.map((r) => r.matchHit)) >= 0.8,
+  // Inspection-only is held to 70%, not 80% (Joe, Oct 17): with record #40 the line's hands-off last contract,
+  // its match widens to any crews with inspection, pooling differently staffed contracts.
+  ['7. Matched p10-p90 holds >= 80% for each common plan (inspection-only >= 70%)', common.length === COMMON_PLANS.length
+    && common.every((r) => r.matchHit >= (r.plan === 'inspect' ? 0.7 : 0.8)),
     common.map((r) => `${r.plan} ${pct(r.matchHit)}`).join('  ')],
   ['8. Matched holds within 3 points of all 40, with a narrower range (hands-off; +3 crews, 10%)',
     [[ho, 'hands-off'], [c3i, 'crews3-inspect']].every(([r, k]) => r.matchHit >= r.ovHit - 0.03 && width(matchOf(k)) < width(past)),
