@@ -1,5 +1,7 @@
 // Tests for the game engine (frontend/src/plan/engine.js).
-import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean, parseResultCode, playPolicy, matchContracts, planFromProject, summarizeContracts } from '../frontend/src/plan/engine.js';
+import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean, parseResultCode, playPolicy, matchContracts, planFromProject, summarizeContracts,
+  encodePlan, decodePlan, normalizePlan, playedPlan, judgeForecast } from '../frontend/src/plan/engine.js';
+import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/plan/table.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond) => { if (cond) { pass++; console.log(`  ok   ${name}`); } else { fail++; console.log(`  FAIL ${name}`); } };
@@ -137,6 +139,110 @@ console.log('Scores and result codes');
   term.commit({ week: 12, low: 11, high: 13, onTimeChance: 50 });
   while (!term.done) term.play({ hire: -3, inspect: 0.3 });
   t('a terminated contract scores 0 on delivery and projects a later outcome', term.result !== 'TERMINATED' || (term.scores().delivery === 0 && term.outcomeWeek() > CONFIG.horizon - 1));
+}
+
+console.log('Fairness invariants');
+{
+  const world = (p) => JSON.stringify([p.shockWeek, p.shockTail, p.shockSize, p.productivity, p.defectProne, p._noise]);
+  const forecasts = [{ week: 8, low: 6, high: 9, onTimeChance: 100 }, { week: 12, low: 11, high: 13, onTimeChance: 50 }, { week: 20, low: 15, high: 24, onTimeChance: 0 }];
+  const plans = [null, { crews: 0, inspect: 0, shift: 'none' }, { crews: 3, inspect: 0.1, shift: 'none' }, { crews: 1, inspect: 0.3, shift: 'every' }];
+  const policies = [{}, { hire: 3, inspect: 0.1 }, { hire: 2, shiftFrom: 1 }, { hire: -2, inspect: 0.3 }];
+  let sameWorld = true, sameOutcome = true;
+  for (const seed of ['ledger', 'compass', 'fair-1', 'fair-2']) {
+    const ref = world(new Project(seed));
+    for (const pol of policies) {
+      let base = null;
+      for (const f of forecasts) for (const plan of plans) {
+        const p = new Project(seed);
+        p.commit({ ...f, plan });
+        if (world(p) !== ref) sameWorld = false;
+        playPolicy(p, pol);
+        if (world(p) !== ref) sameWorld = false;
+        const h = JSON.stringify([p.history, p.result, p.outcomeWeek(), p.spent]);
+        if (base === null) base = h; else if (h !== base) sameOutcome = false;
+      }
+    }
+  }
+  t('1. the world on a code is drawn before play and identical whatever is committed or played', sameWorld);
+  t('2. the forecast and the stated plan never change an outcome', sameOutcome);
+  const past = pastContracts();
+  const rebuilt = past.contracts.every((r, i) => {
+    const p = new Project(`past-${i}`);
+    return p.shockWeek === r.scopeWeek && p.shockSize === r.scopeUnits;
+  });
+  t('3. the past contracts are drawn by the same engine (their scope changes are the engine\'s own draws)', rebuilt);
+  t('3. past scope changes come from the same distributions as the student\'s', past.contracts.every((r) => r.scopeWeek >= CONFIG.shockWeeks[0] && r.scopeWeek <= CONFIG.shockWeeks[1]
+    && ((r.scopeUnits >= CONFIG.shockUnits[0] && r.scopeUnits <= CONFIG.shockUnits[1]) || (r.scopeUnits >= CONFIG.shockTailUnits[0] && r.scopeUnits <= CONFIG.shockTailUnits[1]))));
+  const fresh = playPolicy(new Project('past-0'), { hire: 0, inspect: 0 }).outcomeWeek();
+  t('3. a past contract replays to the same outcome in a fresh engine', fresh === past.contracts[0].accepted);
+}
+
+console.log('Plans in result codes');
+{
+  for (const plan of [{ crews: 0, inspect: 0, shift: 'none' }, { crews: 3, inspect: 0.1, shift: 'none' }, { crews: 2, inspect: 0.3, shift: 'every' }, { crews: 1, inspect: 0.2, shift: 'late' }]) {
+    t(`plan ${encodePlan(plan)} encodes and decodes`, JSON.stringify(decodePlan(encodePlan(plan))) === JSON.stringify(normalizePlan(plan)));
+  }
+  const kept = new Project('code-kept');
+  kept.commit({ week: 13, low: 11, high: 14, onTimeChance: 45, plan: { crews: 3, inspect: 0.1, shift: 'none' } });
+  playPolicy(kept, { hire: 3, inspect: 0.1 });
+  const ck = kept.resultCode('Alex');
+  const rk = parseResultCode(ck);
+  t('a kept plan adds three characters to the code', ck.split('|')[10] === '31n');
+  t('a BLP2 code round-trips the plan', rk && rk.version === 2 && JSON.stringify(rk.plan) === JSON.stringify(kept.plan) && JSON.stringify(rk.played) === JSON.stringify(playedPlan(kept)) && rk.name === 'Alex');
+  const changed = new Project('code-changed');
+  changed.commit({ week: 11, low: 10, high: 12, onTimeChance: 75, plan: { crews: 0, inspect: 0, shift: 'none' } });
+  playPolicy(changed, { hire: 3, inspect: 0.1 });
+  const rc = parseResultCode(changed.resultCode('B'));
+  t('a changed plan carries both plans', changed.resultCode('B').split('|')[10] === '00n31n' && rc.plan.crews === 0 && rc.played.crews === 3);
+  t('every field of a BLP2 code round-trips', rc.week === 11 && rc.low === 10 && rc.high === 12 && rc.onTimeChance === 75 && rc.outcome === changed.scores().outcome && rc.seed === changed.seed);
+  const old = parseResultCode('BLP1|1u65p58|11|10|12|75|12|D|10|4500|Alex');
+  t('old BLP1 codes still parse, with no plan', old && old.version === 1 && old.week === 11 && old.outcome === 12 && old.name === 'Alex' && old.plan === null);
+  t('old BLP1 codes with no name still parse', parseResultCode('BLP1|1u65p58|11|10|12|75|12|D|10|4500')?.name === '');
+  t('a BLP2 code with a garbled plan still parses, without the plan', parseResultCode('BLP2|1u65p58|11|10|12|75|12|D|10|4500|9xq|A')?.plan === null);
+  t('codes read aloud may come back in lower case', parseResultCode('blp2|1u65p58|11|10|12|75|12|d|10|4500|31N|a')?.plan?.crews === 3);
+}
+
+console.log('The table summarises what matchContracts finds');
+{
+  const rows = pastContracts().contracts;
+  for (const cp of COMMON_PLANS) {
+    const m = matchContracts(cp);
+    const f = filterContracts(rows, filterForPlan(cp));
+    const s = summarizeContracts(f);
+    t(`${cp.label}: table filter = matchContracts (n ${m.n}, median ${m.median}, ${m.p10}-${m.p90})`,
+      JSON.stringify(f.map((r) => r.id)) === JSON.stringify(m.contracts.map((r) => r.id))
+      && s.n === m.n && s.median === m.median && s.p10 === m.p10 && s.p90 === m.p90 && s.onTimeShare === m.onTimeShare);
+  }
+  t('no filter is all 40', filterContracts(rows).length === CONFIG.pastContracts);
+  const sorted = sortContracts(rows, 'accepted', -1);
+  t('sorting by acceptance week puts the latest first and keeps every row', sorted.length === rows.length && sorted.every((r, i) => !i || sorted[i - 1].accepted >= r.accepted));
+  t('a stated "late weeks" shift matches the second-shift contracts', matchContracts({ crews: 0, inspect: 0, shift: 'late' }).contracts.every((r) => r.shiftWeeks > 0));
+  t('a stated "no shift" plan does not match the second-shift contracts', matchContracts({ crews: 0, inspect: 0, shift: 'none' }).contracts.every((r) => r.shiftWeeks === 0));
+}
+
+console.log('Verdicts on ledger');
+{
+  const HANDS_OFF = { crews: 0, inspect: 0, shift: 'none' }, C3I = { crews: 3, inspect: 0.1, shift: 'none' };
+  const judge = (f, plan, pol) => {
+    const p = new Project('ledger');
+    p.commit({ ...f, plan });
+    playPolicy(p, pol);
+    return { p, j: judgeForecast({ forecast: p.forecast, outcome: p.scores().outcome, stated: p.plan, played: playedPlan(p) }) };
+  };
+  const pace = { week: 11, low: 10, high: 12, onTimeChance: 75 };
+  const a = judge(pace, HANDS_OFF, { hire: 3, inspect: 0.1 });
+  t('pace, stated hands-off, plays +3/10%: week 12, range held, Lucky (plan changed)', a.p.scores().outcome === 12 && a.j.held && a.j.verdict === 'lucky' && a.j.why === 'changed' && !a.j.coaster);
+  const b = judge({ week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 });
+  t('matched record for +3/10%, stated and played: Reasoned', b.j.verdict === 'reasoned' && b.j.matched.median === 13 && b.j.matched.p10 === 11 && b.j.matched.p90 === 14);
+  const c = judge({ week: 14, low: 12, high: 17, onTimeChance: 15 }, HANDS_OFF, {});
+  t('all-40 record, stated and played hands-off: week 17, held, Lucky (off the coasters\' record), coaster line', c.p.scores().outcome === 17 && c.j.held && c.j.verdict === 'lucky' && c.j.why === 'off-record'
+    && c.j.coaster && c.j.coaster.n === 7 && c.j.coaster.late === 7 && c.j.coaster.median === 17);
+  const d = judge(pace, HANDS_OFF, {});
+  t('pace, stated and played hands-off: Missed, with the coaster line', d.j.verdict === 'missed' && d.j.coaster?.n === 7);
+  const e = judge(pace, C3I, { hire: 3, inspect: 0.1 });
+  t('pace with the best plan stated and played: still Lucky, not Reasoned', e.j.held && e.j.verdict === 'lucky');
+  t('the verdict never changes a score', a.p.scores().forecast === 90 && judge(pace, C3I, { hire: 3, inspect: 0.1 }).p.scores().forecast === 90);
+  t('a code without a plan gets no verdict for a held range', judgeForecast({ forecast: pace, outcome: 12, stated: null, played: C3I }).verdict === null);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

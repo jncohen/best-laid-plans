@@ -31,10 +31,55 @@ ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
 }
 ok('Room, empty', () => renderToString(<Room />));
 {
+  // The four ledger cases from the work order: each reveal must name its verdict.
+  const C3I = { crews: 3, inspect: 0.1, shift: 'none' }, HO = { crews: 0, inspect: 0, shift: 'none' };
+  const pace = { week: 11, low: 10, high: 12, onTimeChance: 75 };
+  const cases = [
+    ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, 'Lucky', false],
+    ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, 'Reasoned', false],
+    ['all 40, hands-off stated and played', { week: 14, low: 12, high: 17, onTimeChance: 15 }, HO, {}, 'Lucky', true],
+    ['pace, hands-off stated and played', pace, HO, {}, 'Missed', true],
+  ];
+  const codes = [];
+  for (const [label, f, plan, pol, verdict, coaster] of cases) {
+    const p = new Project('ledger');
+    p.commit({ ...f, plan });
+    playPolicy(p, pol);
+    codes.push(p.resultCode(label.slice(0, 10)));
+    ok(`Reveal, ledger: ${label} → ${verdict}`, () => {
+      const h = renderToString(<Reveal project={p} name="" onReplay={() => {}} />);
+      if (!h.includes(`>${verdict}</div>`)) throw new Error(`verdict ${verdict} not shown`);
+      if (h.includes('past managers also ran it hands-off') !== coaster) throw new Error('coaster line wrong');
+      return h;
+    });
+    ok(`Play, ledger with stated plan: ${label}`, () => {
+      const q = new Project('ledger');
+      q.commit({ ...f, plan });
+      const h = renderToString(<Play project={q} onPlay={() => {}} />);
+      if (!h.includes('Your stated plan')) throw new Error('stated plan not shown');
+      return h;
+    });
+  }
+  ok('Room, BLP2 and BLP1 codes together', () => {
+    const h = renderToString(<Room initialText={[...codes, 'BLP1|1u65p58|11|10|12|75|12|D|10|4500|Old'].join('\n')} />);
+    if (!h.includes('changed') || !h.includes('kept')) throw new Error('kept/changed markers missing');
+    if (!/1<!-- --> reasoned/.test(h) || !/2<!-- --> lucky/.test(h)) throw new Error('reasoned/lucky counts wrong');
+    return h;
+  });
+  ok('Brief shows the record table and the disclosures', () => {
+    const h = renderToString(<Brief onCommit={() => {}} />);
+    for (const s of ['Crews added', 'Scope change', 'terminates the contract', 'turn out defective', 'Contracts run like my plan', '1 · Your plan']) {
+      if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    }
+    if ((h.match(/<tr /g) || []).length < 41 && (h.match(/<tr>/g) || []).length + (h.match(/<tr /g) || []).length < 41) throw new Error('table does not have 40 rows');
+    return h;
+  });
+}
+{
   let n = 0;
   for (let i = 0; i < 40; i++) {
     const p = new Project(`fuzz-plan-${i}`);
-    p.commit({ week: 8 + (i % 8), low: 7 + (i % 8), high: 10 + (i % 9), onTimeChance: (i * 7) % 101 });
+    p.commit({ week: 8 + (i % 8), low: 7 + (i % 8), high: 10 + (i % 9), onTimeChance: (i * 7) % 101, plan: { crews: i % 4, inspect: [0, 0.1, 0.2, 0.3][(i >> 2) % 4], shift: ['none', 'late', 'every'][i % 3] } });
     playPolicy(p, { hire: (i % 5) - 1, inspect: [0, 0.1, 0.2, 0.3][i % 4], shiftFrom: 6 + (i % 7) });
     try { renderToString(<Reveal project={p} name={`s${i}`} onReplay={() => {}} />); n++; } catch (err) { console.log(`  FAIL plan fuzz ${i}: ${err.message}`); fails++; break; }
   }
