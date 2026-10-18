@@ -341,17 +341,6 @@ export function whatIf(S, plans, L = null) {
   });
 }
 
-/** Risk Register: the kinds of risk a student can log. The reveal says which happened. */
-export const RISK_KINDS = [
-  { id: 'scope', name: 'The customer adds a lot of work' },
-  { id: 'defects', name: 'Defects found late, at acceptance' },
-  { id: 'money', name: 'The money runs out' },
-  { id: 'slow', name: 'The line runs slower than planned' },
-  { id: 'late', name: 'We deliver late' },
-  { id: 'other', name: 'Something else' },
-];
-export const RISK_LEVELS = ['low', 'medium', 'high'];
-
 // ── Ask an AI ────────────────────────────────────────────────────────────────
 const k$ = (n) => (Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : `$${Math.round(n / 1000)}k`);
 /**
@@ -408,7 +397,6 @@ export const TABS = [
   { id: 'ai', letter: 'i', group: 'People', name: 'Ask an AI', tone: 'people', forecasts: false, sees: 'Whatever you paste in: the prompt holds the basic numbers and the situation', cant: 'Anything you do not ask it' },
   { id: 'last5', letter: 'e', group: 'History', name: 'Last 5 Contracts', tone: 'record', forecasts: true, sees: 'The five newest contracts, and the story of the last one', cant: 'Whether five is enough' },
   { id: 'records', letter: 'j', group: 'History', name: 'Records', tone: 'record', forecasts: true, sees: 'What actually happened, defects and scope changes included', cant: 'Plans no past manager tried' },
-  { id: 'risks', letter: 'r', group: 'Your notes', name: 'Risk Register', tone: 'front', forecasts: false, sees: 'The risks you log, and how likely you think each is', cant: 'Risks you do not think of' },
 ];
 export const tabById = (id) => TABS.find((t) => t.id === id);
 export const tabByLetter = (l) => TABS.find((t) => t.letter && t.letter === l);

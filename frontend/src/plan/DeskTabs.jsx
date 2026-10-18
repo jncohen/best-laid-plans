@@ -1,7 +1,7 @@
 // The Decision Desk's tool tabs. Each is a generic replica of a dashboard genre, fed
 // only by desk.js, which sees only what the briefing shows.
 import { useState } from 'react';
-import { statusReport, lastFive, teamChat, aiPrompt, recordsCsv, tabById, projectControls, whatIf, RISK_KINDS, RISK_LEVELS } from './desk.js';
+import { statusReport, lastFive, teamChat, aiPrompt, recordsCsv, tabById, projectControls, whatIf } from './desk.js';
 import { CONFIG, describePlan, onboardingRule, failuresLine } from './engine';
 import { Card, ScoringNote } from './ui';
 import { CHART_W as W, CHART_CLASS, svgText } from './chartStyle';
@@ -282,41 +282,6 @@ function WhatIfTab({ S, plan, planNote, live }) {
   );
 }
 
-function RiskTab({ risks = [], onAddRisk, live }) {
-  const [kind, setKind] = useState('scope');
-  const [level, setLevel] = useState('medium');
-  const [note, setNote] = useState('');
-  const add = () => { if (onAddRisk) { onAddRisk({ kind, level, note: note.trim() }); setNote(''); } };
-  const name = (k) => RISK_KINDS.find((r) => r.id === k).name;
-  return (
-    <Card title="Risk Register · your notes" tone="slate">
-      <p className="text-xs text-slate-400">List what could go wrong and how likely you think it is. It changes nothing in the game. At the end you see which of your risks happened, and which happened that you didn&apos;t list.</p>
-      <ul className="mt-3 divide-y divide-slate-800">
-        {risks.length === 0 && <li className="text-sm text-slate-500 py-2">No risks logged yet.</li>}
-        {risks.map((r, i) => (
-          <li key={i} className="py-2 text-sm text-slate-200 flex justify-between gap-2">
-            <span>{name(r.kind)}{r.note ? <span className="text-slate-400">: {r.note}</span> : ''}</span>
-            <span className="text-xs text-slate-400 whitespace-nowrap">{r.level} · {r.week ? `after wk ${r.week}` : 'before wk 1'}</span>
-          </li>
-        ))}
-      </ul>
-      <div className="bg-slate-950 rounded-lg p-2 mt-3 space-y-2">
-        <label className="block text-xs text-slate-400">Risk
-          <select value={kind} onChange={(e) => setKind(e.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white">
-            {RISK_KINDS.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
-          </select>
-        </label>
-        <Seg label="Likelihood" value={level} onChange={setLevel} options={RISK_LEVELS.map((l) => [l, l])} />
-        <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={140} placeholder="What you'd watch for, or do (optional)" aria-label="Note"
-          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
-        <button type="button" onClick={add} className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">
-          Add to the register{live ? ` (after week ${live.week})` : ''}
-        </button>
-      </div>
-    </Card>
-  );
-}
-
 function Last5Tab({ S, onUse }) {
   const L = lastFive(S);
   const N = L.newest;
@@ -421,7 +386,7 @@ function RecordsTab({ S, plan, planReady, onUse, onNote }) {
 }
 
 /** One tool tab. `plan` is the stated plan before week 1 (hands-off until one is stated), and this week's decisions during play. */
-export default function DeskTab({ id, S, plan, planReady, onUse, live = null, risks = [], onAddRisk = null, onNote = null }) {
+export default function DeskTab({ id, S, plan, planReady, onUse, live = null, onNote = null }) {
   const planNote = live
     ? <p className="text-xs text-slate-500 mb-3">From week {live.week + 1} on, assuming this week's decisions: {describePlan(plan)}.</p>
     : !planReady
@@ -433,7 +398,6 @@ export default function DeskTab({ id, S, plan, planReady, onUse, live = null, ri
     case 'status': return <StatusTab {...props} />;
     case 'controls': return <ControlsTab {...props} />;
     case 'whatif': return <WhatIfTab key={live ? live.week : 'brief'} {...props} />;
-    case 'risks': return <RiskTab risks={risks} onAddRisk={onAddRisk} live={live} />;
     case 'last5': return <Last5Tab {...props} />;
     case 'chat': return <ChatTab {...props} />;
     case 'ai': return <AiTab {...props} />;

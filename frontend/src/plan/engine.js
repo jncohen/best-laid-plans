@@ -172,7 +172,6 @@ export class Project {
     this.forecastLog = [];
     this.checkpoints = [];     // Keep/Change taps during play: { week, event, choice }
     this.gutForecast = null;
-    this.risks = [];           // the student's risk register: { week, kind, level, note }; never read by play()
     this.decisions = [];       // each week's decisions as played (crews hired or released, shift, inspection), for the luck replay
     this.history = [];
     this.spent = 0;
@@ -198,23 +197,15 @@ export class Project {
    * The forecast and the plan the student says they will play. Neither is read by
    * play(): they are recorded, never acted on.
    */
-  commit({ week, low, high, onTimeChance, plan = null, desk = null, gut = null, risks = [] }) {
+  commit({ week, low, high, onTimeChance, plan = null, desk = null, gut = null }) {
     this.forecast = { week: +week, low: +low, high: +high, onTimeChance: +onTimeChance };
     // The gut forecast, made after seeing only The Contract and the Status Report: recorded, never scored.
     this.gutForecast = gut ? { week: +gut.week, low: +gut.low, high: +gut.high, onTimeChance: +gut.onTimeChance } : null;
     this.forecastLog = [{ week: 0, forecast: +week, low: +low, high: +high, chance: +onTimeChance }];
     this.plan = plan ? normalizePlan(plan) : null;
     this.desk = desk ? normalizeDesk(desk) : null;
-    this.risks = [];
-    for (const r of risks || []) this.noteRisk(0, r);
   }
 
-  /** Adds a risk to the student's register (week 0 = before week 1). Recorded, never acted on. */
-  noteRisk(week, { kind, level, note = '' }) {
-    const KINDS = ['scope', 'defects', 'money', 'slow', 'late', 'other'];
-    if (!KINDS.includes(kind)) return;
-    this.risks.push({ week: Math.max(0, Math.round(+week || 0)), kind, level: ['low', 'medium', 'high'].includes(level) ? level : 'medium', note: String(note || '').slice(0, 140) });
-  }
 
   /** Records that a decision-support tab was opened (or the AI prompt copied) before a week was played. Never read by play(). */
   noteDesk(week, tab) {
@@ -508,8 +499,8 @@ export const dashboardPeak = (r) => (r.rejected > 0 ? 1 : r.reported);
 /** The student's own tab: Your Plan & Prediction before week 1, This Week's Decisions during play. Never counted as a tool check. */
 export const isFront = (tab) => tab === 'commit' || tab === 'decide';
 
-/** A tool check, for How you played: opening a tool tab. The front tab, The Contract, Ask an AI and the Risk Register don't count, nor using a tool's numbers. There is no limit. */
-export const isCheck = (tab) => !!tab && !isFront(tab) && tab !== 'contract' && tab !== 'ai' && tab !== 'ai-copy' && tab !== 'records-csv' && tab !== 'risks' && !tab.startsWith('use:');
+/** A tool check, for How you played: opening a tool tab. The front tab, The Contract and Ask an AI don't count, nor using a tool's numbers. There is no limit. */
+export const isCheck = (tab) => !!tab && !isFront(tab) && tab !== 'contract' && tab !== 'ai' && tab !== 'ai-copy' && tab !== 'records-csv' && !tab.startsWith('use:');
 
 
 

@@ -48,7 +48,6 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   // Each scenario code has its own record of past contracts, so the desk follows the code.
   const S = useMemo(() => screenData(CONFIG, seed), [seed]);
   // The plan comes first: crews added at the start, inspection share, second shift.
-  const [risks, setRisks] = useState([]);
   const [plan, setPlan] = useState(initialPlan || { crews: null, inspect: null, shift: null });
   const planReady = plan.crews !== null && plan.inspect !== null && plan.shift !== null;
   const setPlanPart = (k) => (v) => setPlan((p) => ({ ...p, [k]: v }));
@@ -83,7 +82,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
     const edited = !given || given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
     const source = loaded ? (loaded.id === 'chat' && loaded.label ? `${loaded.label}'s` : tabById(loaded.id)?.name || '') : '';
     const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', source, tabs: opened.filter(isCheck).length, minutes: (Date.now() - startedAt) / 60000, edited, order: opened, checks, copied: notes.includes('ai-copy'), csv: notes.includes('records-csv'), ai: notes.includes('ai') };
-    onCommit({ week, low, high, onTimeChance: chance, plan, desk, risks }, seed.trim());
+    onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim());
   };
   const deskPlan = planReady ? plan : { crews: 0, inspect: 0, shift: 'none' };
   const rows = planReady ? comparisonRows(S, plan, null) : [];
@@ -196,7 +195,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
       </div>
       <div className={`${onFront ? 'order-first lg:order-none' : ''} space-y-4 min-w-0`}>
         {!onFront ? (<>
-          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} onNote={(n) => setNotes((x) => [...x, n])} risks={risks} onAddRisk={(r) => setRisks((x) => [...x, { ...r, week: 0 }])} />
+          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} onNote={(n) => setNotes((x) => [...x, n])} />
           <button type="button" onClick={() => open('commit')} className="lg:hidden w-full py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
             Back to Your Plan and Prediction
           </button>

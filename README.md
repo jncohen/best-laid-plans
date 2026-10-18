@@ -30,7 +30,6 @@ browser, on a phone or a laptop, with nothing to install and no sign-in.
    | Ask an AI | a prompt you can paste into any AI assistant |
    | Last 5 Contracts | the five newest contracts on this line, and the story of the last one |
    | Records | all 40 past contracts on this line; you can download them as a CSV |
-   | Risk Register | your own list of what could go wrong |
 
    The tabs disagree. Deciding which to trust is the exercise. The game counts what you
    look at, but never uses it against you.
@@ -71,7 +70,7 @@ A narrow range that holds scores best. Say what you actually believe.
   a show of hands ("hands up if fact 3 happened to you"). It covers each student's plan,
   what they checked (how often, whether they stopped looking, and whether they used
   AI), the 90% moment, the surprise, whose advice they took, whether their range held,
-  money, their risk register, and luck: their own decisions replayed under 100 other
+  money, and luck: their own decisions replayed under 100 other
   draws.
 - **Collect the results files** (`best-laid-plans-<code>-run1.txt`) if you want each
   student's first play in writing.

@@ -141,7 +141,7 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
       if (order.some((x) => at(x) < 0) || order.some((x, k) => k && at(x) < at(order[k - 1]))) throw new Error('reveal order wrong');
       const fw = p.history.find((r) => r.rejected > 0 || r.reported >= 0.999).week;
       if (!/Your game in 9 facts/.test(h) || (h.match(/aria-hidden="true">[1-9]<\/span>/g) || []).length !== 9) throw new Error('9 numbered facts missing');
-      if (!h.includes('Your risk register') || !h.includes('Download my results (.txt)') || !h.replace(/<[^>]+>/g, '').includes('You planned ')) throw new Error('the plan fact or the download is missing');
+      if (h.includes('Your risk register') || !h.includes('Download my results (.txt)') || !h.replace(/<[^>]+>/g, '').includes('You planned ')) throw new Error('the plan fact or the download is missing');
       for (const x of [`Your dashboard said week ${fw}.`, `It was accepted in week ${p.scores().outcome}.`, `The past contracts said week 14`, `You gave ${f.onTimeChance}% to week 12; it`, 'first passed 90% in week']) if (!h.replace(/<[^>]+>/g, '').includes(x)) throw new Error(`"${x}" missing`);
       if (h.includes('BLP') || h.includes('result code')) throw new Error('a result code is still shown');
       return h;
@@ -176,15 +176,13 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     if (!h.includes('id="ai-prompt"') || !h.includes('When will the customer accept the contract?') || !/Copy/.test(h)) throw new Error('Ask an AI tab wrong');
     return h;
   });
-  ok('Project Controls, What-if Planner and the Risk Register render before week 1', () => {
+  ok('Project Controls and the What-if Planner render before week 1', () => {
     const plan = { crews: 3, inspect: 0.1, shift: 'none' };
     const c = renderToString(<Brief onCommit={() => {}} initialTab="controls" initialPlan={plan} />).replace(/<!-- -->/g, '');
     const w = renderToString(<Brief onCommit={() => {}} initialTab="whatif" initialPlan={plan} />).replace(/<!-- -->/g, '');
-    const r = renderToString(<Brief onCommit={() => {}} initialTab="risks" initialPlan={plan} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
     if (!c.includes('Burn-down chart') || !c.includes('Starts in week 1')) throw new Error('controls wrong');
     if (!w.includes('Option A') || !w.includes('Option B') || !w.includes('Done on paper') || !w.includes('contracts')) throw new Error('what-if wrong');
-    if (!r.includes('No risks logged yet.') || !r.includes('Add to the register') || !r.includes('Defects found late, at acceptance')) throw new Error('risk register wrong');
-    return c + w + r;
+    return c + w;
   });
   ok('Team Chat: each colleague says what they go by', () => {
     const h = renderToString(<Brief onCommit={() => {}} initialTab="chat" />).replace(/<!-- -->/g, '');

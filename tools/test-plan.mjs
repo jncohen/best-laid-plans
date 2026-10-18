@@ -5,7 +5,7 @@ import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/p
 import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, isCheck, forecastScore, forecastParts, dashboardPeak } from '../frontend/src/plan/engine.js';
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
-import { gameFacts, luckReplay, resultsText, riskReview, checkingSummary } from '../frontend/src/plan/facts.js';
+import { gameFacts, luckReplay, resultsText, checkingSummary } from '../frontend/src/plan/facts.js';
 import { comparisonRows, aiPrompt, recordsCsv, projectControls, whatIf } from '../frontend/src/plan/desk.js';
 
 let pass = 0, fail = 0;
@@ -274,8 +274,8 @@ console.log('The Decision Desk sees only the screen');
   t('Cost Management implies the Schedule\'s finish, and shows the credit line', JSON.stringify(costManagement(S, COMMON_PLANS[4]).forecast) === JSON.stringify(schedule(S, COMMON_PLANS[4]).forecast)
     && costManagement(S, COMMON_PLANS[4]).limit === CONFIG.budget + CONFIG.creditLine);
   t('Cost Management: +2 crews with a shift every week runs out of money in week 13', costManagement(S, { crews: 2, inspect: 0, shift: 'every' }).brokeWeek === 13);
-  t('every tab has a one-line sees and can\'t-see, except the front tab', TABS.slice(1).every((x) => x.sees && x.cant) && TABS.length === 10 && TABS[1].id === 'contract');
-  t('tab letters are unique', new Set(TABS.map((x) => x.letter).filter(Boolean)).size === 9);
+  t('every tab has a one-line sees and can\'t-see, except the front tab', TABS.slice(1).every((x) => x.sees && x.cant) && TABS.length === 9 && TABS[1].id === 'contract');
+  t('tab letters are unique', new Set(TABS.map((x) => x.letter).filter(Boolean)).size === 8);
 }
 
 console.log('The desk during play sees only the dashboard');
@@ -320,8 +320,8 @@ console.log('Desk numbers on ledger (work order, Oct 17)');
   // Every range from the record carries its failures beside it.
   t('failures beside the ranges: all 40 carries them; ranges with none carry none', records(S).all.fail === '2 of 40 never delivered (2 bankrupt)'
     && records(S, C3I).matched.fail === null && lastFive(S).forecast.fail === null && teamChat(S, HO).find((c) => c.key === 'veteran').reasoning.includes('2 of 40 never delivered'));
-  t('the desk is ten tabs: the front tab, The Contract, Status Report, Project Controls, What-if Planner, Team Chat, Ask an AI, Last 5 Contracts, Records, Risk Register',
-    TABS.map((t) => t.id).join() === 'commit,contract,status,controls,whatif,chat,ai,last5,records,risks' && Object.keys(FORECASTERS).join() === 'status,last5,records-all,records-plan');
+  t('the desk is nine tabs: the front tab, The Contract, Status Report, Project Controls, What-if Planner, Team Chat, Ask an AI, Last 5 Contracts, Records',
+    TABS.map((t) => t.id).join() === 'commit,contract,status,controls,whatif,chat,ai,last5,records' && Object.keys(FORECASTERS).join() === 'status,last5,records-all,records-plan');
   const st = statusReport(S, null, C3I);
   t('the Status Report carries the money: planned cost, budget, credit line, cost efficiency', st.money.plannedCost === costManagement(S, C3I).cost.bac && st.money.budget === CONFIG.budget && st.money.creditLine === CONFIG.creditLine && typeof st.cpi === 'number');
 }
@@ -385,7 +385,7 @@ console.log('Review fixes (Oct 17)');
   const cl = costManagement(S, C3I, liveScreen(live)).cost, sl = statusReport(S, liveScreen(live), C3I);
   t(`during play CPI sits near 1 (cost ${cl.cpi}, status ${sl.cpi})`, cl.cpi > 0.6 && cl.cpi < 1.4 && sl.cpi > 0.6 && sl.cpi < 1.4);
   t('every tool keeps its sees / cant-see line, now shown on the reveal', TABS.slice(1).every((x) => x.sees && x.cant));
-  t('group headers are neutral', JSON.stringify([...new Set(TABS.slice(1).map((x) => x.group))]) === JSON.stringify(['The Brief', 'Dashboards', 'People', 'History', 'Your notes']));
+  t('group headers are neutral', JSON.stringify([...new Set(TABS.slice(1).map((x) => x.group))]) === JSON.stringify(['The Brief', 'Dashboards', 'People', 'History']));
 }
 
 
@@ -542,7 +542,7 @@ console.log('Fix 13: gut then final, the tour, checkpoints');
   t('the checkpoint log never changes an outcome', JSON.stringify(p.history) === JSON.stringify(q.history));
 }
 
-console.log('Management information: controls, what-if, risk register');
+console.log('Management information: controls, what-if');
 {
   const S = screenData(), plan = { crews: 3, inspect: 0.1, shift: 'none' };
   const pc0 = projectControls(S, plan);
@@ -557,17 +557,7 @@ console.log('Management information: controls, what-if, risk register');
     wi[0].finish < wi[2].finish && wi.every((r) => r.record && r.record.n >= 5 && r.cost > 0));
   const wl = whatIf(S, [plan], L);
   t('What-if during play re-plans from now and shows no record', wl[0].finish > L.week && wl[0].record === null);
-  const before = JSON.stringify(new Project('ledger').play({ hire: 3, inspect: 0.1 }) ?? null);
-  const r1 = new Project('ledger'); r1.commit({ week: 13, low: 12, high: 15, onTimeChance: 30, plan, risks: [{ kind: 'defects', level: 'high', note: 'watch rejects' }, { kind: 'bogus' }] });
-  r1.noteRisk(3, { kind: 'scope', level: 'low' });
-  const r2 = new Project('ledger'); r2.commit({ week: 13, low: 12, high: 15, onTimeChance: 30, plan });
-  while (!r1.done) { r1.play({ hire: r1.week === 0 ? 3 : 0, inspect: 0.1 }); r2.play({ hire: r2.week === 0 ? 3 : 0, inspect: 0.1 }); }
-  t('the risk register is recorded, never acted on: same game with and without it', r1.risks.length === 2 && r1.finishWeek === r2.finishWeek && r1.spent === r2.spent && before !== undefined);
-  const rv = riskReview(r1);
-  t('the reveal says which logged risks happened, and which happened unlogged', rv.logged.length === 2 && rv.logged.every((r) => r.happened !== undefined)
-    && rv.logged.find((r) => r.kind === 'scope').happened.startsWith('+15 units in week 4') && rv.missed.every((m) => !['defects', 'scope'].includes(m.kind)));
-  t('the results file lists the risk register', resultsText(r1, gameFacts(r1)).includes('Your risk register:\n- Before week 1: Defects found late, at acceptance (watch rejects), likelihood high.'));
-  t('the Risk Register tab is not a tool check', !isCheck('risks') && isCheck('controls') && isCheck('whatif'));
+  t('Project Controls and the What-if Planner are tool checks', isCheck('controls') && isCheck('whatif'));
 }
 
 console.log('Each scenario code draws its own record');
