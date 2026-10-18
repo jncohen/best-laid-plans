@@ -160,9 +160,9 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     });
   }
   // No gut stage: every tab is open; the commit waits for the plan, the forecast and the tour.
-  ok('Brief: every tab open, the commit waits for the tour', () => {
+  ok('Brief: every tab open, nothing to click through before committing', () => {
     const h = renderToString(<Brief onCommit={() => {}} initialPlan={{ crews: 3, inspect: 0.1, shift: 'none' }} initialOpened={['status', 'chat']} />).replace(/<!-- -->/g, '');
-    if (!h.includes('Every tab is open. Before you commit, open Last 5, Records.') || !/disabled=""[^>]*>Commit plan and forecast/.test(h) || h.includes('These disagree by') || h.includes('🔒') || /gut forecast/i.test(h)) throw new Error('tour lock wrong');
+    if (!h.includes('Every tab is open. What you check before you commit is up to you.') || /Open [^<]* first/.test(h) || !h.includes('Set the week, both ends of the range and the chance first.') || h.includes('These disagree by') || h.includes('🔒') || /gut forecast/i.test(h)) throw new Error('a tour gate is still shown');
     return h;
   });
   ok('Brief after the tour: the comparison card, the plan cost, and the commit open', () => {
@@ -193,7 +193,7 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   });
   ok('Brief, front tab: inputs only', () => {
     const h = renderToString(<Brief onCommit={() => {}} />);
-    for (const s of ['1 · Your plan', '2 · Your forecast', 'Commit plan and forecast', 'Every tab is open']) if (!h.includes(s) && !h.includes(s.replace("'", '&#x27;'))) throw new Error(`missing "${s}"`);
+    for (const s of ['1 · Your plan', '2 · Your forecast', 'Commit plan and forecast', 'What you check before you commit is up to you']) if (!h.includes(s) && !h.includes(s.replace("'", '&#x27;'))) throw new Error(`missing "${s}"`);
     for (const s of ['two scores', 'Two scores']) if (h.includes(s)) throw new Error(`front tab still shows "${s}"`);
     // On a desktop the right panel starts on The Contract; on a phone it is hidden until the tab is chosen.
     if (!/<div class="hidden lg:block">.*What you decide each week/s.test(h)) throw new Error('the default right panel is not The Contract, desktop only');
@@ -233,7 +233,7 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
         if (t.id === 'status' && (!h.includes('Schedule efficiency') || !h.includes('Cost efficiency') || !h.includes('Projected finish') || !h.includes('Credit line') || /EV ÷|BAC|planned value/.test(h))) throw new Error('status report jargon or money tiles wrong');
         if (t.id === 'simulator' && !h.includes('Include rework')) throw new Error('rework switch missing');
         if (t.id === 'last5' && !/#(<!-- -->)?40/.test(h)) throw new Error('last contract not record #40');
-        if (t.id === 'ai' && (!h.includes('Copy the prompt') || !h.includes('Past contracts on this line (40)') || !h.includes('gives no forecast of its own') || /reference class|base rate|outside view/i.test(h))) throw new Error('AI prompt: the numbers and situation, no method, no forecast');
+        if (t.id === 'ai' && (!h.includes('Copy the prompt') || h.includes('Past contracts') || !h.includes('Records can download them as a CSV') || !h.includes('gives no forecast of its own') || /reference class|base rate|outside view/i.test(h))) throw new Error('AI prompt: the numbers and situation, no method, no forecast');
         return h;
       });
     }

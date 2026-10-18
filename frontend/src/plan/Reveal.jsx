@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, firstCloseWeek, playSummary, dashboardPeak, matchContracts, isCheck } from './engine';
 import { screenData, allForecasts, tabById, tabByLetter, costManagement } from './desk.js';
 import { Card } from './ui';
-import { money } from './format';
+import { money, downloadText } from './format';
 import { RevealChart, ForecastChart, RangeChart } from './charts';
 import { gameFacts, resultsText, riskReview } from './facts';
 
@@ -83,13 +83,7 @@ export default function Reveal({ project, onReplay }) {
   const counted = useRef(false);
   useEffect(() => { if (!counted.current) { counted.current = true; setRun(nextRun(code)); } }, [code]);
   const text = useMemo(() => resultsText(p, facts, { run }), [p, facts, run]);
-  const download = () => {
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    const a = document.createElement('a');
-    a.href = url; a.download = `best-laid-plans-${code}-run${run}.txt`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
+  const download = () => downloadText(`best-laid-plans-${code}-run${run}.txt`, text);
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">

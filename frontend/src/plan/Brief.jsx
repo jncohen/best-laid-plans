@@ -22,9 +22,8 @@ function Choice({ label, options, value, onChange }) {
   );
 }
 
-// Every tab is open from the start; before committing, // the student must have opened each of these.
+// The comparison card appears once these three have been opened (nothing is locked).
 const TOUR = ['chat', 'last5', 'records'];
-const TOUR_NAMES = { chat: 'Team Chat', last5: 'Last 5', records: 'Records' };
 const range = (f) => (f.low === f.high ? `week ${f.low}` : `${f.low}–${f.high}`);
 
 export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit', initialPlan = null, initialOpened = [] }) {
@@ -40,6 +39,9 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   // opened, and the numbers last copied in from a tool.
   const [tab, setTab] = useState(initialTab);
   const [opened, setOpened] = useState(initialOpened);
+  // Every opening of an information tab (repeats count), and the AI steps: opening Ask an AI, copying its prompt, downloading the records.
+  const [checks, setChecks] = useState(0);
+  const [notes, setNotes] = useState([]);
   const [startedAt] = useState(() => Date.now());
   const [loaded, setLoaded] = useState(null);
   const [seed, setSeed] = useState(initialSeed);
@@ -63,6 +65,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const open = (id) => {
     setTab(id);
     if (id !== 'commit') setOpened((o) => (o.includes(id) ? o : [...o, id]));
+    if (isCheck(id) && id !== tab) setChecks((n) => n + 1);
+    if (id === 'ai') setNotes((x) => [...x, 'ai']);
     window.scrollTo(0, 0);
   };
   const applyNumbers = (id, f, label = null) => {
@@ -77,7 +81,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
     const given = loaded ? loaded.numbers : null;
     const edited = !given || given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
     const source = loaded ? (loaded.id === 'chat' && loaded.label ? `${loaded.label}'s` : tabById(loaded.id)?.name || '') : '';
-    const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', source, tabs: opened.filter(isCheck).length, minutes: (Date.now() - startedAt) / 60000, edited, order: opened };
+    const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', source, tabs: opened.filter(isCheck).length, minutes: (Date.now() - startedAt) / 60000, edited, order: opened, checks, copied: notes.includes('ai-copy'), csv: notes.includes('records-csv'), ai: notes.includes('ai') };
     onCommit({ week, low, high, onTimeChance: chance, plan, desk, risks }, seed.trim());
   };
   const deskPlan = planReady ? plan : { crews: 0, inspect: 0, shift: 'none' };
@@ -127,8 +131,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
 
       <TabStrip tab={tab} opened={opened} onOpen={open} />
 
-      <p className={`text-sm rounded-lg px-3 py-2 border ${left.length ? 'text-amber-100 bg-amber-500/15 border-amber-400' : 'text-slate-200 bg-slate-900 border-slate-700'}`} role="status">
-        {left.length ? `Every tab is open. Before you commit, open ${left.map((id) => TOUR_NAMES[id]).join(', ')}.` : 'Use any forecast on the desk, or set your own.'}
+      <p className="text-sm rounded-lg px-3 py-2 border text-slate-200 bg-slate-900 border-slate-700" role="status">
+        Every tab is open. What you check before you commit is up to you.
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] gap-4 items-start">
@@ -181,17 +185,17 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
                   className="min-w-0 flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono" />
               </label>
             )}
-          <button type="button" disabled={!intervalOk || !planReady || left.length > 0} onClick={commit}
+          <button type="button" disabled={!intervalOk || !planReady} onClick={commit}
             className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold">
             Commit plan and forecast, start week 1
           </button>
-          {(!planReady || !forecastSet || left.length > 0) && <p className="text-xs text-amber-200 text-center -mt-2">{!planReady ? 'Choose all three parts of your plan first.' : !forecastSet ? 'Set the week, both ends of the range and the chance first.' : `Open ${left.map((id) => TOUR_NAMES[id]).join(', ')} first.`}</p>}
+          {(!planReady || !forecastSet) && <p className="text-xs text-amber-200 text-center -mt-2">{!planReady ? 'Choose all three parts of your plan first.' : 'Set the week, both ends of the range and the chance first.'}</p>}
         </div>
       </Card>
       </div>
       <div className={`${onFront ? 'order-first lg:order-none' : ''} space-y-4 min-w-0`}>
         {!onFront ? (<>
-          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} risks={risks} onAddRisk={(r) => setRisks((x) => [...x, { ...r, week: 0 }])} />
+          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} onNote={(n) => setNotes((x) => [...x, n])} risks={risks} onAddRisk={(r) => setRisks((x) => [...x, { ...r, week: 0 }])} />
           <button type="button" onClick={() => open('commit')} className="lg:hidden w-full py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
             Back to Your Plan and Prediction
           </button>

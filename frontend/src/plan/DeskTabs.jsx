@@ -1,11 +1,11 @@
 // The Decision Desk's tool tabs. Each is a generic replica of a dashboard genre, fed
 // only by desk.js, which sees only what the briefing shows.
 import { useState } from 'react';
-import { statusReport, lastFive, teamChat, aiPrompt, tabById, projectControls, whatIf, RISK_KINDS, RISK_LEVELS } from './desk.js';
+import { statusReport, lastFive, teamChat, aiPrompt, recordsCsv, tabById, projectControls, whatIf, RISK_KINDS, RISK_LEVELS } from './desk.js';
 import { CONFIG, pastContracts, describePlan, onboardingRule, failuresLine } from './engine';
 import { Card, ScoringNote } from './ui';
 import { CHART_W as W, CHART_CLASS, svgText } from './chartStyle';
-import { money } from './format';
+import { money, downloadText } from './format';
 import Records from './Records';
 
 const TONE = {
@@ -385,10 +385,11 @@ function ChatTab({ S, plan, onUse, planNote, live }) {
   );
 }
 
-function AiTab({ S, plan, planNote, live }) {
+function AiTab({ S, plan, planNote, live, onNote }) {
   const text = aiPrompt(S, plan, live);
   const [copied, setCopied] = useState(false);
   const copy = async () => {
+    if (onNote) onNote('ai-copy');
     try { await navigator.clipboard.writeText(text); setCopied(true); } catch {
       // No clipboard (an old browser, or not allowed): select the text so it can be copied by hand.
       const el = document.getElementById('ai-prompt'); if (el) { el.focus(); el.select(); }
@@ -397,6 +398,7 @@ function AiTab({ S, plan, planNote, live }) {
   return (
     <Frame id="ai" kind="prompt for your AI assistant" planNote={planNote}>
       <p className="text-sm text-slate-300">Copy this into any AI assistant. It holds the basic numbers and the situation{live ? `, up to week ${live.week}` : ''}, and asks one question. How you question the AI after that is up to you.</p>
+      <p className="text-xs text-slate-400 mt-1">The past contracts are not in it. Records can download them as a CSV file, to upload to the AI if you choose.</p>
       <button type="button" onClick={copy} className="mt-2 w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">{copied ? 'Copied' : 'Copy the prompt'}</button>
       <textarea id="ai-prompt" readOnly value={text} rows={10} onFocus={(e) => e.target.select()}
         className="mt-2 w-full bg-slate-950 border border-slate-700 rounded-xl p-3 font-mono text-[11px] text-slate-300" />
@@ -406,23 +408,26 @@ function AiTab({ S, plan, planNote, live }) {
 }
 
 // ── The record ───────────────────────────────────────────────────────────────
-function RecordsTab({ plan, planReady, onUse }) {
+function RecordsTab({ S, plan, planReady, onUse, onNote }) {
   const past = pastContracts();
+  const csv = () => { if (onNote) onNote('records-csv'); downloadText('best-laid-plans-past-contracts.csv', recordsCsv(S), 'text/csv'); };
   return (
     <Card title="Records · project database" tone="amber">
       <Records past={past} plan={planReady ? plan : null} onUse={(f, label) => onUse('records', f, label)} />
+      <button type="button" onClick={csv} className="mt-3 w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">Download the records (.csv)</button>
+      <p className="text-[11px] text-slate-500 mt-1">All {past.contracts.length} contracts, one row each: for a spreadsheet, or to upload to an AI.</p>
     </Card>
   );
 }
 
 /** One tool tab. `plan` is the stated plan before week 1 (hands-off until one is stated), and this week's decisions during play. */
-export default function DeskTab({ id, S, plan, planReady, onUse, live = null, risks = [], onAddRisk = null }) {
+export default function DeskTab({ id, S, plan, planReady, onUse, live = null, risks = [], onAddRisk = null, onNote = null }) {
   const planNote = live
     ? <p className="text-xs text-slate-500 mb-3">From week {live.week + 1} on, assuming this week's decisions: {describePlan(plan)}.</p>
     : !planReady
       ? <p className="text-xs text-violet-200 mb-3">Assuming a hands-off plan until you state yours on the front tab.</p>
       : <p className="text-xs text-slate-500 mb-3">For your plan: {describePlan(plan)}.</p>;
-  const props = { S, plan, onUse, planNote, live };
+  const props = { S, plan, onUse, planNote, live, onNote };
   switch (id) {
     case 'contract': return <ContractTab />;
     case 'status': return <StatusTab {...props} />;
@@ -432,7 +437,7 @@ export default function DeskTab({ id, S, plan, planReady, onUse, live = null, ri
     case 'last5': return <Last5Tab {...props} />;
     case 'chat': return <ChatTab {...props} />;
     case 'ai': return <AiTab {...props} />;
-    case 'records': return <RecordsTab plan={plan} planReady={planReady || !!live} onUse={onUse} />;
+    case 'records': return <RecordsTab S={S} plan={plan} planReady={planReady || !!live} onUse={onUse} onNote={onNote} />;
     default: return null;
   }
 }

@@ -509,7 +509,7 @@ export const dashboardPeak = (r) => (r.rejected > 0 ? 1 : r.reported);
 export const isFront = (tab) => tab === 'commit' || tab === 'decide';
 
 /** A tool check, for How you played: opening a tool tab. The front tab, The Contract, Ask an AI and the Risk Register don't count, nor using a tool's numbers. There is no limit. */
-export const isCheck = (tab) => !!tab && !isFront(tab) && tab !== 'contract' && tab !== 'ai' && tab !== 'ai-copy' && tab !== 'risks' && !tab.startsWith('use:');
+export const isCheck = (tab) => !!tab && !isFront(tab) && tab !== 'contract' && tab !== 'ai' && tab !== 'ai-copy' && tab !== 'records-csv' && tab !== 'risks' && !tab.startsWith('use:');
 
 
 
@@ -538,7 +538,7 @@ export function normalizeDesk(d) {
   const tool = /^[a-z]$/.test(d.tool || '') ? d.tool : '';
   // Whose numbers were committed, in words: "Mabel's", "Records", or '' for the student's own.
   const source = typeof d.source === 'string' ? d.source.slice(0, 40) : '';
-  return { tool, source, tabs: Math.max(0, Math.min(99, Math.round(+d.tabs || 0))), minutes: Math.max(0, Math.min(99, Math.round(+d.minutes || 0))), edited: !!d.edited, copied: !!d.copied, seconds: Math.max(0, Math.round((+d.minutes || 0) * 60)), order: Array.isArray(d.order) ? d.order.map(String) : [] };
+  return { tool, source, tabs: Math.max(0, Math.min(99, Math.round(+d.tabs || 0))), minutes: Math.max(0, Math.min(99, Math.round(+d.minutes || 0))), edited: !!d.edited, copied: !!d.copied, csv: !!d.csv, ai: !!d.ai, checks: Math.max(0, Math.min(999, Math.round(+d.checks || 0))), seconds: Math.max(0, Math.round((+d.minutes || 0) * 60)), order: Array.isArray(d.order) ? d.order.map(String) : [] };
 }
 
 // ── Plans ────────────────────────────────────────────────────────────────────

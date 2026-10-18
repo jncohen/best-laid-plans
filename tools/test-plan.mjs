@@ -5,8 +5,8 @@ import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/p
 import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, isCheck, forecastScore, forecastParts, dashboardPeak } from '../frontend/src/plan/engine.js';
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
-import { gameFacts, luckReplay, resultsText, riskReview } from '../frontend/src/plan/facts.js';
-import { comparisonRows, aiPrompt, projectControls, whatIf } from '../frontend/src/plan/desk.js';
+import { gameFacts, luckReplay, resultsText, riskReview, checkingSummary } from '../frontend/src/plan/facts.js';
+import { comparisonRows, aiPrompt, recordsCsv, projectControls, whatIf } from '../frontend/src/plan/desk.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond) => { if (cond) { pass++; console.log(`  ok   ${name}`); } else { fail++; console.log(`  FAIL ${name}`); } };
@@ -466,7 +466,7 @@ console.log('Your game in 8 facts');
   const a = game({ commit: { week: 10, low: 10, high: 11, onTimeChance: 90 }, desk: { tool: 'a', source: 'Status Report', tabs: 1, minutes: 2, order: ['status'] }, pol: plan });
   const fa = gameFacts(a), byKey = (fs, k) => fs.find((x) => x.key === k);
   t('fact 1: week 10 is close to the line\'s pace (10.5) and not the median', byKey(fa, 'start').value.near.join() === 'close to the line\'s pace' && byKey(fa, 'start').text === 'You committed week 10: close to the line\'s pace.');
-  t('fact 2: opened Status Report only, so Records no and Last 5 no', byKey(fa, 'record').text === 'You opened Records: no. You opened Last 5 Contracts: no.');
+  t('fact 2: opened Status Report only, so Records no and Last 5 no; no checks in play; no AI', byKey(fa, 'record').text === 'Before week 1 you checked information sources 1 time (Records: no; Last 5 Contracts: no). During play you checked nothing; You did not use AI.');
   const ninety = a.history.find((r) => dashboardPeak(r) >= 0.9), rej = a.history.reduce((s, r) => s + r.rejected, 0);
   t('fact 3: the 90% week from the peak reading, the units rejected, and a move after the rejection', byKey(fa, 'ninety').value.week === ninety.week && byKey(fa, 'ninety').value.rejected === rej && rej > 0
     && byKey(fa, 'ninety').text === `Your dashboard passed 90% in week ${ninety.week} (it read ${Math.round(dashboardPeak(ninety) * 100)}%); the customer then rejected ${rej} units. You changed your forecast within 2 weeks of the rejection: no.`);
@@ -570,11 +570,29 @@ console.log('Management information: controls, what-if, risk register');
   t('the Risk Register tab is not a tool check', !isCheck('risks') && isCheck('controls') && isCheck('whatif'));
 }
 
+console.log('Records CSV, checks, AI use, checking out');
+{
+  const S = screenData(), csv = recordsCsv(S).split('\n');
+  t('the records CSV has a header and all 40 contracts, with failures as outcomes', csv.length === 41 && csv[0].startsWith('id,crews_added') && csv.filter((l) => /,bankrupt,/.test(l)).length === 2);
+  const plan = { crews: 3, inspect: 0.1, shift: 'none' };
+  const p = new Project('ledger');
+  p.commit({ week: 13, low: 12, high: 15, onTimeChance: 30, plan, desk: { tool: '', source: '', tabs: 2, checks: 5, ai: true, copied: true, csv: false, minutes: 3, order: ['records', 'ai'] } });
+  let w = 0;
+  while (!p.done) { w++; if (w <= 3) { p.noteDesk(w, 'status'); p.noteDesk(w, 'controls'); } if (w === 2) p.noteDesk(w, 'records-csv'); p.play({ hire: w === 1 ? 3 : 0, inspect: 0.1 }); }
+  const k = checkingSummary(p);
+  t('checks are counted before week 1 and during play; the AI steps; checking out after week 3', k.before === 5 && k.during === 6 && k.weeksChecked === 3 && k.stoppedAfter === 3 && k.aiOpened && k.aiCopied && k.csv);
+  const fx = gameFacts(p).find((x) => x.key === 'record');
+  t('the fact says it in words', fx.title === 'What you checked' && fx.text.includes('checked information sources 5 times') && fx.text.includes('you stopped checking after week 3')
+    && fx.text.includes('AI: you opened Ask an AI, copied its prompt, downloaded the records.'));
+  t('the results file lists the checks', resultsText(p, gameFacts(p)).includes('- Stopped checking: after week 3.'));
+  t('the records CSV download is not a tool check; Ask an AI is not either', !isCheck('records-csv') && !isCheck('ai'));
+}
+
 console.log('Ask an AI, the plan fact, the results file, the chat');
 {
   const S = screenData(), plan = { crews: 3, inspect: 0.1, shift: 'none' };
   const pr = aiPrompt(S, plan);
-  t('Ask an AI: the basic numbers and the situation, one question, no method', pr.includes('Past contracts on this line (40)') && pr.includes('My plan: add 3 crews at the start') && pr.trim().endsWith('When will the customer accept the contract?')
+  t('Ask an AI: the basic numbers and the situation, one question, no method', !pr.includes('Past contracts') && !/was accepted in week|read 100% in week/.test(pr) && pr.includes('My plan: add 3 crews at the start') && pr.trim().endsWith('When will the customer accept the contract?')
     && !/reference class|base rate|outside view|inside view|forecasting/i.test(pr) && !('ai' in FORECASTERS));
   const p = new Project('ledger', CONFIG, 7);
   p.commit({ week: 13, low: 12, high: 15, onTimeChance: 30, plan, desk: { tool: 'j', source: 'Records', tabs: 3, minutes: 4, order: ['chat', 'last5', 'records'] } });

@@ -3,7 +3,7 @@
  * room "hands up if fact 3 happened to you". Every fact is computed from the finished
  * project and the briefing; nothing here changes a score or an outcome.
  */
-import { CONFIG, Project, pastContracts, historyMean, dashboardPeak, describePlan, playSummary, forecastParts } from './engine.js';
+import { CONFIG, Project, pastContracts, historyMean, dashboardPeak, describePlan, playSummary, forecastParts, isCheck } from './engine.js';
 import { screenData, allForecasts, tabById, schedule, RISK_KINDS } from './desk.js';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -62,6 +62,10 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
   const log = p.forecastLog;
   // Did the student move the forecast in weeks a+1..a+2, the two weeks after something happened in week a?
   const movedWithin = (a) => log.some((e, i) => i > 0 && e.week > a && e.week <= a + 2 && moved(e, log[i - 1], c));
+
+  // How much the student looked: every opening of an information tab, before week 1 and week by week;
+  // the AI steps; and the week after which they stopped looking ("checked out"), if they did.
+  const checking = checkingSummary(p);
 
   // Keep/Change checkpoint taps, by event: what the student did when the game showed it to them.
   const tapped = (event) => (p.checkpoints || []).find((k) => k.event === event) || null;
@@ -127,8 +131,11 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
       text: p.gutForecast
         ? `Gut: week ${p.gutForecast.week}. Final: week ${f.week}${p.gutForecast.week === f.week && p.gutForecast.low === f.low && p.gutForecast.high === f.high ? ', kept after the tour' : ' (after the tour)'}: ${start.join(' and ')}.`
         : `You committed week ${f.week}: ${start.join(' and ')}.` },
-    { n: 2, key: 'record', title: 'The record', value: { records: opened.has('records'), last5: opened.has('last5') },
-      text: `You opened Records: ${opened.has('records') ? 'yes' : 'no'}. You opened Last 5 Contracts: ${opened.has('last5') ? 'yes' : 'no'}.` },
+    { n: 2, key: 'record', title: 'What you checked', value: { records: opened.has('records'), last5: opened.has('last5'), ...checking },
+      text: `Before week 1 you checked information sources ${plural(checking.before, 'time')} (Records: ${opened.has('records') ? 'yes' : 'no'}; Last 5 Contracts: ${opened.has('last5') ? 'yes' : 'no'}). `
+        + (checking.during ? `During play, ${plural(checking.during, 'more check')} in ${checking.weeksChecked} of ${plural(checking.weeks, 'week')}; ` : 'During play you checked nothing; ')
+        + (checking.during ? (checking.stoppedAfter !== null ? `you stopped checking after week ${checking.stoppedAfter} (${plural(checking.weeks - checking.stoppedAfter, 'week')} without a look). ` : 'you kept checking to the end. ') : '')
+        + (checking.aiUsed ? `AI: ${[checking.aiOpened && 'you opened Ask an AI', checking.aiCopied && 'copied its prompt', checking.csv && 'downloaded the records'].filter(Boolean).join(', ')}.` : 'You did not use AI.') },
     { n: 3, key: 'ninety', title: 'The 90% moment', value: { week: ninety ? ninety.week : null, peak: ninety ? dashboardPeak(ninety) : null, rejected, afterReject },
       text: (ninety
         ? `Your dashboard passed 90% in week ${ninety.week} (it read ${Math.round(dashboardPeak(ninety) * 100)}%); ${rejected > 0 ? `the customer then rejected ${plural(rejected, 'unit')}.` : 'the customer rejected no units.'}`
@@ -155,6 +162,24 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
         + `With your decisions and other luck, your 80% range held in ${replay.held} of ${replay.draws}; week ${c.deadline} was made in ${replay.onTime}, and the company went bankrupt in ${replay.bankrupt}.` },
   ];
   return facts.map((x, i) => ({ ...x, n: i + 1 }));
+}
+
+/** Information checks: before week 1, during play by week, the AI steps, and when the looking stopped. */
+export function checkingSummary(p) {
+  const weeks = p.history.filter((r) => !r.bankrupt).length;
+  const log = p.deskLog.filter((d) => isCheck(d.tab));
+  const byWeek = {};
+  for (const d of log) byWeek[d.week] = (byWeek[d.week] || 0) + 1;
+  const checked = Object.keys(byWeek).map(Number).filter((w) => w >= 1 && w <= weeks);
+  const last = checked.length ? Math.max(...checked) : null;
+  // Checked out: at least two weeks at the end without a look (deskLog weeks are the week about to be played).
+  const stoppedAfter = last !== null && weeks - last >= 2 ? last : null;
+  const tabs = p.deskLog.map((d) => d.tab);
+  const aiOpened = !!p.desk?.ai || tabs.includes('ai'), aiCopied = !!p.desk?.copied || tabs.includes('ai-copy'), csv = !!p.desk?.csv || tabs.includes('records-csv');
+  return {
+    before: p.desk ? Math.max(p.desk.checks || 0, p.desk.tabs || 0) : 0, during: log.length, weeksChecked: checked.length, weeks, byWeek,
+    lastWeekChecked: last, stoppedAfter, neverDuring: log.length === 0, aiOpened, aiCopied, csv, aiUsed: aiOpened || aiCopied || csv,
+  };
 }
 
 /**
@@ -201,6 +226,14 @@ export function resultsText(p, facts, { run = 1, date = new Date() } = {}) {
     '',
     'Your game in facts:',
     ...facts.map((x) => `${x.n}. ${x.title}. ${x.text}`),
+    '',
+    'What you checked:',
+    ...(() => {
+      const k = checkingSummary(p);
+      return [`- Before week 1: ${k.before} checks of information sources.`, `- During play: ${k.during} checks, in ${k.weeksChecked} of ${k.weeks} weeks${k.during ? ` (by week: ${Object.entries(k.byWeek).map(([w, n]) => `${w}:${n}`).join(' ')})` : ''}.`,
+        `- Stopped checking: ${k.neverDuring ? 'never checked during play' : k.stoppedAfter !== null ? `after week ${k.stoppedAfter}` : 'no, checked to the end'}.`,
+        `- AI: opened Ask an AI ${k.aiOpened ? 'yes' : 'no'}; copied the prompt ${k.aiCopied ? 'yes' : 'no'}; downloaded the records CSV ${k.csv ? 'yes' : 'no'}.`];
+    })(),
     '',
     'Your risk register:',
     ...(() => {

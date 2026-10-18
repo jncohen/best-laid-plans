@@ -356,13 +356,12 @@ export const RISK_LEVELS = ['low', 'medium', 'high'];
 const k$ = (n) => (Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : `$${Math.round(n / 1000)}k`);
 /**
  * A plain prompt with the basic numbers and the situation, for the student to paste into any AI
- * assistant. It asks one question and says nothing about method: getting a good answer (asking
- * about the past contracts, or forecasting theory) is up to the student.
+ * assistant. It asks one question and says nothing about method. It holds no past contracts:
+ * the student can download them from Records (recordsCsv) and upload them, or not.
  */
 export function aiPrompt(S, plan, L = null) {
   const R = S.rules, p = asPlan(plan);
   const planText = `${p.crews ? `add ${p.crews} crew${p.crews > 1 ? 's' : ''} at the start` : 'add no crews'}, ${p.inspect ? `${Math.round(p.inspect * 100)}% of the line on inspection` : 'no inspection'}, ${p.shift === 'none' ? 'no second shift' : p.shift === 'late' ? 'a second shift in weeks 9–11' : 'a second shift every week'}`;
-  const row = (r) => [r.id, r.crewsAdded, Math.round(r.inspect * 100), r.shiftWeeks, r.scopeWeek, r.scopeUnits, r.dashboardFullWeek, r.rejected, r.delivered ? r.accepted : r.bankrupt ? 'bankrupt' : 'terminated'].join(',');
   const lines = [
     'I manage a production contract. Here is the situation.',
     '',
@@ -372,11 +371,7 @@ export function aiPrompt(S, plan, L = null) {
     '- The customer will add units once, partway through, at a week and in an amount not known in advance.',
     `- Each crew costs ${k$(R.crewWeek)} a week; adding one costs ${k$(R.hireFee)} and slows the whole line for ${R.onboardingWeeks} weeks. A second shift adds ${Math.round((R.shiftBoost - 1) * 100)}% output. Inspection moves part of the line from building to checking.`,
     '',
-    `The line's last contract (same line, ${R.crews} crews, no inspection): its dashboard showed ${S.history.map((v) => v.toFixed(1)).join(', ')} units in its first six weeks, read 100% in week ${S.last.dashboardFullWeek}, and was accepted in week ${S.last.deliveredWeek} with ${S.last.rejected} units rejected.`,
-    '',
-    `Past contracts on this line (${S.contracts.length}):`,
-    'id,crews_added,inspection_pct,second_shift_weeks,scope_change_week,scope_change_units,dashboard_100pct_week,units_rejected,accepted_week',
-    ...S.contracts.map(row),
+    `On the line's last contract (same line, ${R.crews} crews, no inspection) the dashboard showed ${S.history.map((v) => v.toFixed(1)).join(', ')} units in its first six weeks.`,
     '',
     `My plan: ${planText}.`,
   ];
@@ -388,6 +383,14 @@ export function aiPrompt(S, plan, L = null) {
   }
   lines.push('', 'When will the customer accept the contract?');
   return lines.join('\n');
+}
+
+/** The 40 past contracts as a CSV file, for the student to open or upload to an AI. */
+export function recordsCsv(S) {
+  const head = 'id,crews_added,inspection_pct,second_shift_weeks,scope_change_week,scope_change_units,dashboard_100pct_week,units_rejected,outcome,accepted_week,on_time';
+  const row = (r) => [r.id, r.crewsAdded, Math.round(r.inspect * 100), r.shiftWeeks, r.scopeWeek, r.scopeUnits, r.dashboardFullWeek, r.rejected,
+    r.delivered ? 'accepted' : r.bankrupt ? 'bankrupt' : 'terminated', r.delivered ? r.accepted : '', r.onTime ? 'yes' : 'no'].join(',');
+  return [head, ...S.contracts.map(row)].join('\n');
 }
 
 // ── The desk ─────────────────────────────────────────────────────────────────
