@@ -2,7 +2,7 @@
 import { Project, CONFIG, COMMON_PLANS, pastContracts, lastContract, historyMean, playPolicy, matchContracts, planFromProject, summarizeContracts,
   encodePlan, decodePlan, normalizePlan, playedPlan, judgeForecast } from '../frontend/src/plan/engine.js';
 import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/plan/table.js';
-import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, isCheck, forecastScore } from '../frontend/src/plan/engine.js';
+import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, isCheck, forecastScore, forecastParts, dashboardPeak } from '../frontend/src/plan/engine.js';
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
 import { gameFacts, luckReplay } from '../frontend/src/plan/facts.js';
@@ -126,12 +126,14 @@ console.log('Matching past contracts to a plan');
 {
   for (const cp of COMMON_PLANS) {
     const m = matchContracts(cp);
-    // On the seeded-manager record no common plan has five exact matches; most match within one crew,
-    // and inspection-only widens to any crews with inspection.
+    // Crews within one come before dropping crews: "crews within one" may mix inspection and shift,
+    // "inspection and shift" drops crews (and says so).
     const crewsOk = m.rule === 'inspection and shift' || m.contracts.every((r) => Math.abs(r.crewsAdded - cp.crews) <= 1);
-    t(`${cp.label}: at least 5 contracts match (n ${m.n}, ${m.rule})`, m.n >= 5 && m.rule !== 'all contracts'
-      && crewsOk && m.contracts.every((r) => (r.inspect > 0) === (cp.inspect > 0) && (r.shiftWeeks > 0) === cp.shift));
+    const sameOk = m.rule === 'crews within one' || m.contracts.every((r) => (r.inspect > 0) === (cp.inspect > 0) && (r.shiftWeeks > 0) === cp.shift);
+    t(`${cp.label}: at least 5 contracts match (n ${m.n}, ${m.rule})`, m.n >= 5 && m.rule !== 'all contracts' && crewsOk && sameOk && m.crewsDropped === (m.rule === 'inspection and shift'));
   }
+  const far = matchContracts({ crews: 7, inspect: 0.3, shift: 'every' });
+  t('a plan no past manager ran drops crews, and says so', far.crewsDropped === true && ['inspection and shift', 'all contracts'].includes(far.rule) && matchContracts(COMMON_PLANS[1]).rule === 'crews within one' && matchContracts(COMMON_PLANS[1]).crewsDropped === false);
   const odd = matchContracts({ crews: 5, inspect: 0.3, shift: true });
   t('an unusual plan still gets at least 5 contracts, under a wider rule', odd.n >= 5 && odd.rule !== 'crews, inspection and shift');
   const p = runPolicy('plan-of', { hire: 3, inspect: 0.1, shiftFrom: 10, shiftTo: 11 });
@@ -207,6 +209,7 @@ console.log('The table summarises what matchContracts finds');
     const base = filterForPlan(cp);
     const f = m.rule === 'crews, inspection and shift' ? filterContracts(rows, base)
       : m.rule === 'inspection and shift' ? filterContracts(rows, { ...base, crews: 'any' })
+      : m.rule === 'crews within one' ? rows.filter((r) => [cp.crews - 1, cp.crews, cp.crews + 1].some((c) => filterContracts([r], { crews: c }).length))
       : rows.filter((r) => [cp.crews - 1, cp.crews, cp.crews + 1].some((c) => filterContracts([r], { ...base, crews: c }).length));
     const s = summarizeContracts(f);
     t(`${cp.label}: table filter = matchContracts (n ${m.n}, median ${m.median}, ${m.p10}-${m.p90})`,
@@ -441,7 +444,9 @@ console.log('The Forecast score: one score, and wide ranges cost points');
   t('there is no Updating score', !('updating' in new Project('ledger').scores()));
   // Bankruptcy is reported on its own; the range is graded against the projected week.
   const b = new Project('render-broke'); b.commit({ week: 14, low: 12, high: 16, onTimeChance: 0 }); while (!b.done) b.play({ hire: 3, shift: true });
-  t('a bankrupt contract is graded against its projected week, and reported as failed', b.result === 'BANKRUPT' && b.scores().failed === 'bankrupt' && b.scores().held === (b.outcomeWeek() >= 12 && b.outcomeWeek() <= 16));
+  t('a bankrupt contract missed its range: Forecast score 0, reported as failed', b.result === 'BANKRUPT' && b.scores().failed === 'bankrupt' && b.scores().held === false && b.scores().forecast === 0);
+  const pt = forecastParts({ week: 14, low: 12, high: 17, onTimeChance: 20 }, 15, false);
+  t('the Forecast score shows its three parts: point 8, range 15, chance 2 = 75', pt.point === 8 && pt.range === 15 && pt.chance === 2 && pt.score === 75);
 }
 
 console.log('Your game in 8 facts');
@@ -452,7 +457,7 @@ console.log('Your game in 8 facts');
     p.commit({ ...commit, plan: { crews: 3, inspect: 0.1, shift: 'none' }, desk });
     while (!p.done) {
       const w = p.week + 1, fc = forecastAt ? forecastAt(w, p) : null;
-      p.play({ ...pol(w), forecast: fc ? fc.week : Math.max(w, commit.week), range: fc || { low: Math.max(w, commit.low), high: Math.max(w, commit.high), chance: commit.onTimeChance, carried: commit.week < w } });
+      p.play({ ...pol(w), forecast: fc ? fc.week : Math.max(w, commit.week), range: fc ? { low: fc.low, high: fc.high, chance: fc.chance, touched: fc.touched } : { low: Math.max(w, commit.low), high: Math.max(w, commit.high), chance: commit.onTimeChance, carried: commit.week < w } });
     }
     return p;
   };
@@ -461,11 +466,12 @@ console.log('Your game in 8 facts');
   const fa = gameFacts(a), byKey = (fs, k) => fs.find((x) => x.key === k);
   t('fact 1: week 10 is close to the line\'s pace (10.5) and not the median', byKey(fa, 'start').value.near.join() === 'close to the line\'s pace' && byKey(fa, 'start').text === 'You committed week 10: close to the line\'s pace.');
   t('fact 2: opened Status Report only, so Records no and Last 5 no', byKey(fa, 'record').text === 'You opened Records: no. You opened Last 5 Contracts: no.');
-  const ninety = a.history.find((r) => r.reported >= 0.9), rej = a.history.reduce((s, r) => s + r.rejected, 0);
-  t('fact 3: the 90% week and the units rejected, from the history', byKey(fa, 'ninety').value.week === ninety.week && byKey(fa, 'ninety').value.rejected === rej && rej > 0
-    && byKey(fa, 'ninety').text === `Your dashboard passed 90% in week ${ninety.week}; the customer then rejected ${rej} units.`);
-  t('fact 4: ledger adds 15 units in week 4; a forecast never moved is "no"', byKey(fa, 'surprise').text === 'The customer added 15 units in week 4. You changed your forecast afterwards: no.');
-  t('fact 5: the Status Report numbers', byKey(fa, 'advice').text === 'You used the Status Report numbers.');
+  const ninety = a.history.find((r) => dashboardPeak(r) >= 0.9), rej = a.history.reduce((s, r) => s + r.rejected, 0);
+  t('fact 3: the 90% week from the peak reading, the units rejected, and a move after the rejection', byKey(fa, 'ninety').value.week === ninety.week && byKey(fa, 'ninety').value.rejected === rej && rej > 0
+    && byKey(fa, 'ninety').text === `Your dashboard passed 90% in week ${ninety.week} (it read ${Math.round(dashboardPeak(ninety) * 100)}%); the customer then rejected ${rej} units. You changed your forecast within 2 weeks of the rejection: no.`);
+  t('the peak reading: a week whose acceptance test rejected units read 100%', dashboardPeak({ rejected: 3, reported: 0.92 }) === 1 && dashboardPeak({ rejected: 0, reported: 0.92 }) === 0.92);
+  t('fact 4: the scope change against the record\'s spread; a forecast never moved is "no"', byKey(fa, 'surprise').text === 'The customer added 15 units in week 4 (past contracts: +10 to +52). You changed your forecast within 2 weeks: no.');
+  t('fact 5: the committed Status Report numbers', byKey(fa, 'advice').text === 'You committed the Status Report numbers.');
   t('fact 6: the range against the outcome', byKey(fa, 'range').value.held === a.scores().held && byKey(fa, 'range').value.missBy === a.scores().missBy);
   t('fact 7: not bankrupt; over budget only if spent more than $5.00M', byKey(fa, 'money').value.bankruptWeek === null && byKey(fa, 'money').value.over === Math.max(0, a.spent - CONFIG.budget));
   const b = game({ commit: { week: 13, low: 12, high: 15, onTimeChance: 30 }, desk: { tool: 'f', source: "Mabel's", tabs: 2, minutes: 3, order: ['records', 'chat'] }, pol: plan,
@@ -473,17 +479,29 @@ console.log('Your game in 8 facts');
   const fb = gameFacts(b);
   t('fact 1 for week 13: close to the past contracts\' median (14)', byKey(fb, 'start').value.near.join() === 'close to the past contracts\' median');
   t('facts 2, 4, 5 for a Mabel follower who moved the forecast in week 6', byKey(fb, 'record').value.records && !byKey(fb, 'record').value.last5
-    && byKey(fb, 'surprise').value.changedAfter === true && byKey(fb, 'advice').text === "You used Mabel's numbers.");
+    && byKey(fb, 'surprise').value.changedWithin === true && byKey(fb, 'advice').text === "You committed Mabel's numbers.");
+  t('fact 4 asks within 2 weeks: a move in week 6, after a week-4 change, counts', byKey(gameFacts(game({ commit: { week: 13, low: 12, high: 15, onTimeChance: 30 }, desk: { tool: 'f', source: "Mabel's", tabs: 1, minutes: 3, order: ['chat'] }, pol: plan,
+    forecastAt: (w) => (w >= 6 ? { week: 14, low: 13, high: 15, chance: 20, touched: w === 6 } : null) })), 'surprise').value.changedWithin === true);
+  // Fact 5 counts "Use X's numbers" during play.
+  const mid = new Project('ledger', CONFIG, 7);
+  mid.commit({ week: 13, low: 12, high: 15, onTimeChance: 30, plan: { crews: 3, inspect: 0.1, shift: 'none' }, desk: { tool: '', tabs: 0, minutes: 1, order: [] } });
+  while (!mid.done) { const w = mid.week + 1; if (w === 6) mid.noteDesk(6, 'use:chat:Priya'); if (w === 8) mid.noteDesk(8, 'use:records'); mid.play({ hire: w === 1 ? 3 : 0, inspect: 0.1 }); }
+  t('fact 5 counts mid-game uses and names the hand-set forecast\'s closest tool', /closest to /.test(byKey(gameFacts(mid), 'advice').text) && byKey(gameFacts(mid), 'advice').text.endsWith("During play you used Priya's in week 6, the Records in week 8."));
   const coast = gameFacts(game({ commit: { week: 13, low: 12, high: 15, onTimeChance: 29 }, desk: { tool: 'j', source: 'Records', tabs: 2, minutes: 5, order: ['records', 'last5'] }, pol: plan }));
-  t('fact 4: the calendar moving a range forward is not the student changing the forecast', byKey(coast, 'surprise').value.changedAfter === false && byKey(coast, 'advice').text === 'You used the Records numbers.');
+  t('fact 4: the calendar moving a range forward is not the student changing the forecast', byKey(coast, 'surprise').value.changedWithin === false && byKey(coast, 'advice').text === 'You committed the Records numbers.');
   const fd = gameFacts(game({ commit: { week: 12, low: 11, high: 13, onTimeChance: 50 }, desk: { tool: '', tabs: 0, minutes: 1, order: [] }, pol: plan }));
-  t('fact 1 for week 12 is "at the deadline"; fact 5 is your own numbers', byKey(fd, 'start').value.near.includes('at the deadline') && byKey(fd, 'advice').text === 'You used your own numbers.');
+  t('fact 1 for week 12 is "at the deadline"; fact 5 is your own numbers, closest to a desk tool', byKey(fd, 'start').value.near.includes('at the deadline') && byKey(fd, 'advice').text === "You set your own numbers, closest to Kim's (week 12, 11–13).");
   // Fact 7 and 8 on a bankrupt game: +2 crews with a shift every week.
   const br = game({ commit: { week: 12, low: 11, high: 13, onTimeChance: 50 }, desk: { tool: '', tabs: 0, minutes: 1, order: [] }, pol: (w) => ({ hire: w === 1 ? 2 : 0, shift: true }) });
   const fbr = gameFacts(br);
-  t('fact 7: bankrupt, with the week', br.result === 'BANKRUPT' && byKey(fbr, 'money').text.startsWith(`Bankrupt: yes, in week ${br.week}.`));
-  t('fact 8: the luck replay counts are deterministic and plausible', JSON.stringify(luckReplay(a)) === JSON.stringify(luckReplay(a)) && byKey(fbr, 'luck').value.bankrupt >= 90 && byKey(fa, 'luck').value.draws === 100
-    && byKey(fa, 'luck').text === `With exactly your decisions, other luck would have made week 12 in ${byKey(fa, 'luck').value.onTime} of 100 games, and gone bankrupt in ${byKey(fa, 'luck').value.bankrupt}.`);
+  const bw = br.history[br.history.length - 1];
+  t('fact 7: bankrupt, with the week and the overrun that triggered it', br.result === 'BANKRUPT' && bw.bankrupt && byKey(fbr, 'money').value.shortfall === bw.shortfall && bw.shortfall > 0
+    && byKey(fbr, 'money').text === `Bankrupt: yes, in week ${bw.week}. Its payroll ($${Math.round(bw.payroll / 1000)}k) would have gone $${Math.round(bw.shortfall / 1000)}k past the $500k credit line.`);
+  t('fact 6 and the score: a bankrupt contract missed its range and scores 0', byKey(fbr, 'range').text === 'Your 80% range (weeks 11–13): missed. The contract was never delivered.' && br.scores().forecast === 0 && br.scores().held === false && br.scores().parts === null);
+  const L = byKey(fa, 'luck').value, R = luckReplay(a);
+  t('fact 8: deterministic; typical week, luckier-than, made, bankrupt and range-held counts', JSON.stringify(luckReplay(a)) === JSON.stringify(R) && byKey(fbr, 'luck').value.bankrupt >= 90 && L.draws === 100
+    && L.luckier === R.weeks.filter((w) => w > a.outcomeWeek()).length && L.held === R.weeks.filter((w) => w >= a.forecast.low && w <= a.forecast.high).length
+    && byKey(fa, 'luck').text === `With exactly your decisions, other luck gave week ${Math.ceil(L.median)} typically (${Math.ceil(L.p10)}–${Math.ceil(L.p90)}); you were luckier than ${L.luckier} of 100. Week 12 was made in ${L.onTime} of 100, bankruptcy in ${L.bankrupt}, and your range held in ${L.held}.`);
   t('fact 8 replays the student\'s own decisions: replaying with the student\'s own luck reproduces the outcome', (() => {
     const q = new Project('ledger', CONFIG, 7); let w = 0; while (!q.done) { q.play(a.decisions[w] || { hire: 0, inspect: 0.1 }); w++; } return q.outcomeWeek() === a.outcomeWeek() && q.spent === a.spent; })());
   t('the facts never change an outcome', (() => { const before = JSON.stringify(a.history); gameFacts(a); return JSON.stringify(a.history) === before; })());

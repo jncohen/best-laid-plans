@@ -1,6 +1,7 @@
 // Hand-drawn SVG charts. Plain SVG renders identically on the server and in the
 // browser, so the reveal can be checked without a browser, and it adds no weight.
 import { CHART_W as W, CHART_CLASS } from './chartStyle';
+import { dashboardPeak } from './engine';
 
 const PAD = { l: 36, r: 12, t: 22, b: 24 };
 
@@ -42,7 +43,8 @@ export function RevealChart({ history, deadline, finishWeek, ninetyWeek, band, e
   const h = 280;
   const x = (w) => PAD.l + (w / end) * (W - PAD.l - PAD.r);
   const y = (v) => PAD.t + (1 - v / 100) * (h - PAD.t - PAD.b);
-  const pts = [[0, 0], ...history.map((r) => [r.week, Math.round(r.reported * 100)])];
+  // A week whose acceptance test rejected units read 100% first, then dropped as the rework went back on.
+  const pts = [[0, 0], ...history.flatMap((r) => (r.rejected > 0 ? [[r.week, 100], [r.week, Math.round(r.reported * 100)]] : [[r.week, Math.round(r.reported * 100)]]))];
   const line = pts.map(([w, v]) => `${x(w)},${y(v)}`).join(' ');
   const rejections = history.filter((r) => r.rejected > 0);
   const ninety = ninetyWeek ? history.find((r) => r.week === ninetyWeek) : null;
@@ -55,12 +57,12 @@ export function RevealChart({ history, deadline, finishWeek, ninetyWeek, band, e
       {vline(x(deadline), h, { color: '#fb7185', label: 'deadline', anchor: 'end', dy: 150 })}
       {finishWeek !== null && vline(x(finishWeek), h, { color: '#fbbf24', dash: '0', label: 'accepted', anchor: 'start' })}
       <polyline points={line} fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinejoin="round" />
-      {pts.map(([w, v]) => <circle key={w} cx={x(w)} cy={y(v)} r="2.5" fill="#38bdf8" />)}
+      {pts.map(([w, v], i) => <circle key={i} cx={x(w)} cy={y(v)} r="2.5" fill="#38bdf8" />)}
       {ninety && (
         <g>
-          <circle cx={x(ninety.week)} cy={y(Math.round(ninety.reported * 100))} r="6" fill="none" stroke="#e0f2fe" strokeWidth="2" />
-          <text x={x(ninety.week) - 8} y={y(Math.round(ninety.reported * 100)) + 4} textAnchor="end" fontSize="12" fill="#e0f2fe" fontWeight="600">
-            "{Math.round(ninety.reported * 100)}% done"
+          <circle cx={x(ninety.week)} cy={y(Math.round(dashboardPeak(ninety) * 100))} r="6" fill="none" stroke="#e0f2fe" strokeWidth="2" />
+          <text x={x(ninety.week) - 8} y={y(Math.round(dashboardPeak(ninety) * 100)) + 4} textAnchor="end" fontSize="12" fill="#e0f2fe" fontWeight="600">
+            "{Math.round(dashboardPeak(ninety) * 100)}% done"
           </text>
         </g>
       )}
@@ -82,10 +84,11 @@ export function ProgressSpark({ history, deadline, end }) {
   const h = 140;
   const x = (w) => PAD.l + (w / end) * (W - PAD.l - PAD.r);
   const y = (v) => PAD.t + (1 - v / 100) * (h - PAD.t - PAD.b);
-  const pts = [[0, 0], ...history.map((r) => [r.week, Math.round(r.reported * 100)])];
+  // A week whose acceptance test rejected units read 100% first, then dropped as the rework went back on.
+  const pts = [[0, 0], ...history.flatMap((r) => (r.rejected > 0 ? [[r.week, 100], [r.week, Math.round(r.reported * 100)]] : [[r.week, Math.round(r.reported * 100)]]))];
   const line = pts.map(([w, v]) => `${x(w)},${y(v)}`).join(' ');
   const area = `${x(0)},${y(0)} ${line} ${x(pts[pts.length - 1][0])},${y(0)}`;
-  const ninety = history.find((r) => !r.bankrupt && r.reported >= 0.9);
+  const ninety = history.find((r) => !r.bankrupt && dashboardPeak(r) >= 0.9);
   return (
     <svg viewBox={`0 0 ${W} ${h}`} className={CHART_CLASS} role="img" aria-label="Reported progress so far">
       {axes({ x, y, end, h })}
@@ -95,8 +98,8 @@ export function ProgressSpark({ history, deadline, end }) {
       {ninety && (
         // The week the dashboard first passed 90%.
         <g>
-          <circle cx={x(ninety.week)} cy={y(Math.round(ninety.reported * 100))} r="5" fill="none" stroke="#e0f2fe" strokeWidth="2" />
-          <text x={x(ninety.week) - 8} y={y(Math.round(ninety.reported * 100)) + 4} textAnchor="end" fontSize="12" fontWeight="600" fill="#e0f2fe">Dashboard: 90% done</text>
+          <circle cx={x(ninety.week)} cy={y(Math.round(dashboardPeak(ninety) * 100))} r="5" fill="none" stroke="#e0f2fe" strokeWidth="2" />
+          <text x={x(ninety.week) - 8} y={y(Math.round(dashboardPeak(ninety) * 100)) + 4} textAnchor="end" fontSize="12" fontWeight="600" fill="#e0f2fe">Dashboard: 90% done</text>
         </g>
       )}
     </svg>

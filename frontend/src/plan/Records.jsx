@@ -3,17 +3,19 @@ import { CONFIG, matchContracts, summarizeContracts, describePlan, failuresLine 
 import { DotStrip } from './ui';
 import { ANY, filterContracts, sortContracts } from './table.js';
 
+// [key, label, shown on a phone]. On a 375 px phone the table keeps what was done and how it ended.
 const COLS = [
-  ['id', '#'],
-  ['crews', 'Crews added'],
-  ['inspect', 'Inspect'],
-  ['shift', '2nd shift wks'],
-  ['scope', 'Scope change'],
-  ['full', 'Dashboard 100%'],
-  ['rejected', 'Rejected'],
-  ['accepted', 'Accepted'],
-  ['onTime', 'On time'],
+  ['id', '#', true],
+  ['crews', 'Crews', true],
+  ['inspect', 'Insp.', true],
+  ['shift', '2nd shift wks', false],
+  ['scope', 'Scope change', false],
+  ['full', 'Dashboard 100%', false],
+  ['rejected', 'Rej.', true],
+  ['accepted', 'Accepted', true],
+  ['onTime', 'On time', true],
 ];
+const cell = (phone) => (phone ? '' : 'hidden sm:table-cell');
 
 function Select({ label, value, onChange, options }) {
   return (
@@ -72,7 +74,11 @@ export default function Records({ past, plan = null, onUse = null }) {
         <p className="text-xs text-slate-400">
           Contracts run like your plan, {describePlan(plan)}. Matched on {match.rule}
           {match.rule !== 'crews, inspection and shift' && ' (no closer match had five contracts)'}.
+          {match.rule === 'crews within one' && ' These include contracts inspected or shifted differently from your plan.'}
         </p>
+      )}
+      {match && match.crewsDropped && (
+        <p className="text-sm font-bold text-rose-200 bg-rose-500/15 border border-rose-400 rounded-lg px-3 py-2">No past contract ran a plan like yours; this is the nearest.</p>
       )}
 
       <div className="grid grid-cols-3 gap-2">
@@ -105,9 +111,9 @@ export default function Records({ past, plan = null, onUse = null }) {
         <table className="w-full text-xs font-mono text-slate-200 whitespace-nowrap">
           <thead className="sticky top-0 bg-slate-900 text-slate-400">
             <tr>
-              {COLS.map(([key, label]) => (
-                <th key={key} scope="col" aria-sort={sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'} className="font-sans font-semibold text-left">
-                  <button type="button" onClick={() => sortBy(key)} className="px-2 py-2 w-full text-left hover:text-white">
+              {COLS.map(([key, label, phone]) => (
+                <th key={key} scope="col" aria-sort={sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'} className={`font-sans font-semibold text-left ${cell(phone)}`}>
+                  <button type="button" onClick={() => sortBy(key)} className="px-1 sm:px-2 py-2 w-full text-left hover:text-white">
                     {label}{sort.key === key ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}
                   </button>
                 </th>
@@ -117,19 +123,20 @@ export default function Records({ past, plan = null, onUse = null }) {
           <tbody>
             {shown.map((r) => (
               <tr key={r.id} className="border-t border-slate-800">
-                <td className="px-2 py-1.5 text-slate-500">{r.id}</td>
-                <td className="px-2 py-1.5">{r.crewsAdded ? `+${r.crewsAdded} (wk ${r.hires.map((h) => h.week).join(',')})` : '—'}</td>
-                <td className="px-2 py-1.5">{r.inspect ? `${Math.round(r.inspect * 100)}%` : '—'}</td>
-                <td className="px-2 py-1.5">{r.shiftWeeks || '—'}</td>
-                <td className="px-2 py-1.5">wk {r.scopeWeek}, +{r.scopeUnits}</td>
-                <td className="px-2 py-1.5 text-sky-300">wk {r.dashboardFullWeek}</td>
-                <td className={`px-2 py-1.5 ${r.rejected ? 'text-rose-300' : 'text-slate-500'}`}>{r.rejected}</td>
-                <td className="px-2 py-1.5 text-amber-300 font-bold">{r.bankrupt ? <span className="text-rose-300">Bankrupt, wk {r.endedWeek}</span> : r.delivered === false ? `Terminated, wk ${r.endedWeek}` : `wk ${r.accepted}`}</td>
-                <td className="px-2 py-1.5">{r.onTime ? 'yes' : 'no'}</td>
+                <td className="px-1 sm:px-2 py-1.5 text-slate-500">{r.id}</td>
+                <td className="px-1 sm:px-2 py-1.5">{r.crewsAdded ? <>+{r.crewsAdded}<span className="hidden sm:inline"> (wk {r.hires.map((h) => h.week).join(',')})</span></> : '—'}</td>
+                <td className="px-1 sm:px-2 py-1.5">{r.inspect ? `${Math.round(r.inspect * 100)}%` : '—'}</td>
+                <td className={`px-2 py-1.5 ${cell(false)}`}>{r.shiftWeeks || '—'}</td>
+                <td className={`px-2 py-1.5 ${cell(false)}`}>wk {r.scopeWeek}, +{r.scopeUnits}</td>
+                <td className={`px-2 py-1.5 text-sky-300 ${cell(false)}`}>wk {r.dashboardFullWeek}</td>
+                <td className={`px-1 sm:px-2 py-1.5 ${r.rejected ? 'text-rose-300' : 'text-slate-500'}`}>{r.rejected}</td>
+                <td className="px-1 sm:px-2 py-1.5 text-amber-300 font-bold">{r.bankrupt ? <span className="text-rose-300">Bankrupt wk {r.endedWeek}</span> : r.delivered === false ? `Terminated wk ${r.endedWeek}` : `wk ${r.accepted}`}</td>
+                <td className="px-1 sm:px-2 py-1.5">{r.onTime ? 'yes' : 'no'}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        <p className="sm:hidden text-[11px] text-slate-500 px-2 py-1">On a wider screen the table also shows second-shift weeks, the scope change and the week the dashboard read 100%.</p>
       </div>
     </div>
   );

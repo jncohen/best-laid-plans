@@ -248,7 +248,7 @@ export class Project {
       const row = {
         week: this.week, crews: this.crews, shift: false, inspect: 0, built: 0, found: 0, rejected: 0, shock: 0, cost: 0,
         budget: this.budget, backlog: +this.backlog.toFixed(1), reported: +this.reportedPct().toFixed(4), true: +this.truePct().toFixed(4), defectRate: 0,
-        bankrupt: true,
+        bankrupt: true, payroll: cost, shortfall: Math.round(cost - (this.budget + c.creditLine)),
         events: [`Week ${this.week}'s payroll (${Math.round(cost / 1000)}k) would take the company past its ${Math.round(c.creditLine / 1000)}k credit line. It can't pay its crews: the company is bankrupt and the contract ends.`],
       };
       if (forecast !== null && forecast !== undefined && Number.isFinite(+forecast)) this.forecastLog.push({ week: this.week, forecast: +forecast, ...(range || {}) });
@@ -384,16 +384,16 @@ export class Project {
       : Math.max(0, Math.round(100 - late * c.latePenaltyPerWeek - (over / 50_000) * c.overspendPenaltyPer50k));
 
     const f = this.forecast || { week: c.deadline, low: c.deadline, high: c.deadline, onTimeChance: 50 };
-    // Bankruptcy and termination are reported on their own; the forecast is graded against the
-    // acceptance week (projected, for a contract never delivered).
+    // A contract never delivered (bankrupt or terminated) misses the range, and its Forecast score is 0.
     const failed = this.result === 'BANKRUPT' ? 'bankrupt' : this.result === 'TERMINATED' ? 'terminated' : null;
-    const held = outcome >= f.low && outcome <= f.high;
-    const missBy = held ? 0 : +(outcome > f.high ? outcome - f.high : outcome - f.low).toFixed(1);
+    const held = !failed && outcome >= f.low && outcome <= f.high;
+    const missBy = held ? 0 : failed ? null : +(outcome > f.high ? outcome - f.high : outcome - f.low).toFixed(1);
     const onTime = this.result === 'DELIVERED' && this.finishWeek <= c.deadline;
     const p = Math.max(0, Math.min(1, f.onTimeChance / 100));
     const brier = (p - (onTime ? 1 : 0)) ** 2;
 
-    return { delivery, forecast: forecastScore(f, outcome, onTime, c), outcome, held, missBy, failed, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
+    const parts = forecastParts(f, outcome, onTime, c);
+    return { delivery, forecast: failed ? 0 : parts.score, parts: failed ? null : parts, outcome, held, missBy, failed, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
   }
 
 }
@@ -469,10 +469,22 @@ export const intervalScore = (low, high, outcome) => (high - low) + 10 * Math.ma
  * so a range that holds only because it is wide still costs points.
  */
 export function forecastScore(f, outcome, onTime, cfg = CONFIG) {
+  return forecastParts(f, outcome, onTime, cfg).score;
+}
+
+/** The Forecast score and the points each part cost: the point, the range, the chance of week 12. */
+export function forecastParts(f, outcome, onTime, cfg = CONFIG) {
   const p = Math.max(0, Math.min(1, f.onTimeChance / 100));
   const brier = (p - (onTime ? 1 : 0)) ** 2;
-  return Math.max(0, Math.round(100 - 8 * Math.abs(outcome - f.week) - cfg.forecastIntervalWeight * intervalScore(f.low, f.high, outcome) - 40 * brier));
+  const point = 8 * Math.abs(outcome - f.week), range = cfg.forecastIntervalWeight * intervalScore(f.low, f.high, outcome), chance = 40 * brier;
+  return { score: Math.max(0, Math.round(100 - point - range - chance)), point: Math.round(point), range: Math.round(range), chance: Math.round(chance) };
 }
+
+/**
+ * The highest the dashboard read in a week. A week whose acceptance test rejected units read 100%
+ * before the test ran; the history row holds the reading after the rework went back on.
+ */
+export const dashboardPeak = (r) => (r.rejected > 0 ? 1 : r.reported);
 
 /** The student's own tab: Your Plan & Prediction before week 1, This Week's Decisions during play. Never counted as a tool check. */
 export const isFront = (tab) => tab === 'commit' || tab === 'decide';
@@ -755,13 +767,15 @@ export function matchContracts(plan, { min = 5, cfg = CONFIG } = {}) {
   const rules = [
     ['crews, inspection and shift', (r) => same(r) && r.crewsAdded === crews],
     ['crews within one, inspection and shift', (r) => same(r) && Math.abs(r.crewsAdded - crews) <= 1],
+    ['crews within one', (r) => Math.abs(r.crewsAdded - crews) <= 1],
     ['inspection and shift', same],
     ['all contracts', () => true],
   ];
   for (const [rule, f] of rules) {
     const contracts = all.filter(f);
     // Widen until at least `min` of the matches were delivered, so the weeks quoted rest on real outcomes.
-    if (contracts.filter((r) => r.delivered !== false).length >= min || rule === 'all contracts') return { rule, contracts, ...summarizeContracts(contracts, cfg) };
+    // crewsDropped: the nearest match ignores how many crews were added, so it is not "a plan like yours".
+    if (contracts.filter((r) => r.delivered !== false).length >= min || rule === 'all contracts') return { rule, crewsDropped: rule === 'inspection and shift' || rule === 'all contracts', contracts, ...summarizeContracts(contracts, cfg) };
   }
   return null;
 }

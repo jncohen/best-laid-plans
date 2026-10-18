@@ -63,7 +63,10 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     while (!m.done && !m.history.some((r) => r.rejected > 0)) m.play({});
     ok('Play: an acceptance rejection is a card, and the 90% marker shows', () => {
       const h = show(), r = m.history[m.history.length - 1];
-      if (!new RegExp(`border-rose-400[^>]*>Customer acceptance test: ${r.rejected} units rejected\. Fixing them now takes ${r.rejected * 2} units of work\.`).test(h)) throw new Error('no rejection card');
+      if (!new RegExp(`border-rose-400[^>]*>Customer acceptance test, week ${r.week}: ${r.rejected} units rejected\. Fixing them now takes ${r.rejected * 2} units of work\.`).test(h)) throw new Error('no rejection card');
+      if (!/Dashboard: 100% done in week \d+\. The customer ran the acceptance test\./.test(h)) throw new Error('no 100% banner');
+      if (h.indexOf('Customer acceptance test, week') > h.indexOf('Your prediction')) throw new Error('cards are not at the top');
+      if (!/Money lasts to week \d+ at this spend/.test(h)) throw new Error('no money runway line');
       if (!h.includes('Dashboard: 90% done')) throw new Error('no 90% marker');
       return h;
     });
@@ -89,7 +92,7 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     const h = renderToString(<Reveal project={b} onReplay={() => {}} />);
     // Bankruptcy is its own line; the range is graded against the week it would have taken.
     const a = h.replace(/<!-- -->/g, '');
-    if (b.result !== 'BANKRUPT' || !a.includes(`Your company went bankrupt in week ${b.week}.`) || !a.includes('(the week it would have taken)') || a.includes('a miss for every range')) throw new Error('bankruptcy not reported on its own');
+    if (b.result !== 'BANKRUPT' || !a.includes(`Your company went bankrupt in week ${b.week}.`) || !a.includes('a miss for every range') || !a.includes('0: the contract was never delivered') || !a.includes('missed: bankrupt') || a.includes('>held<')) throw new Error('bankruptcy not a miss');
     return h;
   });
   // The finish screen states what happened.
@@ -133,7 +136,7 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
       const q = new Project('ledger');
       q.commit({ ...f, plan });
       const h = renderToString(<Play project={q} onPlay={() => {}} />);
-      if (!h.includes('Your plan:') || !h.includes('Week 1 is set from it')) throw new Error('stated plan not shown as a reminder');
+      if (!h.includes('Your stated plan:') || !h.includes('Week 1 is set from it')) throw new Error('stated plan not shown as a reminder');
       // The stated plan is applied as week 1's decisions.
       const a = h.replace(/<!-- -->/g, '');
       if (plan.crews > 0 && !a.includes(`4 + ${plan.crews} this week`)) throw new Error('week 1 crews not set from the plan');

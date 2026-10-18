@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, firstCloseWeek, playSummary } from './engine';
-import { screenData, allForecasts, tabById, tabByLetter } from './desk.js';
+import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, firstCloseWeek, playSummary, dashboardPeak, matchContracts, isCheck } from './engine';
+import { screenData, allForecasts, tabById, tabByLetter, costManagement } from './desk.js';
 import { Card } from './ui';
 import { money } from './format';
 import { RevealChart, ForecastChart, RangeChart } from './charts';
@@ -27,7 +27,6 @@ export function Finished({ project, onReveal }) {
         <h1 className="text-2xl font-bold text-rose-300">The customer terminated the contract after week {project.week}. It was never delivered.</h1>
       )}
       <p className="text-slate-300">Don't reveal your results yet. Wait for your instructor.</p>
-      <p className="text-sm text-slate-400">While you wait: was your forecast before week 1 right? How sure were you, 0–100?</p>
       <button type="button" onClick={onReveal} className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold">
         Reveal results
       </button>
@@ -46,22 +45,26 @@ export default function Reveal({ project, onReplay }) {
   const played = playedPlan(p);
   const j = judgeForecast({ forecast: f, outcome, stated: p.plan, played });
   // How every tool on the desk would have done, for the plan the student stated.
+  // A contract never delivered misses every range. The Status Report's money line had warned of a bankruptcy.
+  const brokeWarned = p.result === 'BANKRUPT' ? costManagement(screenData(), p.plan || played).brokeWeek : null;
   const tools = allForecasts(screenData(), p.plan || played).map((t) => ({
     about: aboutTool(t.key),
-    // Graded against the acceptance week (projected, for a contract never delivered); bankruptcy is its own line.
-    ...t, result: outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
+    ...t, result: s.failed ? s.failed : outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
+    warned: t.key === 'status' && brokeWarned ? `warned: money runs out wk ${brokeWarned}` : null,
   }));
   const usedTool = p.desk?.tool ? tabByLetter(p.desk.tool) : null;
   const closeWeek = firstCloseWeek(p.forecastLog, outcome);
   const rows = p.history.filter((r) => !r.bankrupt);
-  // The week the dashboard first read 100%: the acceptance test ran then (and any rejects pulled it back below 100%).
-  const full = rows.find((r) => r.rejected > 0 || r.reported >= 0.9995);
-  const ninety = rows.find((r) => r.reported >= 0.9);
+  // The dashboard's peak reading each week: 100% in a week whose acceptance test rejected units.
+  const full = rows.find((r) => dashboardPeak(r) >= 0.9995);
+  const ninety = rows.find((r) => dashboardPeak(r) >= 0.9);
   // The plan, judged by the week-1 decisions (the game sets them from the plan), and the changes after.
   const w1 = rows[0];
   const startedAsStated = p.plan && w1 ? w1.crews === Math.min(c.maxCrews, c.crews + Math.min(c.maxHirePerWeek, p.plan.crews)) && w1.inspect === p.plan.inspect && w1.shift === (p.plan.shift === 'every') : null;
   const laterChanges = playSummary(p).weeks.filter((w) => w.week > 1 && w.decided).length;
-  const ended = delivered ? `It was accepted in week ${outcome}.` : `It was never delivered; it would have taken until week ${outcome}.`;
+  const ended = delivered ? `It was accepted in week ${outcome}.` : `It was never delivered; it would have taken until week ${Math.ceil(outcome)}.`;
+  // The record's answer for the plan the student stated, beside the record's overall median.
+  const mine = p.plan ? matchContracts(p.plan) : null;
   const failLine = p.result === 'BANKRUPT' ? `Your company went bankrupt in week ${p.week}.` : p.result === 'TERMINATED' ? `The customer terminated the contract after week ${c.horizon}.` : null;
   const end = Math.ceil(Math.max(outcome, c.deadline, past.p90)) + 1;
   const facts = useMemo(() => gameFacts(p), [p]);
@@ -84,7 +87,7 @@ export default function Reveal({ project, onReplay }) {
         <p className="text-xs uppercase tracking-wider text-slate-500">The lesson</p>
         <h1 className="text-2xl font-bold text-white mt-1 leading-snug">
           {full ? <>Your dashboard said <span className="text-sky-300">week {full.week}</span>.</> : <>Your dashboard never read 100%.</>}{' '}
-          The past contracts said <span className="text-amber-300">week {past.median}</span>.{' '}
+          The past contracts said <span className="text-amber-300">week {past.median}</span>{mine && !mine.crewsDropped && mine.median !== past.median ? <> (those run like your plan: <span className="text-amber-300">week {mine.median}</span>)</> : ''}.{' '}
           <span className={delivered ? 'text-yellow-300' : 'text-rose-300'}>{ended}</span>
         </h1>
         {failLine && <p className="text-lg font-bold text-rose-300 mt-2">{failLine}</p>}
@@ -95,6 +98,11 @@ export default function Reveal({ project, onReplay }) {
         <div className="bg-slate-900 border border-emerald-500/40 rounded-xl p-3">
           <div className="text-[11px] uppercase tracking-wider text-slate-400">Forecast score</div>
           <div className="text-2xl font-bold font-mono text-white">{s.forecast}</div>
+          {s.parts ? (
+            <p className="text-xs text-slate-300 mt-1 font-mono">100 − point {s.parts.point} − range {s.parts.range} − chance {s.parts.chance}</p>
+          ) : (
+            <p className="text-xs text-rose-300 mt-1">0: the contract was never delivered, so the range missed.</p>
+          )}
           <p className="text-xs text-slate-400 mt-1">
             Week {f.week}, 80% sure of {f.low}–{f.high}. {f.high - f.low >= 6 ? 'A range that wide costs points even when it holds. ' : ''}You gave {f.onTimeChance}% to week {c.deadline}; {s.onTime ? 'it was made' : "it wasn't made"}.
           </p>
@@ -114,16 +122,17 @@ export default function Reveal({ project, onReplay }) {
                 <span className="text-slate-200 min-w-0">{t.name}</span>
                 <span className="font-mono text-xs text-slate-400 whitespace-nowrap">wk {t.week} ({t.low}–{t.high})</span>
                 <span className={`text-xs font-semibold w-24 text-right ${t.result === 'held' ? 'text-slate-100' : 'text-rose-300'}`}>
-                  {t.result === 'held' ? 'held' : `missed ${t.result}`}
+                  {t.result === 'held' ? 'held' : `missed${s.failed ? ':' : ''} ${t.result}`}
                 </span>
               </div>
+              {t.warned && <div className="text-[11px] text-amber-200">{t.warned}</div>}
               {t.fail && <div className="text-[11px] text-rose-300">{t.fail}</div>}
               {t.about && <div className="text-[11px] text-slate-500">{t.about}</div>}
             </li>
           ))}
         </ul>
         <p className="text-[11px] text-slate-500 mt-2">
-          Each tool's 80% range before week 1, for the plan you stated, against week {outcome}{delivered ? '' : ' (the week it would have taken)'}. Ranges from the record are from delivered contracts; the line under one counts those that weren't. The tools never knew this scenario, or your own luck.
+          Each tool's 80% range before week 1, for the plan you stated, against {delivered ? `week ${outcome}` : 'a contract never delivered: a miss for every range'}. Ranges from the record are from delivered contracts; the line under one counts those that weren't. The tools never knew this scenario, or your own luck.
         </p>
       </Card>
 
@@ -139,7 +148,7 @@ export default function Reveal({ project, onReplay }) {
           band={[past.p10, past.p90]} end={end}
         />
         <p className="text-sm text-slate-300 mt-2">
-          {ninety ? `Your dashboard first passed 90% in week ${ninety.week} (it read ${Math.round(ninety.reported * 100)}%).` : 'Your dashboard never passed 90%.'}
+          {ninety ? `Your dashboard first passed 90% in week ${ninety.week} (it read ${Math.round(dashboardPeak(ninety) * 100)}%).` : 'Your dashboard never passed 90%.'}
           {full && delivered ? ` It read 100% in week ${full.week}; the customer accepted it in week ${outcome}.` : ''}
         </p>
         <p className="text-xs text-slate-500 mt-1">Blue: reported complete each week. Red: units the customer's acceptance test rejected. The last stretch is where the time went.</p>
@@ -163,7 +172,7 @@ export default function Reveal({ project, onReplay }) {
             <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Your plan and your numbers</div>
             <ul className="space-y-1 text-sm text-slate-200">
               {p.plan && <li>Your plan: {describePlan(p.plan)}. {startedAsStated ? 'Week 1 ran as stated' : 'You changed it before playing week 1'}{laterChanges ? `; you changed your decisions in ${plural(laterChanges, 'later week')}.` : '; you changed nothing after.'}</li>}
-              {p.desk && <li>Before committing you opened {plural(p.desk.tabs, 'tool tab')}{p.desk.order.length > 0 ? ` (${p.desk.order.map((id) => tabById(id)?.name).filter(Boolean).join(', ')})` : ''}{p.desk.copied ? ' and copied the AI prompt' : ''}.</li>}
+              {p.desk && (() => { const tools = [...new Set(p.desk.order.filter(isCheck))]; return <li>Before committing you opened {plural(tools.length, 'tool tab')}{tools.length ? ` (${tools.map((id) => tabById(id)?.name).filter(Boolean).join(', ')})` : ''}.</li>; })()}
               <li>{usedTool ? `Your committed numbers came from ${usedTool.name}${p.desk.edited ? ', and you then changed them' : ''}.` : 'You set your committed numbers yourself.'}</li>
               {j.coaster && (
                 <li className="text-amber-200">

@@ -107,7 +107,7 @@ function StatusTab({ S, plan, onUse, live }) {
   const x = (w) => 32 + (w / end) * (W - 40), y = (u) => 16 + (1 - u / (st.scope * 1.05)) * (h - 40);
   const m = st.money;
   return (
-    <Frame id="status" kind="status report" f={st.forecast} onUse={onUse}>
+    <Frame id="status" kind="progress and money" f={st.forecast} onUse={onUse}>
       <div className="flex items-center gap-3 mb-3">
         <span className={`w-10 h-10 rounded-full ${light} shadow-lg shrink-0`} aria-label={`status ${st.light}`} />
         <div>
@@ -118,7 +118,7 @@ function StatusTab({ S, plan, onUse, live }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <Tile label="Reported complete" value={`${Math.round(100 * st.earnedPct)}%`} sub={`of ${st.scope} units`} tone="text-sky-300" />
         <Tile label="Schedule efficiency" value={st.spi} sub="below 1 = behind plan · SPI" tone={st.behind.schedule ? 'text-amber-300' : 'text-sky-300'} />
-        <Tile label="Projected finish" value={`wk ${st.eacWeeks}`} sub={`12 weeks ÷ schedule efficiency · EAC`} tone="text-sky-300" />
+        <Tile label="Projected finish" value={`wk ${Math.ceil(st.eacWeeks)}`} sub={`12 weeks ÷ schedule efficiency · EAC`} tone="text-sky-300" />
         <Tile label="Scope" value={st.scope} sub={st.scopeAdded ? `${R.scope} + ${st.scopeAdded} added in week ${st.scopeWeek}` : 'units, no change yet'} tone="text-sky-300" />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
@@ -144,12 +144,12 @@ function StatusTab({ S, plan, onUse, live }) {
         <line x1={x(R.deadline)} x2={x(R.deadline)} y1={10} y2={h - 22} stroke="#fb7185" strokeDasharray="4 3" />
         <line x1={x(st.weeksShown)} y1={y(st.built)} x2={x(st.eacWeeks)} y2={y(st.scope)} stroke="#38bdf8" strokeDasharray="5 4" strokeWidth="2" />
         <polyline points={cum.map((u, w) => `${x(w)},${y(u)}`).join(' ')} fill="none" stroke="#38bdf8" strokeWidth="3" />
-        <text x={Math.min(W - 4, x(st.eacWeeks) + 4)} y={y(st.scope) + 30} textAnchor={x(st.eacWeeks) > W - 90 ? 'end' : 'start'} fill="#7dd3fc" fontSize="12">projected wk {st.eacWeeks}</text>
+        <text x={Math.min(W - 4, x(st.eacWeeks) + 4)} y={y(st.scope) + 30} textAnchor={x(st.eacWeeks) > W - 90 ? 'end' : 'start'} fill="#7dd3fc" fontSize="12">projected wk {Math.ceil(st.eacWeeks)}</text>
         {Array.from({ length: Math.floor(end / 2) + 1 }, (_, i) => i * 2).map((w) => <text key={w} x={x(w)} y={h - 6} textAnchor="middle" {...svgText}>{w}</text>)}
       </svg>
       {live && (() => { const r = live.rows[live.rows.length - 1]; return (
         <p className="text-sm text-slate-300 mt-1">Built in week {r.week}: <span className="font-mono">{Math.round(r.built)}</span> units with {r.crews} crew{r.crews === 1 ? '' : 's'}
-          {' '}({(r.built / Math.max(1, r.crews * (1 - r.inspect))).toFixed(1)} a crew building; the last contract: {(S.history.reduce((a, b) => a + b, 0) / S.history.length / S.rules.crews).toFixed(1)}).
+          {' '}({st.perCrew} a crew so far, allowing for onboarding and inspection; the last contract: {(S.history.reduce((a, b) => a + b, 0) / S.history.length / S.rules.crews).toFixed(1)}).
           {' '}Defects found in week {r.week}: {Math.round(r.found + r.rejected)}; so far: {Math.round(st.found)}. The last contract had {st.rejectedLast} of {R.scope} units rejected at acceptance.</p>
       ); })()}
       <p className="text-[11px] text-slate-500 mt-1">
@@ -217,7 +217,7 @@ function ChatTab({ S, plan, onUse, planNote, live }) {
                 <button type="button" className="text-violet-300 underline" aria-expanded={open === p.key} onClick={() => setOpen(open === p.key ? null : p.key)}>{open === p.key ? 'Hide reasoning' : 'Why?'}</button>
                 <button type="button" className="text-slate-300 underline" onClick={() => onUse('chat', p.forecast, p.name)}>Use {p.name}'s numbers</button>
               </div>
-              {open === p.key && <div className="text-xs text-slate-400 mt-1 border-l-2 border-violet-500/50 pl-2">From: {p.frame}. {p.reasoning} In numbers: week {p.forecast.week}, range {p.forecast.low}–{p.forecast.high}, {p.forecast.chance}% for week 12; {p.confidence}% sure.</div>}
+              {open === p.key && <div className="text-xs text-slate-400 mt-1 border-l-2 border-violet-500/50 pl-2">From: {p.frame}. {p.reasoning} In numbers: week {p.forecast.week}, range {p.forecast.low}–{p.forecast.high}, {p.forecast.chance}% for week 12.</div>}
             </div>
           </div>
         ))}

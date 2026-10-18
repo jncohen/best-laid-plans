@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CONFIG, pastContracts, describePlan, onboardingRule, failuresLine } from './engine';
+import { CONFIG, pastContracts, describePlan, onboardingRule, failuresLine, dashboardPeak } from './engine';
 import { TABS, screenData, liveScreen } from './desk.js';
 import DeskTab from './DeskTabs';
 import TabStrip from './DeskStrip';
@@ -68,11 +68,12 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
     if (id !== 'decide' && !seenTabs.includes(id)) { setSeenTabs((t) => [...t, id]); p.noteDesk(nextWeek, id); }
     window.scrollTo(0, 0);
   };
-  const useTool = (id, f) => {
+  const useTool = (id, f, who = null) => {
     setUseNote(f.fail ? `${f.fail}: the range is from the delivered ones, and the chance counts the rest as not on time.` : null);
     moveForecast(Math.min(lastWeek, Math.max(nextWeek, f.week)));
     moveRange({ low: f.low, high: Math.min(lastWeek, f.high), chance: Math.round(f.chance / 5) * 5 });
-    p.noteDesk(nextWeek, `use:${id}`);
+    // Team Chat names the colleague whose numbers were used.
+    p.noteDesk(nextWeek, `use:${id}${id === 'chat' && who ? `:${who}` : ''}`);
     openTab('decide');
   };
   const live = liveScreen(p);
@@ -80,8 +81,25 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
   const current = { crews: Math.max(0, crewsNext - c.crews), inspect, shift: shift ? 'every' : 'none' };
 
   const late = nextWeek > c.deadline;
-  // The scope change and an acceptance rejection get their own cards; the rest stay in the week's log.
-  const logLines = last ? last.events.filter((e) => !/^Customer acceptance test|changed the requirement/.test(e)) : [];
+  const logLines = last ? last.events : [];
+  // The big moments, kept on screen as cards for two weeks: the scope change, the dashboard passing 90%
+  // and reaching 100%, and an acceptance rejection.
+  const rows = p.history.filter((r) => !r.bankrupt);
+  const recent = (r) => !!r && r.week >= p.week - 1;
+  const firstNinety = rows.find((r) => dashboardPeak(r) >= 0.9), firstFull = rows.find((r) => dashboardPeak(r) >= 0.9995);
+  const moments = [
+    ...rows.filter((r) => r.shock > 0 && recent(r)).map((r) => ({ key: `s${r.week}`, tone: 'amber', text: `The customer added ${r.shock} units in week ${r.week}.` })),
+    ...(recent(firstNinety) && firstNinety !== firstFull ? [{ key: 'n90', tone: 'sky', text: `Dashboard: 90% done in week ${firstNinety.week} (it read ${Math.round(dashboardPeak(firstNinety) * 100)}%).` }] : []),
+    ...(recent(firstFull) ? [{ key: 'n100', tone: 'sky', text: `Dashboard: 100% done in week ${firstFull.week}. The customer ran the acceptance test.` }] : []),
+    ...rows.filter((r) => r.rejected > 0 && recent(r)).map((r) => ({ key: `r${r.week}`, tone: 'rose',
+      text: `Customer acceptance test, week ${r.week}: ${r.rejected} unit${r.rejected === 1 ? '' : 's'} rejected. Fixing ${r.rejected === 1 ? 'it' : 'them'} now takes ${r.rejected * c.lateFixMultiplier} units of work.` })),
+  ].sort((a, b) => (+a.key.slice(1) || 0) - (+b.key.slice(1) || 0));
+  const TONES = { amber: 'border-amber-400 bg-amber-500/15 text-amber-100', rose: 'border-rose-400 bg-rose-500/15 text-rose-100', sky: 'border-sky-400 bg-sky-500/15 text-sky-100' };
+  // Fix 3: how long the money lasts at this week's spend, and a warning one week before bankruptcy is unavoidable.
+  const avail = p.budget + c.creditLine;
+  const steady = crewsNext * c.crewWeek + (shift ? crewsNext * c.shiftPremiumPerCrew : 0);
+  const lastsTo = cost > avail ? p.week : nextWeek + Math.floor((avail - cost) / Math.max(1, steady));
+  const brokeNext = cost <= avail && avail - cost < steady;
   const weeksLeft = c.deadline - p.week;
   const lateShift = p.plan && p.plan.shift === 'late' && nextWeek >= 9 && nextWeek <= 11;
 
@@ -105,6 +123,10 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
         </>
       ) : (<>
 
+      {moments.map((m) => (
+        <div key={m.key} role="status" className={`rounded-xl border-2 px-4 py-3 font-bold ${TONES[m.tone]}`}>{m.text}</div>
+      ))}
+
       <Card title="Your prediction" tone="emerald">
         <div className="flex items-baseline justify-between mb-2">
           <span className="text-sm text-slate-300">The customer accepts it in</span>
@@ -122,7 +144,7 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
         )}
         {useNote && <p className="text-xs text-rose-300 mt-1">{useNote}</p>}
         <details className="mt-2 text-sm">
-          <summary className="text-slate-300 cursor-pointer">Now: 80% range weeks {shownRange.low}–{shownRange.high}, {shownRange.chance}% for week {c.deadline}</summary>
+          <summary className="text-slate-300 cursor-pointer">Now: 80% range {shownRange.low === shownRange.high ? `week ${shownRange.low}` : `weeks ${shownRange.low}–${shownRange.high}`}, {shownRange.chance}% for week {c.deadline}</summary>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
             <Slider label="Earliest (80% sure)" value={shownRange.low} min={nextWeek} max={lastWeek} onChange={(v) => moveRange((r) => ({ ...r, low: Math.min(v, shownForecast) }))} format={(v) => `week ${v}`} />
             <Slider label="Latest" value={shownRange.high} min={nextWeek} max={lastWeek} onChange={(v) => moveRange((r) => ({ ...r, high: Math.max(v, shownForecast) }))} format={(v) => `week ${v}`} />
@@ -131,18 +153,6 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
           <Slider label={`Chance of week ${c.deadline}`} value={shownRange.chance} min={0} max={100} step={5} onChange={(v) => moveRange((r) => ({ ...r, chance: v }))} format={(v) => `${v}%`} />
         </details>
       </Card>
-
-      {/* The week's big moments, as cards rather than log lines. */}
-      {last && last.shock > 0 && (
-        <div role="status" className="rounded-xl border-2 border-amber-400 bg-amber-500/15 px-4 py-3 text-amber-100 font-bold">
-          The customer added {last.shock} units in week {last.week}.
-        </div>
-      )}
-      {last && last.rejected > 0 && (
-        <div role="status" className="rounded-xl border-2 border-rose-400 bg-rose-500/15 px-4 py-3 text-rose-100 font-bold">
-          Customer acceptance test: {last.rejected} unit{last.rejected === 1 ? '' : 's'} rejected. Fixing {last.rejected === 1 ? 'it' : 'them'} now takes {last.rejected * c.lateFixMultiplier} units of work.
-        </div>
-      )}
 
       <Card title="Dashboard">
         <div className="flex items-end justify-between mb-1">
@@ -179,7 +189,7 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
         <div className="space-y-5">
           {p.plan && (
             <p className="text-xs text-slate-400 leading-snug">
-              Your plan: {describePlan(p.plan)}.{week1 ? ' Week 1 is set from it below; change anything you like.' : ' A reminder: change course any week.'}
+              Your stated plan: {describePlan(p.plan)}.{week1 ? ' Week 1 is set from it below; change anything you like.' : ` This week: ${crewsNext} crews, ${Math.round(inspect * 100)}% inspection, ${shift ? 'a second shift' : 'no second shift'}.`}
               {lateShift && !shift && <span className="text-amber-200"> Your plan has a second shift in weeks 9–11.</span>}
             </p>
           )}
@@ -221,6 +231,12 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
             </div>
           </div>
 
+          <p className={`text-sm ${lastsTo < shownForecast ? 'text-rose-300 font-semibold' : 'text-slate-400'}`}>
+            Money lasts to week {lastsTo} at this spend{lastsTo < shownForecast ? `, before your forecast of week ${shownForecast}` : ''}.
+          </p>
+          {brokeNext && (
+            <p className="text-sm font-bold text-rose-200 bg-rose-500/15 border border-rose-400 rounded-lg px-3 py-2">At this spend, next week's payroll will take the company past its credit line: it would go bankrupt.</p>
+          )}
           {p.budget - cost < -c.creditLine && (
             <p className="text-xs text-rose-300">This week would take you past the {money(c.creditLine)} credit line. The company couldn't make payroll: it would go bankrupt and the contract would end, never delivered.</p>
           )}

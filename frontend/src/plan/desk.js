@@ -136,7 +136,7 @@ export function statusReport(S, L = null, plan = null) {
     forecast: clampF({ week: Math.round(eac), low: Math.floor(Math.min(...eacs)), high: Math.ceil(Math.max(...eacs)), chance: eac <= R.deadline - 0.5 ? 90 : eac <= R.deadline ? 60 : 20 }),
     live: !!L, pace: +pace(S).toFixed(1), weeksAtPace: +(R.scope / pace(S)).toFixed(1), eacWeeks: +eac.toFixed(1), weekly,
     earnedPct, plannedPct, weeksShown: wk, built: earnedPct * scope, planned: plannedPct * scope,
-    found: foundSoFar(L), rejectedLast: S.last.rejected,
+    found: foundSoFar(L), rejectedLast: S.last.rejected, perCrew: +observedPerCrew(S, L).toFixed(1),
     spi, cpi, bac, light: ['green', 'amber', 'red'][worst],
   };
 }
@@ -217,7 +217,7 @@ const fromSummary = (s, what = '') => ({ week: s.median, low: s.p10, high: s.p90
 export function records(S, plan = null) {
   const all = summarizeContracts(S.contracts);
   const m = plan ? matchContracts(plan) : null;
-  const matched = m ? { ...fromSummary(m, 'run like yours'), rule: m.rule } : null;
+  const matched = m ? { ...fromSummary(m, 'run like yours'), rule: m.rule, crewsDropped: !!m.crewsDropped } : null;
   return { forecast: matched || fromSummary(all), all: fromSummary(all), matched };
 }
 
@@ -244,7 +244,8 @@ export function teamChat(S, plan, L = null) {
   const gap = S.last.deliveredWeek - S.last.dashboardFullWeek;
   const rejected = Math.round(rejectedSoFar(L)), found = Math.round(foundSoFar(L));
   const spread = Math.round((all.high - all.low) / 2);
-  const yours = (m.week !== all.week ? ` The ones run like yours came in around week ${m.week}.` : '')
+  const yours = (m.crewsDropped ? " Nobody's tried that on this line. I can't vouch for it."
+    : m.week !== all.week ? ` The ones run like yours came in around week ${m.week}.` : '')
     + (m.failed ? ` And ${word(m.failed)} of the ${word(m.n)} run like yours never got delivered.` : '');
   const lastRow = L ? L.rows[L.rows.length - 1] : null;
   const scopeNews = lastRow && lastRow.shock > 0 ? ` The customer just added ${lastRow.shock} units.` : '';
