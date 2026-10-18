@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CONFIG, pastContracts, describePlan, onboardingRule, isCheck, failuresLine, viewLimit, canOpen } from './engine';
+import { CONFIG, pastContracts, describePlan, onboardingRule, failuresLine } from './engine';
 import { TABS, screenData, liveScreen } from './desk.js';
 import DeskTab from './DeskTabs';
 import TabStrip from './DeskStrip';
@@ -35,9 +35,6 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
   const moveRange = (f) => { setRange((r) => (typeof f === 'function' ? f(r) : f)); setTouched(true); };
 
   const nextWeek = p.week + 1;
-  const limit = viewLimit(nextWeek, c);
-  // In round 1 the AI prompt holds every tab opened so far, the briefing's included.
-  const promptTabs = nextWeek === 1 ? [...new Set([...(p.desk?.order || []), ...seenTabs])] : seenTabs;
   // A forecast earlier than the week about to be played is no longer possible.
   const shownForecast = Math.max(forecast, nextWeek);
   const cost = p.weekCost({ hire, shift });
@@ -57,9 +54,6 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
     setDeskTab('decide');
   };
   const openTab = (id) => {
-    // Unlimited in week 1 (round 1), then viewsPerWeek tool tabs a week; tabs already viewed this week stay open,
-    // and This Week's Decisions, The Contract and Ask an AI never count.
-    if (!canOpen(id, seenTabs, limit)) return;
     setDeskTab(id);
     if (id !== 'decide' && !seenTabs.includes(id)) { setSeenTabs((t) => [...t, id]); p.noteDesk(nextWeek, id); }
     window.scrollTo(0, 0);
@@ -84,13 +78,12 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
         </span>
       </header>
 
-      <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} front={DECIDE} tabs={TABS.slice(1)}
-        checks={{ left: Math.max(0, limit - seenTabs.filter(isCheck).length), limit, when: 'this week', counts: isCheck }} />
+      <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} front={DECIDE} tabs={TABS.slice(1)} />
 
       {deskTab !== 'decide' ? (
         <>
           <DeskTab id={deskTab} S={S} plan={p.plan || { crews: 0, inspect: 0, shift: 'none' }} planReady={!!p.plan} onUse={useTool} live={live}
-            onCopyPrompt={() => p.noteDesk(nextWeek, 'ai-copy')} opened={promptTabs} />
+            onCopyPrompt={() => p.noteDesk(nextWeek, 'ai-copy')} opened={seenTabs} />
           <button type="button" onClick={() => openTab('decide')} className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
             Back to This Week's Decisions
           </button>

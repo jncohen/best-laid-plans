@@ -5,7 +5,7 @@ import {
   statusReport, costManagement, schedule, lastFive, teamChat, aiPrompt,
   scenarios, riskRegister, analytics, riskSimulator, consensus, FORECASTERS, FORECASTER_NAMES, tabById,
 } from './desk.js';
-import { CONFIG, pastContracts, describePlan, onboardingRule, eventRules, attentionRule, failuresLine } from './engine';
+import { CONFIG, pastContracts, describePlan, onboardingRule, eventRules, failuresLine } from './engine';
 import { Card } from './ui';
 import { money } from './format';
 import Records from './Records';
@@ -81,7 +81,6 @@ function ContractTab() {
         <p>Some built units turn out defective. The dashboard counts them complete until inspection or the customer's acceptance test finds them.</p>
         <p>Contracts differ: some lines build faster or slower than others, and some turn out more defects. Each week's output and inspection finds show how this one runs. In any week you inspect, the inspectors also report the share of that week's units their sample found defective.</p>
         {eventRules(c).map((e) => <p key={e}>{e}</p>)}
-        <p>{attentionRule(c)}</p>
       </div>
       <div className="mt-4 pt-3 border-t border-slate-800">
         <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">What you decide each week</div>

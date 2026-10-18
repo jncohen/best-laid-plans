@@ -7,7 +7,6 @@ import Reveal from './src/plan/Reveal.jsx';
 import { TABS, screenData, liveScreen } from './src/plan/desk.js';
 import DeskTab from './src/plan/DeskTabs.jsx';
 import TabStrip from './src/plan/DeskStrip.jsx';
-import { isCheck, viewLimit } from './src/plan/engine.js';
 
 let fails = 0;
 const ok = (n, fn) => {
@@ -17,18 +16,12 @@ const ok = (n, fn) => {
 
 console.log('Render checks');
 ok('Brief', () => renderToString(<Brief onCommit={() => {}} />));
-ok('Tab strip: with 3 views used, unviewed tool tabs are locked and say so', () => {
-  const h = renderToString(<TabStrip tab="status" opened={['status', 'records', 'last5']} onOpen={() => {}} checks={{ left: 0, limit: 3, when: 'this week', counts: isCheck }} />);
-  if (!h.includes('used your 3 views this week') || (h.match(/disabled=""/g) || []).length < 8 || /disabled=""[^>]*>[^<]*The Contract/.test(h)) throw new Error('locking wrong');
-  // The front tab is never locked, before week 1 or during play.
+ok('Tab strip: every tab is always open, with no counter or notice', () => {
   for (const front of [{ id: 'commit', short: 'Your Plan & Prediction' }, { id: 'decide', short: "This Week's Decisions" }]) {
-    const f = renderToString(<TabStrip tab="status" opened={['status', 'records', 'last5']} onOpen={() => {}} front={front} checks={{ left: 0, limit: 3, when: 'this week', counts: isCheck }} />);
-    if (/<button[^>]*disabled=""[^>]*>[^<]*(Your Plan|This Week)/.test(f)) throw new Error(`${front.id} locked with 0 views left`);
+    const h = renderToString(<TabStrip tab="status" opened={['status', 'records', 'last5', 'chat', 'cost', 'schedule']} onOpen={() => {}} front={front} />).replace(/&#x27;/g, "'");
+    if (h.includes('disabled=""') || h.includes('🔒') || /views? left|used your|Round 1/.test(h)) throw new Error(`a tab locks or a limit shows (${front.id})`);
   }
-  // Round 1: no limit, nothing locked, and the notice across the top.
-  const r1 = renderToString(<TabStrip tab="status" opened={['status', 'records', 'last5', 'chat']} onOpen={() => {}} checks={{ left: Infinity, limit: viewLimit(1), when: 'before week 1', counts: isCheck }} />);
-  if (r1.includes('disabled=""') || !r1.includes('Round 1 only: look at everything you like. From week 2, you get 3 tool views a week.')) throw new Error('round 1 not unlimited');
-  return h;
+  return renderToString(<TabStrip tab="status" opened={[]} onOpen={() => {}} />);
 });
 {
   // Every desk tab during play, recomputed from the week's dashboard.
@@ -55,22 +48,17 @@ ok('Tab strip: with 3 views used, unviewed tool tabs are locked and say so', () 
 {
   const p = new Project('render-plan');
   p.commit({ week: 10, low: 9, high: 12, onTimeChance: 70 });
-  ok('Play, week 1: round 1, unlimited, with the notice', () => {
-    const h = renderToString(<Play project={p} onPlay={() => {}} initialSeen={['status', 'records', 'last5', 'chat', 'cost']} />);
-    if (!h.includes('Round 1 only: look at everything you like') || h.includes('🔒') || !h.includes('Play week')) throw new Error('round 1 locked or notice missing');
-    return h;
-  });
+  ok('Play, week 1', () => renderToString(<Play project={p} onPlay={() => {}} />));
   for (let w = 0; w < 7; w++) p.play({ hire: w === 0 ? 2 : 0, inspect: 0.1, shift: w > 4, forecast: 11 + w });
   ok('Play, mid-game with history', () => renderToString(<Play project={p} onPlay={() => {}} />));
-  // With 0 views left, This Week's Decisions and its play controls still work, and unviewed tools lock.
-  ok('Play, views used up: the front tab and play controls still work', () => {
-    const h = renderToString(<Play project={p} onPlay={() => {}} initialSeen={['status', 'records', 'last5']} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+  // However many tabs are open, This Week's Decisions and its play controls work, and nothing locks.
+  ok('Play, many tabs viewed: the front tab and play controls work, nothing locks', () => {
+    const h = renderToString(<Play project={p} onPlay={() => {}} initialSeen={['status', 'records', 'last5', 'chat', 'cost', 'schedule', 'analytics']} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
     if (!h.includes(`Play week ${p.week + 1}`) || /<button[^>]*disabled=""[^>]*>[^<]*(This Week's Decisions|Play week)/.test(h)) throw new Error('decisions locked');
-    if (!h.includes("You've used your 3 views this week") || !h.includes('🔒')) throw new Error('unviewed tools not locked');
-    if (h.includes('Round 1 only')) throw new Error('round 1 notice after week 1');
+    if (h.includes('🔒') || /views? left|used your|Round 1/.test(h)) throw new Error('a limit still shows');
     return h;
   });
-  ok('Play, views used up, on a tool tab: the way back is open', () => {
+  ok('Play, on a tool tab: the way back is open', () => {
     const h = renderToString(<Play project={p} onPlay={() => {}} initialSeen={['status', 'records', 'last5']} initialTab="records" />).replace(/&#x27;/g, "'");
     if (!h.includes("Back to This Week's Decisions") || /<button[^>]*disabled=""[^>]*>[^<]*This Week/.test(h)) throw new Error('no way back');
     return h;
@@ -137,7 +125,8 @@ ok('Tab strip: with 3 views used, unviewed tool tabs are locked and say so', () 
   const strip = (h) => h.replace(/<!-- -->/g, '').replace(/&#x27;/g, "'").replace(/<\/?(strong|span)[^>]*>/g, '');
   ok('Before week 1, The Contract states every rule and both scores', () => {
     const h = strip(before('contract'));
-    for (const s of ['200', '12', '4', '$4.60M', '$500k', 'New crews work at 50%', 'lose a crew', 'parts delay', 'tool tabs each week', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Forecast', 'Delivery', 'costs double']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    if (/tool tabs each week|views a week|Round 1/.test(h)) throw new Error('The Contract still states a view limit');
+    for (const s of ['200', '12', '4', '$4.60M', '$500k', 'New crews work at 50%', 'lose a crew', 'parts delay', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Forecast', 'Delivery', 'costs double']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     return h;
   });
   ok('Before week 1, Last 5 Contracts gives the pace and the last contract’s story', () => {
