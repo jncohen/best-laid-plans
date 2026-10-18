@@ -608,7 +608,8 @@ export function judgeForecast({ forecast: f, outcome, stated, played, failed = n
 // ── The outside view ─────────────────────────────────────────────────────────
 // Past contracts on the same line, each run by a manager with habits of their own.
 // A manager is one of eight archetypes, with parameters drawn from a fixed seed, so
-// the record is the same for the whole room and on every scenario code. Managers
+// every code has the same mix of managers; each code plays them under its own draws
+// (see contractSeed), and everyone on one code sees the same record. Managers
 // play week by week and react only to what their screen shows (reported backlog,
 // crews, the week), never to the hidden defects.
 const PAST_SEED = 659;

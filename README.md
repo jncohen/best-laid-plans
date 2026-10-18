@@ -80,6 +80,11 @@ budget, and zero if the company goes bankrupt or the customer cancels.
   draws.
 - **Collect the results files** (`best-laid-plans-<code>-run1.txt`) if you want each
   student's first play in writing.
+- **The game is not rigged, and every deploy checks it.** `tools/fairness-audit.mjs`
+  plays thousands of games and confirms that forecasts, tabs, AI use and Keep/Change taps
+  never change an outcome; that the scope change and the line are the same for everyone
+  on a code; that the record for plans like yours holds about 8 times in 10 and doesn't
+  lean early or late; and that the briefing's numbers come from the same engine.
 - Nothing is sent anywhere. The game runs entirely in the browser; the only thing it
   stores is a run counter on that device. Anything a student pastes into an AI
   assistant is their choice and goes to that service.

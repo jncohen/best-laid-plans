@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "node ../tools/test-plan.mjs",
     "render-check": "npx --yes esbuild render-check.jsx --bundle --platform=node --format=cjs --outfile=node_modules/.render-check.cjs --loader:.jsx=jsx --jsx=automatic --log-level=error && node node_modules/.render-check.cjs",
-    "verify": "npm run lint && npm run test && npm run render-check && npm run build",
+    "verify": "npm run lint && npm run test && npm run audit && npm run render-check && npm run build",
+    "audit": "node ../tools/fairness-audit.mjs",
     "plan": "node ../tools/plan-sweep.mjs"
   },
   "dependencies": {
