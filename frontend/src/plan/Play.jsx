@@ -261,7 +261,7 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
 
         <div className="space-y-4 min-w-0">
           {!onFront ? (<>
-            <DeskTab id={deskTab} S={S} plan={current} planReady onUse={useTool} live={live} />
+            <DeskTab id={deskTab} S={S} plan={current} planReady onUse={useTool} live={live} risks={p.risks} onAddRisk={(r) => { p.noteRisk(p.week, r); setTaps((n) => n + 1); }} />
             <button type="button" onClick={() => openTab('decide')} className="lg:hidden w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
               Back to This Week's Decisions
             </button>

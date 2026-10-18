@@ -1,7 +1,7 @@
 // The Decision Desk's tool tabs. Each is a generic replica of a dashboard genre, fed
 // only by desk.js, which sees only what the briefing shows.
 import { useState } from 'react';
-import { statusReport, lastFive, teamChat, aiPrompt, tabById } from './desk.js';
+import { statusReport, lastFive, teamChat, aiPrompt, tabById, projectControls, whatIf, RISK_KINDS, RISK_LEVELS } from './desk.js';
 import { CONFIG, pastContracts, describePlan, onboardingRule, failuresLine } from './engine';
 import { Card, ScoringNote } from './ui';
 import { CHART_W as W, CHART_CLASS, svgText } from './chartStyle';
@@ -160,6 +160,163 @@ function StatusTab({ S, plan, onUse, live }) {
   );
 }
 
+// ── Management information ────────────────────────────────────────────────────
+function ControlsTab({ S, plan, planNote, live }) {
+  const pc = projectControls(S, plan, live);
+  const R = S.rules;
+  const end = Math.max(R.deadline, pc.finish || 0, pc.weekNow) + 1, h = 170;
+  const top = Math.max(pc.scope, ...pc.actual.map((a) => a.left)) * 1.05;
+  const x = (w) => 32 + (w / end) * (W - 40), y = (u) => 16 + (1 - u / top) * (h - 40);
+  const line = (pts) => pts.map((a) => `${x(a.week)},${y(a.left)}`).join(' ');
+  const ticks = Array.from({ length: Math.floor(end / 2) + 1 }, (_, i) => i * 2);
+  // The defect chart: one bar a week, the centre line and the upper control limit.
+  const dmax = Math.max(4, ...pc.defects.map((d) => d.count), pc.ucl || 0) * 1.1, dh = 150;
+  const dx = (w) => 32 + ((w - 0.5) / end) * (W - 40), dy = (n) => 12 + (1 - n / dmax) * (dh - 34), bw = Math.max(4, (W - 40) / end - 4);
+  const leftNow = Math.round(pc.actual[pc.actual.length - 1].left);
+  return (
+    <Frame id="controls" kind="burn-down and defect control chart" planNote={planNote}>
+      <div className="text-xs font-bold uppercase tracking-wider text-sky-300">Burn-down: units left</div>
+      <p className="text-xs text-slate-400 mt-1">
+        {live ? <>After week {pc.weekNow}: <span className="font-mono text-white">{leftNow}</span> units left,{' '}
+          {pc.behindBy > 0 ? <span className="text-amber-300">{pc.behindBy} more than the straight line to week {R.deadline}</span> : `${-pc.behindBy} fewer than the straight line to week ${R.deadline}`}.
+          {' '}Units left include known rework; the scope change adds to them. Dashed: the Schedule&apos;s projection, week {pc.finish}.</>
+          : <>The last contract&apos;s first six weeks, against the straight line from {R.scope} units to zero at week {R.deadline}. During play this shows your contract.</>}
+      </p>
+      <svg viewBox={`0 0 ${W} ${h}`} className={`${CHART_CLASS} mt-2`} role="img" aria-label="Burn-down chart">
+        <polyline points={line(pc.ideal)} fill="none" stroke="#64748b" strokeWidth="1.5" />
+        <text x={x(2)} y={y(pc.scope * 0.75)} {...svgText}>plan</text>
+        <line x1={x(R.deadline)} x2={x(R.deadline)} y1={10} y2={h - 22} stroke="#fb7185" strokeDasharray="4 3" />
+        <text x={x(R.deadline) + 3} y={20} fill="#fda4af" fontSize="11">deadline</text>
+        {pc.projection.length > 1 && <polyline points={line(pc.projection)} fill="none" stroke="#38bdf8" strokeDasharray="5 4" strokeWidth="2" />}
+        <polyline points={line(pc.actual)} fill="none" stroke="#38bdf8" strokeWidth="3" />
+        <line x1={x(0)} x2={x(end)} y1={y(0)} y2={y(0)} stroke="#334155" />
+        {ticks.map((w) => <text key={w} x={x(w)} y={h - 6} textAnchor="middle" {...svgText}>{w}</text>)}
+      </svg>
+      <div className="text-xs font-bold uppercase tracking-wider text-sky-300 mt-4">Defect control chart: defects found each week</div>
+      {!live ? (
+        <p className="text-xs text-slate-400 mt-1">Starts in week 1: defects found by inspection and by the acceptance test, week by week, against limits from your own weeks. The last contract had no inspection and {pc.rejectedLast} units rejected at acceptance.</p>
+      ) : (<>
+        <p className="text-xs text-slate-400 mt-1">
+          {pc.centre === null ? 'The limits need three weeks without an acceptance test.' : <>Centre line {pc.centre} a week; upper control limit {pc.ucl} (centre + 3√centre, from the weeks before any acceptance test).</>}
+          {pc.out.length > 0 && <span className="text-rose-300"> Above the limit in week{pc.out.length > 1 ? 's' : ''} {pc.out.join(', ')}: something other than the usual has changed.</span>}
+          {' '}Few defects found can mean few made, or little inspection.
+        </p>
+        <svg viewBox={`0 0 ${W} ${dh}`} className={`${CHART_CLASS} mt-2`} role="img" aria-label="Defect control chart">
+          {pc.defects.map((d) => <rect key={d.week} x={dx(d.week) - bw / 2} y={dy(d.count)} width={bw} height={dy(0) - dy(d.count)} fill={pc.out.includes(d.week) ? '#fb7185' : d.rejected ? '#fbbf24' : '#38bdf8'} />)}
+          {pc.centre !== null && <>
+            <line x1={x(0)} x2={x(end)} y1={dy(pc.centre)} y2={dy(pc.centre)} stroke="#94a3b8" />
+            <line x1={x(0)} x2={x(end)} y1={dy(pc.ucl)} y2={dy(pc.ucl)} stroke="#fb7185" strokeDasharray="4 3" />
+            <text x={x(end) - 2} y={dy(pc.ucl) - 3} textAnchor="end" fill="#fda4af" fontSize="11">upper limit</text>
+          </>}
+          <line x1={x(0)} x2={x(end)} y1={dy(0)} y2={dy(0)} stroke="#334155" />
+          {ticks.map((w) => <text key={w} x={dx(w)} y={dh - 6} textAnchor="middle" {...svgText}>{w}</text>)}
+        </svg>
+        <p className="text-[11px] text-slate-500">Blue: found by inspection. Amber: a week with an acceptance test. Red: above the upper limit.</p>
+      </>)}
+    </Frame>
+  );
+}
+
+function Seg({ label, options, value, onChange }) {
+  return (
+    <div className="flex items-center gap-1 flex-wrap" role="radiogroup" aria-label={label}>
+      <span className="text-[11px] text-slate-500 w-20 shrink-0">{label}</span>
+      {options.map(([v, l]) => (
+        <button key={String(v)} type="button" role="radio" aria-checked={value === v} onClick={() => onChange(v)}
+          className={`px-2 py-1 rounded text-xs border ${value === v ? 'bg-slate-700 border-slate-300 text-white font-semibold' : 'bg-slate-950 border-slate-700 text-slate-300'}`}>{l}</button>
+      ))}
+    </div>
+  );
+}
+
+function WhatIfTab({ S, plan, planNote, live }) {
+  const R = S.rules;
+  const base = { crews: plan.crews, inspect: plan.inspect, shift: plan.shift };
+  // During play crews can only be added from here: the plan engine does not model releases.
+  const minCrews = live ? Math.max(0, live.crews - R.crews) : 0;
+  const maxCrews = Math.min(R.maxCrews - R.crews, minCrews + (live ? R.maxHirePerWeek : 3));
+  const crewOpts = Array.from({ length: maxCrews - minCrews + 1 }, (_, i) => minCrews + i);
+  const [alts, setAlts] = useState(() => [
+    { ...base, crews: Math.min(maxCrews, Math.max(minCrews, base.crews) + 1) },
+    { ...base, crews: Math.max(minCrews, base.crews), inspect: base.inspect ? 0 : R.inspectionOptions[1], shift: base.shift === 'none' ? 'late' : 'none' },
+  ]);
+  const setAlt = (i, k) => (v) => setAlts((a) => a.map((o, j) => (j === i ? { ...o, [k]: v } : o)));
+  const rows = whatIf(S, [base, ...alts], live);
+  const names = [live ? "This week's decisions" : 'Your plan', 'Option A', 'Option B'];
+  return (
+    <Frame id="whatif" kind="scenario planner" planNote={planNote}>
+      <p className="text-xs text-slate-400 mb-2">
+        Price a change of course before you make it. Each option runs on paper{live ? ` from week ${live.week + 1}` : ''}: the plan engine and the money, with no defects and no scope change.
+        {live ? '' : ' The last column is the record for plans like it.'}
+      </p>
+      {alts.map((a, i) => (
+        <div key={i} className="bg-slate-950 rounded-lg p-2 mb-2 space-y-1">
+          <div className="text-xs font-semibold text-white">{names[i + 1]}</div>
+          <Seg label={live ? 'Crews added' : 'Crews at start'} value={a.crews} onChange={setAlt(i, 'crews')} options={crewOpts.map((n) => [n, `+${n}`])} />
+          <Seg label="Inspection" value={a.inspect} onChange={setAlt(i, 'inspect')} options={R.inspectionOptions.map((o) => [o, `${Math.round(o * 100)}%`])} />
+          <Seg label="Second shift" value={a.shift} onChange={setAlt(i, 'shift')} options={[['none', 'None'], ['late', 'Wks 9–11'], ['every', 'Every week']]} />
+        </div>
+      ))}
+      <table className="w-full text-xs text-slate-200 mt-2">
+        <thead className="text-slate-400">
+          <tr><th className="text-left font-semibold py-1">Option</th><th className="text-right font-semibold">Done on paper</th><th className="text-right font-semibold">Cost to finish</th><th className="text-right font-semibold">Money</th>{!live && <th className="text-right font-semibold">Record</th>}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-slate-800 align-top">
+              <td className="py-1.5 pr-1"><div className="text-white">{names[i]}</div><div className="text-[11px] text-slate-500">{describePlan(r.plan)}</div></td>
+              <td className="text-right font-mono">wk {r.finish}</td>
+              <td className={`text-right font-mono ${r.overBudget ? 'text-amber-300' : ''}`}>{money(r.cost)}</td>
+              <td className={`text-right ${r.brokeWeek ? 'text-rose-300' : 'text-slate-400'}`}>{r.brokeWeek ? `runs out wk ${r.brokeWeek}` : 'lasts'}</td>
+              {!live && (
+                <td className="text-right font-mono whitespace-nowrap">wk {r.record.median}
+                  <div className={`text-[11px] ${r.record.crewsDropped ? 'text-rose-300' : 'text-slate-500'}`}>{r.record.low}–{r.record.high} · {r.record.n} contracts{r.record.loose ? ' · loose' : ''}</div>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-[11px] text-slate-500 mt-2">&quot;Done on paper&quot; is when the dashboard would read 100% if nothing goes wrong; acceptance comes later. This tab gives no forecast of its own.</p>
+    </Frame>
+  );
+}
+
+function RiskTab({ risks = [], onAddRisk, live }) {
+  const [kind, setKind] = useState('scope');
+  const [level, setLevel] = useState('medium');
+  const [note, setNote] = useState('');
+  const add = () => { if (onAddRisk) { onAddRisk({ kind, level, note: note.trim() }); setNote(''); } };
+  const name = (k) => RISK_KINDS.find((r) => r.id === k).name;
+  return (
+    <Card title="Risk Register · your notes" tone="slate">
+      <p className="text-xs text-slate-400">List what could go wrong and how likely you think it is. It changes nothing in the game. At the end you see which of your risks happened, and which happened that you didn&apos;t list.</p>
+      <ul className="mt-3 divide-y divide-slate-800">
+        {risks.length === 0 && <li className="text-sm text-slate-500 py-2">No risks logged yet.</li>}
+        {risks.map((r, i) => (
+          <li key={i} className="py-2 text-sm text-slate-200 flex justify-between gap-2">
+            <span>{name(r.kind)}{r.note ? <span className="text-slate-400">: {r.note}</span> : ''}</span>
+            <span className="text-xs text-slate-400 whitespace-nowrap">{r.level} · {r.week ? `after wk ${r.week}` : 'before wk 1'}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="bg-slate-950 rounded-lg p-2 mt-3 space-y-2">
+        <label className="block text-xs text-slate-400">Risk
+          <select value={kind} onChange={(e) => setKind(e.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white">
+            {RISK_KINDS.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+          </select>
+        </label>
+        <Seg label="Likelihood" value={level} onChange={setLevel} options={RISK_LEVELS.map((l) => [l, l])} />
+        <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={140} placeholder="What you'd watch for, or do (optional)" aria-label="Note"
+          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-sm text-white" />
+        <button type="button" onClick={add} className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">
+          Add to the register{live ? ` (after week ${live.week})` : ''}
+        </button>
+      </div>
+    </Card>
+  );
+}
+
 function Last5Tab({ S, onUse }) {
   const L = lastFive(S);
   const N = L.newest;
@@ -259,7 +416,7 @@ function RecordsTab({ plan, planReady, onUse }) {
 }
 
 /** One tool tab. `plan` is the stated plan before week 1 (hands-off until one is stated), and this week's decisions during play. */
-export default function DeskTab({ id, S, plan, planReady, onUse, live = null }) {
+export default function DeskTab({ id, S, plan, planReady, onUse, live = null, risks = [], onAddRisk = null }) {
   const planNote = live
     ? <p className="text-xs text-slate-500 mb-3">From week {live.week + 1} on, assuming this week's decisions: {describePlan(plan)}.</p>
     : !planReady
@@ -269,6 +426,9 @@ export default function DeskTab({ id, S, plan, planReady, onUse, live = null }) 
   switch (id) {
     case 'contract': return <ContractTab />;
     case 'status': return <StatusTab {...props} />;
+    case 'controls': return <ControlsTab {...props} />;
+    case 'whatif': return <WhatIfTab key={live ? live.week : 'brief'} {...props} />;
+    case 'risks': return <RiskTab risks={risks} onAddRisk={onAddRisk} live={live} />;
     case 'last5': return <Last5Tab {...props} />;
     case 'chat': return <ChatTab {...props} />;
     case 'ai': return <AiTab {...props} />;

@@ -1,10 +1,10 @@
 /**
- * "Your game in 8 facts": the reveal's numbered card, so the instructor can ask the
+ * "Your game in 9 facts": the reveal's numbered card, so the instructor can ask the
  * room "hands up if fact 3 happened to you". Every fact is computed from the finished
  * project and the briefing; nothing here changes a score or an outcome.
  */
 import { CONFIG, Project, pastContracts, historyMean, dashboardPeak, describePlan, playSummary, forecastParts } from './engine.js';
-import { screenData, allForecasts, tabById } from './desk.js';
+import { screenData, allForecasts, tabById, schedule, RISK_KINDS } from './desk.js';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const money = (n) => (n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : `$${Math.round(n / 1000)}k`);
@@ -158,6 +158,31 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
 }
 
 /**
+ * The risk register against what happened: each logged risk, whether it happened (and
+ * how), and the risks that happened without being logged. "Something else" can't be judged.
+ */
+export function riskReview(p) {
+  const c = p.cfg || CONFIG, h = p.history;
+  const shock = h.find((r) => r.shock > 0);
+  const rejected = h.reduce((a, r) => a + (r.rejected || 0), 0);
+  const full = h.find((r) => r.rejected > 0 || r.reported >= 0.999);
+  const onPaper = p.plan ? schedule(screenData(c), p.plan).forecast.week : null;
+  const delivered = p.result === 'DELIVERED';
+  const happened = {
+    scope: shock ? `+${shock.shock} units in week ${shock.week}` : null,
+    defects: rejected > 0 ? `${rejected} units rejected at acceptance` : null,
+    money: p.result === 'BANKRUPT' ? `bankrupt in week ${p.week}` : p.spent > c.budget ? `${money(p.spent - c.budget)} over budget` : null,
+    slow: onPaper && (!full || full.week > onPaper) ? `the dashboard read 100% ${full ? `in week ${full.week}` : 'never'}; your plan on paper said week ${onPaper}` : null,
+    late: !delivered ? 'never delivered' : p.finishWeek > c.deadline ? `accepted in week ${p.finishWeek}, ${plural(p.finishWeek - c.deadline, 'week')} late` : null,
+  };
+  const name = (k) => RISK_KINDS.find((x) => x.id === k).name;
+  const logged = p.risks.map((r) => ({ ...r, name: name(r.kind), happened: r.kind === 'other' ? undefined : happened[r.kind] || null }));
+  const listed = new Set(p.risks.map((r) => r.kind));
+  const missed = Object.entries(happened).filter(([k, v]) => v && !listed.has(k)).map(([k, v]) => ({ kind: k, name: name(k), happened: v }));
+  return { logged, missed };
+}
+
+/**
  * The run as a plain text file, for the student to keep (so a replay doesn't lose the first game):
  * the plan, the forecasts, the outcome and scores, the facts, and the game week by week.
  */
@@ -176,6 +201,13 @@ export function resultsText(p, facts, { run = 1, date = new Date() } = {}) {
     '',
     'Your game in facts:',
     ...facts.map((x) => `${x.n}. ${x.title}. ${x.text}`),
+    '',
+    'Your risk register:',
+    ...(() => {
+      const rv = riskReview(p);
+      const out = rv.logged.length ? rv.logged.map((r) => `- ${r.week ? `After week ${r.week}` : 'Before week 1'}: ${r.name}${r.note ? ` (${r.note})` : ''}, likelihood ${r.level}. ${r.happened === undefined ? 'Not judged.' : r.happened ? `Happened: ${r.happened}.` : 'Did not happen.'}`) : ['- No risks logged.'];
+      return [...out, ...rv.missed.map((r) => `- Not logged, but happened: ${r.name}: ${r.happened}.`)];
+    })(),
     '',
     'Week by week:',
     'week,crews,inspection_pct,second_shift,units_built,defects_found,units_rejected,scope_added,dashboard_pct,forecast_week,range',

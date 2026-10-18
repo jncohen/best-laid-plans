@@ -4,7 +4,7 @@ import { screenData, allForecasts, tabById, tabByLetter, costManagement } from '
 import { Card } from './ui';
 import { money } from './format';
 import { RevealChart, ForecastChart, RangeChart } from './charts';
-import { gameFacts, resultsText } from './facts';
+import { gameFacts, resultsText, riskReview } from './facts';
 
 // Each finished game on this browser is a numbered run, so a replay never overwrites the first play's file.
 function nextRun(code) {
@@ -78,6 +78,7 @@ export default function Reveal({ project, onReplay }) {
   const end = Math.ceil(Math.max(outcome, c.deadline, past.p90)) + 1;
   const facts = useMemo(() => gameFacts(p), [p]);
   const code = p.seedInput ?? p.seed;
+  const risk = useMemo(() => riskReview(p), [p]);
   const [run, setRun] = useState(1);
   const counted = useRef(false);
   useEffect(() => { if (!counted.current) { counted.current = true; setRun(nextRun(code)); } }, [code]);
@@ -113,6 +114,29 @@ export default function Reveal({ project, onReplay }) {
             <textarea readOnly value={text} rows={10} className="mt-2 w-full rounded bg-slate-950 border border-slate-700 p-2 font-mono text-[11px]" />
           </details>
         </div>
+      </Card>
+
+      {/* The risk register against what happened. */}
+      <Card title="Your risk register" tone="slate">
+        {risk.logged.length === 0 ? <p className="text-sm text-slate-400">You logged no risks.</p> : (
+          <ul className="space-y-1.5 text-sm text-slate-200">
+            {risk.logged.map((r, i) => (
+              <li key={i}>
+                <span className="text-white">{r.name}</span>{r.note ? <span className="text-slate-400"> ({r.note})</span> : ''}
+                <span className="text-xs text-slate-500"> · {r.level} · {r.week ? `after week ${r.week}` : 'before week 1'}</span>
+                <div className={`text-xs ${r.happened ? 'text-amber-200' : 'text-slate-400'}`}>{r.happened === undefined ? 'Not judged by the game.' : r.happened ? `Happened: ${r.happened}.` : 'Did not happen.'}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {risk.missed.length > 0 && (
+          <div className="mt-3 pt-2 border-t border-slate-800">
+            <div className="text-xs font-bold uppercase tracking-wider text-rose-300">Happened, but not in your register</div>
+            <ul className="mt-1 space-y-1 text-sm text-slate-200">
+              {risk.missed.map((r) => <li key={r.kind}>{r.name}: <span className="text-slate-400">{r.happened}.</span></li>)}
+            </ul>
+          </div>
+        )}
       </Card>
 
       <header>

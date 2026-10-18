@@ -14,7 +14,7 @@ Written for DATA 790, Module 05: Imagining, Modeling, and Prediction.
 
 **Play it:** <https://jncohen.github.io/best-laid-plans/>. The live site serves the
 `plan-matched-record` branch (version 1.1.0). This README describes `simple-1.2`, the
-simplified 1.2 for class: seven tabs, one forecast score, the richer past record with
+simplified 1.2 for class: ten tabs (with a small management-information system), one forecast score, the richer past record with
 its failures shown, personal luck, bankruptcy, and a show of hands instead of result
 codes. The full 1.2 (more tools, an Updating score, mid-game events, the inspectors'
 sample) is on `decision-desk`.
@@ -51,6 +51,26 @@ sample) is on `decision-desk`.
    pace of the line; Sam by the plan on paper; Kim by what the customer was promised;
    Mabel by the record of past contracts; Priya by defects and rework), and every
    colleague updates after each week of play with that week's numbers.
+   **Management information.** Three tabs work like a project office's own system.
+   None gives a forecast, and none changes the game.
+   - **Project Controls** (Dashboards): a burn-down (units left each week, from the
+     dashboard, against the straight line to zero at week 12, with the Schedule's
+     projection) and a defect control chart (defects found each week, with a c-chart
+     centre line and upper limit, mean + 3√mean, from the weeks before any acceptance
+     test). An acceptance-test week usually lands above the limit: the defects were
+     there all along. Before week 1 it shows the last contract's first six weeks.
+   - **What-if Planner** (Dashboards): the student's plan beside two options they set
+     (crews, inspection, shift), each priced on paper: when the dashboard would read
+     100%, the cost to finish, and whether the money lasts. Before week 1 each row also
+     shows the past contracts run like it (median, range, how many, and "loose" when
+     the match is). During play the options run from next week, and crews can only be
+     added.
+   - **Risk Register** (Your notes): the student logs risks before or during play
+     (the customer adds a lot of work; defects found late; the money runs out; the line
+     runs slower than planned; late delivery; something else), each with a likelihood
+     and an optional note. It is recorded, never acted on. The reveal lists each risk
+     and whether it happened, and the risks that happened without being logged; the
+     results file includes it.
    **Ask an AI** holds a plain prompt to copy into any AI assistant: the contract and
    its rules, the last contract, the 40 past contracts as a table, the student's plan
    and, during play, the dashboard week by week. It ends with one question, "When will
@@ -126,7 +146,7 @@ sample) is on `decision-desk`.
 
    Under the facts, **Download my results (.txt)** saves a text file of the run: the
    scenario code, a run number and the date; the plan, forecast and outcome; the
-   Forecast score and its parts; the Delivery score; the nine facts; and the weeks as a
+   Forecast score and its parts; the Delivery score; the nine facts; the risk register; and the weeks as a
    CSV. Each finished game on a browser is a new run (`best-laid-plans-ledger-run1.txt`,
    then `run2`), so students can replay and still keep their first play for the class
    discussion. On a phone, the same text can be copied from "Show the text to copy".
@@ -237,6 +257,9 @@ Colours:
 | Status Report | status report: a red/amber/green light that flags schedule or cost, in plain words (schedule efficiency, below 1 = behind plan; cost efficiency, below 1 = over budget for the work done; projected finish, 12 weeks ÷ schedule efficiency), the current scope, money tiles (spent, budget left, credit left, cost efficiency; before week 1 the plan's cost), when the money would run out, a burn-up chart; during play, units built per crew and defects found so far. The standard abbreviations (SPI, CPI, EAC) appear only in small grey text | Progress and money: units reported complete against plan, spend, the credit line · whether those units will pass acceptance |
 | **People** | | |
 | Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap), updated each week. In order: Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan re-planned from now; Kim (sales) from the promise; Mabel, a veteran on the line, from the record; Priya (quality) from rework, the last contract's or this one's | Five colleagues, each from where they sit · which view to weigh most |
+| Project Controls | a burn-down of units left against the plan line, and a defect control chart (c-chart limits from the weeks before any acceptance test) | Units left and defects found · defects no one has found yet |
+| What-if Planner | the plan engine and the money for the student's plan and two options, side by side; before week 1, the record for plans like each | What other plans would cost and finish on paper · defects and the scope change |
+| Risk Register | the student's own list of risks and likelihoods, judged at the reveal | The risks the student logs · the ones they do not think of |
 | Ask an AI | a plain prompt (the contract, the last contract, the 40 past contracts, the plan and, during play, the dashboard) to paste into any AI assistant, ending "When will the customer accept the contract?"; no method hints and no forecast of its own | Whatever the student asks it · how to question an AI about a forecast |
 | **History** | | |
 | Last 5 Contracts | the last contract's first six weeks and its pace (19.1 a week, 10.5 weeks to 200 units), an after-action review of it, and a list of the five newest contracts. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |

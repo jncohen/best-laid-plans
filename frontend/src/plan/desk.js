@@ -288,6 +288,70 @@ export function teamChat(S, plan, L = null) {
 }
 
 
+// ── Management information ────────────────────────────────────────────────────
+/**
+ * Project Controls: two standard control views, from the screen only.
+ * Burn-down: units left each week (the dashboard's count, which includes known rework),
+ * against the straight line to zero at the deadline, and the Schedule's projection from
+ * here. Defect control chart: defects found each week (inspection and the acceptance
+ * test), with the centre line and the upper control limit of a c-chart (mean + 3√mean)
+ * from the weeks so far. Before week 1 the burn-down is the last contract's first six
+ * weeks and the defect chart has no weeks yet.
+ */
+export function projectControls(S, plan, L = null) {
+  const R = S.rules;
+  let actual;
+  if (L) actual = [{ week: 0, left: R.scope }, ...L.rows.map((r) => ({ week: r.week, left: Math.max(0, r.backlog) }))];
+  else { let left = R.scope; actual = [{ week: 0, left }, ...S.history.map((b, i) => { left -= b; return { week: i + 1, left: Math.max(0, left) }; })]; }
+  const sc = L ? schedule(S, plan, L) : null;
+  const projection = sc ? [{ week: L.week, left: Math.max(0, L.backlog) }, ...sc.weeks.map((w) => ({ week: w.week, left: w.left }))] : [];
+  const ideal = [{ week: 0, left: R.scope }, { week: R.deadline, left: 0 }];
+  const now = actual[actual.length - 1];
+  const plannedLeft = Math.max(0, R.scope * (1 - now.week / R.deadline));
+  // Defects found each week, and the c-chart limits once there are three weeks to go on.
+  const defects = L ? L.rows.map((r) => ({ week: r.week, found: Math.round(r.found), rejected: Math.round(r.rejected), count: Math.round(r.found + r.rejected) })) : [];
+  const base = defects.filter((d) => d.rejected === 0);
+  const centre = base.length >= 3 ? base.reduce((a, d) => a + d.count, 0) / base.length : null;
+  const ucl = centre === null ? null : centre + 3 * Math.sqrt(Math.max(centre, 0.25));
+  const out = ucl === null ? [] : defects.filter((d) => d.count > ucl).map((d) => d.week);
+  return {
+    live: !!L, scope: L ? L.totalScope : R.scope, deadline: R.deadline, actual, ideal, projection,
+    behindBy: Math.round(now.left - plannedLeft), weekNow: now.week, finish: sc ? Math.max(sc.forecast.week, L.week + 1) : null,
+    defects, centre: centre === null ? null : +centre.toFixed(1), ucl: ucl === null ? null : +ucl.toFixed(1), out,
+    rejectedLast: S.last.rejected,
+  };
+}
+
+/**
+ * What-if Planner: the same plan engine as the Schedule and the money from Cost
+ * Management, run for up to three plans side by side, so a change of course can be
+ * priced before it is made. Before week 1 each row also shows the past contracts run
+ * like that plan. On paper only: no defects, no scope change.
+ */
+export function whatIf(S, plans, L = null) {
+  const R = S.rules;
+  return plans.map((pl) => {
+    const p = asPlan(pl);
+    const sc = schedule(S, p, L).forecast, cm = costManagement(S, p, L);
+    const m = L ? null : matchContracts(p);
+    return {
+      plan: p, finish: sc.week, cost: cm.cost.toFinish, overBudget: Math.max(0, cm.cost.toFinish - R.budget), brokeWeek: cm.brokeWeek,
+      record: m ? { median: m.median, low: m.p10, high: m.p90, n: m.n, failed: m.failed.total, onTime: Math.round(100 * m.onTimeShare), loose: m.rule !== 'crews, inspection and shift', crewsDropped: !!m.crewsDropped } : null,
+    };
+  });
+}
+
+/** Risk Register: the kinds of risk a student can log. The reveal says which happened. */
+export const RISK_KINDS = [
+  { id: 'scope', name: 'The customer adds a lot of work' },
+  { id: 'defects', name: 'Defects found late, at acceptance' },
+  { id: 'money', name: 'The money runs out' },
+  { id: 'slow', name: 'The line runs slower than planned' },
+  { id: 'late', name: 'We deliver late' },
+  { id: 'other', name: 'Something else' },
+];
+export const RISK_LEVELS = ['low', 'medium', 'high'];
+
 // ── Ask an AI ────────────────────────────────────────────────────────────────
 const k$ = (n) => (Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : `$${Math.round(n / 1000)}k`);
 /**
@@ -335,10 +399,13 @@ export const TABS = [
   { id: 'commit', letter: '', group: null, name: 'Your Plan and Prediction · Commit Before Week 1', short: 'Your Plan & Prediction', tone: 'front' },
   { id: 'contract', letter: 'b', group: 'The Brief', name: 'The Contract', tone: 'brief', forecasts: false, sees: 'The contract, every rule and how you are scored', cant: 'How long it will take' },
   { id: 'status', letter: 'a', group: 'Dashboards', name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Progress and money: units reported complete against plan, spend, the credit line', cant: 'Whether those units will pass acceptance' },
+  { id: 'controls', letter: 'c', group: 'Dashboards', name: 'Project Controls', tone: 'inside', forecasts: false, sees: 'Units left against the plan line, and defects found each week against control limits', cant: 'Defects no one has found yet' },
+  { id: 'whatif', letter: 'w', group: 'Dashboards', name: 'What-if Planner', tone: 'inside', forecasts: false, sees: 'What other plans would cost and when they would finish on paper', cant: 'Defects and the scope change' },
   { id: 'chat', letter: 'f', group: 'People', name: 'Team Chat', tone: 'people', forecasts: true, sees: 'Five colleagues, each from where they sit', cant: 'Which view to weigh most' },
   { id: 'ai', letter: 'i', group: 'People', name: 'Ask an AI', tone: 'people', forecasts: false, sees: 'Whatever you paste in: the prompt holds the basic numbers and the situation', cant: 'Anything you do not ask it' },
   { id: 'last5', letter: 'e', group: 'History', name: 'Last 5 Contracts', tone: 'record', forecasts: true, sees: 'The five newest contracts, and the story of the last one', cant: 'Whether five is enough' },
   { id: 'records', letter: 'j', group: 'History', name: 'Records', tone: 'record', forecasts: true, sees: 'What actually happened, defects and scope changes included', cant: 'Plans no past manager tried' },
+  { id: 'risks', letter: 'r', group: 'Your notes', name: 'Risk Register', tone: 'front', forecasts: false, sees: 'The risks you log, and how likely you think each is', cant: 'Risks you do not think of' },
 ];
 export const tabById = (id) => TABS.find((t) => t.id === id);
 export const tabByLetter = (l) => TABS.find((t) => t.letter && t.letter === l);
