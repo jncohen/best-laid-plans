@@ -38,7 +38,7 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
   const [shift, setShift] = useState(week1 ? p.plan.shift === 'every' : false);
   const [inspect, setInspect] = useState(week1 ? p.plan.inspect : last ? last.inspect : 0);
   const [forecast, setForecast] = useState(lastForecast);
-  // The running forecast's range and chance, carried from week to week; the week-1 commitment is what is scored.
+  // The running forecast's range and chance, carried from week to week; the week-1 commitment is what is judged.
   const [range, setRange] = useState({ low: lastLog?.low ?? p.forecast.low, high: lastLog?.high ?? p.forecast.high, chance: lastLog?.chance ?? p.forecast.onTimeChance });
   // The decisions tab opens each week; tool tabs sit beside it. Switching tabs keeps every choice above.
   const [deskTab, setDeskTab] = useState(initialTab);
@@ -181,7 +181,7 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
         </div>
         <Slider label="Move it if the evidence says so" value={shownForecast} min={nextWeek} max={lastWeek} onChange={moveForecast}
           format={(v) => `week ${v}`}
-          hint={`Committed before week 1 (the forecast that is scored): week ${p.forecast.week}, 80% sure of ${p.forecast.low}–${p.forecast.high}.`} />
+          hint={`Committed before week 1 (the one judged at the end): week ${p.forecast.week}, 80% sure of ${p.forecast.low}–${p.forecast.high}.`} />
         {calendarMoved.length > 0 && !touched && (
           <p className="text-xs text-amber-200 mt-1">The calendar moved {calendarMoved.join(', and ')}: those weeks have passed. Nothing else moves your forecast but you.</p>
         )}

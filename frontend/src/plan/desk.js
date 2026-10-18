@@ -389,7 +389,7 @@ export function recordsCsv(S) {
  */
 export const TABS = [
   { id: 'commit', letter: '', group: null, name: 'Your Plan and Prediction · Commit Before Week 1', short: 'Your Plan & Prediction', tone: 'front' },
-  { id: 'contract', letter: 'b', group: 'The Brief', name: 'The Contract', tone: 'brief', forecasts: false, sees: 'The contract, every rule and how you are scored', cant: 'How long it will take' },
+  { id: 'contract', letter: 'b', group: 'The Brief', name: 'The Contract', tone: 'brief', forecasts: false, sees: 'The contract, every rule and how your forecast is judged', cant: 'How long it will take' },
   { id: 'status', letter: 'a', group: 'Dashboards', name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Progress and money: units reported complete against plan, spend, the credit line', cant: 'Whether those units will pass acceptance' },
   { id: 'controls', letter: 'c', group: 'Dashboards', name: 'Project Controls', tone: 'inside', forecasts: false, sees: 'Units left against the plan line, and defects found each week against control limits', cant: 'Defects no one has found yet' },
   { id: 'whatif', letter: 'w', group: 'Dashboards', name: 'What-if Planner', tone: 'inside', forecasts: false, sees: 'What other plans would cost and when they would finish on paper', cant: 'Defects and the scope change' },

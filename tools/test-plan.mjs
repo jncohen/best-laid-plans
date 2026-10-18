@@ -5,7 +5,7 @@ import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/p
 import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, isCheck, forecastScore, forecastParts, dashboardPeak } from '../frontend/src/plan/engine.js';
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
-import { gameFacts, luckReplay, resultsText, checkingSummary } from '../frontend/src/plan/facts.js';
+import { gameFacts, luckReplay, resultsText, checkingSummary, forecastVerdict } from '../frontend/src/plan/facts.js';
 import { comparisonRows, aiPrompt, recordsCsv, projectControls, whatIf } from '../frontend/src/plan/desk.js';
 
 let pass = 0, fail = 0;
@@ -574,6 +574,20 @@ console.log('Each scenario code draws its own record');
   t('the rules are the same on every code', JSON.stringify(screenData(CONFIG, 'compass').rules) === JSON.stringify(S.rules));
 }
 
+console.log('The forecast is judged in words, not scored');
+{
+  const p = new Project('ledger');
+  p.commit({ week: 13, low: 12, high: 14, onTimeChance: 30, plan: { crews: 3, inspect: 0.1, shift: 'none' } });
+  while (!p.done) p.play({ hire: p.week === 0 ? 3 : 0, inspect: 0.1 });
+  const v = forecastVerdict(p), s = p.scores(), off = Math.round(s.outcome - 13);
+  t('the verdict: the week off, the range held or missed and its width, the record beside it, the chance',
+    v.point.off === off && v.range.width === 3 && v.range.held === s.held && v.range.text.startsWith('12–14 (3 weeks wide): ')
+    && v.record.label === 'the record for plans like yours' && v.record.width >= 2 && v.chance.text === `you gave week 12 30%; it ${s.onTime ? 'was' : "wasn't"} made`);
+  const b = new Project('ledger'); b.commit({ week: 13, low: 12, high: 14, onTimeChance: 30 });
+  while (!b.done) b.play({ hire: b.week < 3 ? 3 : 0, shift: true });
+  if (b.result !== 'DELIVERED') t('a contract never delivered: the range missed, the point has no error', forecastVerdict(b).range.text.endsWith('missed, never delivered') && forecastVerdict(b).point.off === null);
+}
+
 console.log('Records CSV, checks, AI use, checking out');
 {
   const S = screenData(), csv = recordsCsv(S).split('\n');
@@ -604,7 +618,7 @@ console.log('Ask an AI, the plan fact, the results file, the chat');
   const fs = gameFacts(p);
   t('the facts open with the plan: stated, week 1 as planned, the later changes', fs[0].key === 'plan' && fs[0].n === 1 && fs.length === 9 && fs[0].text.startsWith('You planned +3 crews at the start, 10% inspection, no second shift. Week 1 ran as planned; you changed your decisions in 1 later week'));
   const txt = resultsText(p, fs, { run: 2, date: new Date('2026-10-20T10:00:00Z') });
-  t('the results file holds the run, plan, forecast, scores, facts and weeks', txt.includes('Scenario code: ledger   Run: 2   Date: 2026-10-20') && txt.includes('Plan: +3 crews at the start') && txt.includes(`Forecast score: ${p.scores().forecast}`)
+  t('the results file holds the run, plan, forecast, scores, facts and weeks', txt.includes('Scenario code: ledger   Run: 2   Date: 2026-10-20') && txt.includes('Plan: +3 crews at the start') && !txt.includes('Forecast score') && txt.includes('Your 80% range: ') && txt.includes('How the company did (Delivery): ')
     && txt.includes('1. Your plan.') && txt.includes('9. Luck.') && txt.split('\n').filter((l) => /^\d+,\d+,/.test(l)).length === p.history.length);
   const chat0 = teamChat(S, plan), q = new Project('ledger'); q.play({ hire: 3, inspect: 0.1 }); q.play({ inspect: 0.1 }); const chat2 = teamChat(S, plan, liveScreen(q));
   t('Team Chat says each approach, and every colleague updates during play', chat0.every((c) => c.approach && c.approach.startsWith('goes by'))

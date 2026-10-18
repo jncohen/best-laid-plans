@@ -134,24 +134,22 @@ td.n,th.n{text-align:right}
           <tr><td>Release a crew</td><td>Lower weekly cost</td><td class="n">$50k</td></tr>
           <tr><td>Second shift</td><td>+30% output. From the second straight week, tired crews make more defects.</td><td class="n">$20k / crew</td></tr>
           <tr><td>Inspect 0–30%</td><td>Moves capacity from building to checking. Finds defects while they're cheap.</td><td class="n">capacity</td></tr>
-          <tr><td>Move your forecast</td><td>Update your estimate. Only your week-1 commitment is scored. After key events, tap Keep or Change.</td><td class="n">free</td></tr>
+          <tr><td>Move your forecast</td><td>Update your estimate. Only your week-1 commitment is judged. After key events, tap Keep or Change.</td><td class="n">free</td></tr>
         </tbody>
       </table>
     </div>
     <div class="box">
-      <h2>How you're scored</h2>
-      <p style="margin-bottom:6px"><b>Forecast</b>: the score that counts most. It measures how right you were about your own project.</p>
+      <h2>How your forecast is judged</h2>
+      <p style="margin-bottom:6px">No points. At the end you see three verdicts on the forecast you committed before week 1:</p>
       <table>
         <tbody>
-          <tr><td>Start</td><td class="n">100</td></tr>
-          <tr><td>For each week your point forecast was off</td><td class="n">−8</td></tr>
-          <tr><td>Your 80% range: for each week of its width</td><td class="n">−3</td></tr>
-          <tr><td>…and for each week the outcome fell outside it</td><td class="n">−30</td></tr>
-          <tr><td>Chance-of-week-12 error: 40 × (your % − what happened)²</td><td class="n">up to −40</td></tr>
+          <tr><td><b>Your week</b></td><td>How many weeks off, early or late.</td></tr>
+          <tr><td><b>Your 80% range</b></td><td>Did it hold? How wide was it, beside the record's range?</td></tr>
+          <tr><td><b>Your chance of week 12</b></td><td>What you said, against what happened.</td></tr>
         </tbody>
       </table>
-      <p style="margin:6px 0 2px">Never delivered (bankrupt or cancelled): Forecast 0. <b>Delivery</b>: 100, minus 12 per week late and 1 per $50k over budget. Zero if never delivered.</p>
-      <p class="rules">Two separate scores. You can deliver late and still forecast well.</p>
+      <p style="margin:6px 0 2px">A wide range holds easily; a narrow range that holds is the skill. <b>Delivery</b> shows how the company did: 100, minus 12 per week late and 1 per $50k over budget; zero if never delivered.</p>
+      <p class="rules">One game can't score a forecaster. The room's hit rate is the real score.</p>
     </div>
   </div>
 
@@ -162,7 +160,7 @@ td.n,th.n{text-align:right}
     </div>
     <div class="box tint">
       <h2>Honest beats bold</h2>
-      <p>Say 80% and it happens: you lose <span class="n">0.04 × 40 ≈ 2</span>. Say 80% and it doesn't: you lose <span class="n">0.64 × 40 ≈ 26</span>. Say what you actually believe.</p>
+      <p>Say what you actually believe. Across the room, your 80% ranges should hold about 8 times in 10, and your 60% calls should come true about 6 in 10. Too bold and the room misses; too timid and your ranges say nothing.</p>
     </div>
     <div class="box tint">
       <h2>Room rules</h2>
@@ -243,7 +241,7 @@ td.n,th.n{text-align:right}
       <ul>
         <li><b>Your game in 9 facts.</b> Numbered for a show of hands: your plan, your starting point, what you checked (how often, whether you stopped, and your AI use), the 90% week and the rejections, the scope change, whose numbers you used, whether your range held, money, and luck (your decisions replayed under 100 other draws).</li>
         <li><b>The lesson line.</b> "Your dashboard said week X. The past contracts said week Y. It was accepted in week Z."</li>
-        <li><b>Forecast and Delivery scores.</b> Each with the points every part cost, as on the front.</li>
+        <li><b>Your forecast and Delivery.</b> Three verdicts on your forecast, as on the front, and how the company did.</li>
         <li><b>How each tool on the desk would have done,</b> with what each could and couldn't see.</li>
         <li><b>"What your dashboard told you."</b> The gap between 100% on the dashboard and acceptance is the rework it couldn't see.</li>
         <li><b>Download my results (.txt).</b> Keep it for the discussion; a replay saves as a new run.</li>

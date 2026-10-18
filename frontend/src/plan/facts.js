@@ -1,9 +1,9 @@
 /**
  * "Your game in 9 facts": the reveal's numbered card, so the instructor can ask the
  * room "hands up if fact 3 happened to you". Every fact is computed from the finished
- * project and the briefing; nothing here changes a score or an outcome.
+ * project and the briefing; nothing here changes an outcome.
  */
-import { CONFIG, Project, pastContracts, historyMean, dashboardPeak, describePlan, playSummary, forecastParts, isCheck } from './engine.js';
+import { CONFIG, Project, pastContracts, historyMean, dashboardPeak, describePlan, playSummary, matchContracts, isCheck } from './engine.js';
 import { screenData, allForecasts, tabById } from './desk.js';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -183,12 +183,32 @@ export function checkingSummary(p) {
 }
 
 /**
+ * The forecast committed before week 1, judged in plain terms instead of a score: how far
+ * off the week was, whether the 80% range held and how wide it was beside the record's,
+ * and the week-12 chance against what happened. One game can't score a forecaster; the
+ * room's hit rate is the score that means something.
+ */
+export function forecastVerdict(p) {
+  const c = p.cfg || CONFIG, s = p.scores(), f = p.forecast;
+  const width = (lo, hi) => hi - lo + 1;
+  const off = s.failed ? null : Math.round(s.outcome - f.week);
+  const m = p.plan ? matchContracts(p.plan, { cfg: c, code: p.seedInput }) : null;
+  const rec = m && !m.crewsDropped ? { low: m.p10, high: m.p90, label: 'the record for plans like yours' } : (() => { const all = pastContracts(c, p.seedInput); return { low: all.p10, high: all.p90, label: 'the record of all 40' }; })();
+  return {
+    point: { week: f.week, off, text: s.failed ? `week ${f.week}; never delivered` : off === 0 ? `week ${f.week}: exactly right` : `week ${f.week}: off by ${plural(Math.abs(off), 'week')} (${off > 0 ? 'late' : 'early'})` },
+    range: { low: f.low, high: f.high, width: width(f.low, f.high), held: s.held, missBy: s.missBy, failed: s.failed,
+      text: `${f.low}–${f.high} (${plural(width(f.low, f.high), 'week')} wide): ${s.held ? 'held' : s.failed ? 'missed, never delivered' : `missed by ${plural(Math.abs(s.missBy), 'week')} (${s.missBy > 0 ? 'late' : 'early'})`}` },
+    record: { ...rec, width: width(rec.low, rec.high), text: `${rec.label}: ${rec.low}–${rec.high} (${plural(width(rec.low, rec.high), 'week')} wide)` },
+    chance: { given: f.onTimeChance, made: s.onTime, text: `you gave week ${c.deadline} ${f.onTimeChance}%; it ${s.onTime ? 'was' : "wasn't"} made` },
+  };
+}
+
+/**
  * The run as a plain text file, for the student to keep (so a replay doesn't lose the first game):
- * the plan, the forecasts, the outcome and scores, the facts, and the game week by week.
+ * the plan, the forecast and how it did, the facts, and the game week by week.
  */
 export function resultsText(p, facts, { run = 1, date = new Date() } = {}) {
-  const c = p.cfg || CONFIG, s = p.scores(), f = p.forecast;
-  const parts = s.parts || forecastParts(f, s.outcome, s.onTime, c);
+  const c = p.cfg || CONFIG, s = p.scores(), f = p.forecast, v = forecastVerdict(p);
   const lines = [
     'Best Laid Plans: my results',
     `Scenario code: ${p.seedInput ?? p.seed}   Run: ${run}   Date: ${date.toISOString().slice(0, 10)}`,
@@ -196,8 +216,10 @@ export function resultsText(p, facts, { run = 1, date = new Date() } = {}) {
     `Plan: ${p.plan ? describePlan(p.plan) : 'none stated'}`,
     `Forecast committed before week 1: week ${f.week}, 80% range ${f.low}–${f.high}, ${f.onTimeChance}% chance of week ${c.deadline}`,
     `Outcome: ${p.result === 'DELIVERED' ? `accepted in week ${p.finishWeek}` : p.result === 'BANKRUPT' ? `bankrupt in week ${p.week}, never delivered` : `terminated after week ${c.horizon}, never delivered`}`,
-    `Forecast score: ${s.forecast}${s.parts ? ` (100 − point ${parts.point} − range ${parts.range} − chance ${parts.chance})` : ' (never delivered, so the range missed)'}`,
-    `Delivery score: ${s.delivery}`,
+    `Your week: ${v.point.text}`,
+    `Your 80% range: ${v.range.text}; ${v.record.text}`,
+    `Your chance: ${v.chance.text}`,
+    `How the company did (Delivery): ${s.delivery}`,
     '',
     'Your game in facts:',
     ...facts.map((x) => `${x.n}. ${x.title}. ${x.text}`),

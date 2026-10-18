@@ -16,7 +16,7 @@ Written for DATA 790, Module 05: Imagining, Modeling, and Prediction.
 
 **Play it:** <https://jncohen.github.io/best-laid-plans/>. The live site serves
 `master`. These notes describe `simple-1.2`, the
-simplified 1.2 for class: nine tabs (with a small management-information system), one forecast score, the richer past record with
+simplified 1.2 for class: nine tabs (with a small management-information system), no forecast score (the forecast is judged in words), the richer past record with
 its failures shown, personal luck, bankruptcy, and a show of hands instead of result
 codes. The full 1.2 (more tools, an Updating score, mid-game events, the inspectors'
 sample) is on `decision-desk`.
@@ -149,7 +149,7 @@ sample) is on `decision-desk`.
 
    Under the facts, **Download my results (.txt)** saves a text file of the run: the
    scenario code, a run number and the date; the plan, forecast and outcome; the
-   Forecast score and its parts; the Delivery score; the nine facts; the checks (by week), checking out and AI use; and the weeks as a
+   forecast's three verdicts; Delivery; the nine facts; the checks (by week), checking out and AI use; and the weeks as a
    CSV. Each finished game on a browser is a new run (`best-laid-plans-ledger-run1.txt`,
    then `run2`), so students can replay and still keep their first play for the class
    discussion. On a phone, the same text can be copied from "Show the text to copy".
@@ -158,10 +158,10 @@ sample) is on `decision-desk`.
    1. one lesson line: "Your dashboard said week X. The past contracts said week Y. It
       was accepted in week Z." (X is the week the dashboard first read 100%, Y the
       delivered past contracts' median);
-   2. the Forecast score (the score) and the Delivery score (secondary), each with one
-      plain sentence: whether the week-1 range held, a note when the range was wide,
-      "You gave 35% to week 12; it wasn't made", lateness and spend. A bankruptcy is its
-      own line under the lesson;
+   2. the forecast's three verdicts (the week off; the range held or missed, its width
+      beside the record's; "you gave week 12 35%; it wasn't made"), and Delivery (how
+      the company did: lateness and spend). A bankruptcy is its own line under the
+      lesson;
    3. how every tool on the desk would have done, each with a line on what it sees and
       can't see, and the failures under any range from the record;
    4. their range against the record, in one compact chart;
@@ -209,19 +209,16 @@ for projecting a tab in class.
   week's payroll would take it past that, it can't pay its crews: it goes bankrupt
   and the contract ends. During play, a warning appears before a week that would do
   this.
-- **The score is the forecast.** The front tab and The Contract say "Your score is
-  your forecast. Delivery shows how the company did." **Forecast** scores the
-  commitment made before week 1: 100 − 8 × |outcome − point| − 3 × the interval score
-  of the 80% range − 40 × Brier of the week-12 chance, floored at 0. The interval
-  (Winkler) score is the range's width plus 10 × how far the outcome falls outside it,
-  so a wide range costs points even when it holds. With a 20% chance of week 12 and
-  the point mid-range: on an outcome of week 15, 12–17 scores 75, 6–24 scores 44 and
-  10–11 scores 0; on week 13, 75, 28 and 11–19. **Delivery** (secondary) = 100 − 12
-  per week late − 1 per $50k over budget, or 0 if the contract was terminated or the
-  company went bankrupt. A contract never delivered (bankrupt or terminated) misses
-  its range and scores 0; the reveal says so, and reports the bankruptcy on its own
-  line ("Your company went bankrupt in week N"). The reveal shows the score's three
-  parts: 100 − point − range − chance.
+- **No forecast score.** The forecast committed before week 1 is judged in words
+  (`forecastVerdict` in facts.js): the week off and its direction; whether the 80%
+  range held, its width in weeks, and the width of the record's range beside it (the
+  matched record, or all 40 when the match drops crews); and the week-12 chance against
+  what happened. The reveal adds: "One game can't score a forecaster. The score that
+  means something is the room's: of everyone's 80% ranges, about 8 in 10 should hold."
+  The engine still computes the old composite (100 − 8 × |error| − 3 × interval score
+  − 40 × Brier) in `scores()`, for the tests and the balance sweep only; no screen or
+  file shows it. **Delivery** (how the company did) = 100 − 12 per week late − 1 per
+  $50k over budget, or 0 if the contract was terminated or the company went bankrupt.
 
 ## The Decision Desk
 

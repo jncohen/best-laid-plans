@@ -15,7 +15,7 @@ browser, on a phone or a laptop, with nothing to install and no sign-in.
 1. **Open the link** and enter the scenario code your instructor gives you (or use the
    link with the code already in it, such as
    `https://jncohen.github.io/best-laid-plans/?seed=ledger`).
-2. **Read The Contract tab.** It states every rule and how you are scored.
+2. **Read The Contract tab.** It states every rule and how your forecast is judged.
 3. **Make your plan:** how many crews to add at the start, how much of the line to put
    on inspection, and whether to run a second shift. You can change course later.
 4. **Look at whatever you think you need.** Every tab is open:
@@ -35,27 +35,33 @@ browser, on a phone or a laptop, with nothing to install and no sign-in.
    look at, but never uses it against you.
 5. **Commit three numbers:** the week you think the customer accepts the work, an 80%
    range (earliest to latest), and your chance of finishing by week 12. These are
-   scored. You can move your forecast during play, but only the first one counts.
+   what you're judged on. You can move your forecast during play, but only the first
+   one counts.
 6. **Play week by week.** Each week, add or release crews, set inspection and the
    shift, then play the week. When something big happens (the customer adds work, the
    dashboard passes 90%, units are rejected, money runs short), you'll be asked whether
    to keep or change your forecast.
 7. **When it says "finished," wait.** Don't reveal until your instructor says so.
 8. **After the reveal,** read "Your game in 9 facts" and click **Download my results
-   (.txt)**. Keep that file: it has your plan, forecast, scores and every week, for the
+   (.txt)**. Keep that file: it has your plan, your forecast and how it did, and every week, for the
    class discussion. If you play again, the next file is saved as a new run, so your
    first play is never lost.
 
-### How you're scored
+### How your forecast is judged
 
-- **Forecast score** (the one that counts): starts at 100. You lose 8 points for each
-  week your point forecast was off; 3 for each week of width in your 80% range, and 30
-  more for each week the outcome fell outside it; and up to 40 for your chance of week
-  12 (40 × the squared error). A contract never delivered scores 0.
-- **Delivery score** (shown, secondary): 100, minus 12 a week late and 1 per $50k over
-  budget. Zero if the company goes bankrupt or the customer cancels.
+There is no forecast score. At the end you see three plain verdicts on the forecast
+you committed before week 1:
 
-A narrow range that holds scores best. Say what you actually believe.
+- **Your week:** how many weeks off it was, and whether early or late.
+- **Your 80% range:** whether it held, and how wide it was beside the record's range.
+  A wide range holds easily; a narrow range that holds is the skill.
+- **Your chance of week 12:** what you said, against what happened.
+
+One game can't tell a good forecaster from a lucky one. The score that means something
+is the room's: of everyone's 80% ranges, about 8 in 10 should hold.
+
+**Delivery** shows how the company did: 100, minus 12 a week late and 1 per $50k over
+budget, and zero if the company goes bankrupt or the customer cancels.
 
 ## For instructors
 

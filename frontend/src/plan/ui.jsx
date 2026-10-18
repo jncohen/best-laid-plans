@@ -5,7 +5,7 @@
 export function ScoringNote({ className = '' }) {
   return (
     <p className={`text-sm text-slate-200 ${className}`}>
-      <strong className="text-emerald-300">Your score is your forecast.</strong> Delivery shows how the company did.
+      <strong className="text-emerald-300">Your forecast is what counts:</strong> at the end you see whether your range held, and how narrow it was. Delivery shows how the company did.
     </p>
   );
 }

@@ -86,8 +86,8 @@ function ContractTab() {
         </ul>
         <ScoringNote className="mt-3" />
         <p className="text-xs text-slate-400 mt-1">
-          The forecast you commit before week 1 loses points for being far off, for a wide range and for a miss: a narrow range that holds scores best.
-          Delivery: −{c.latePenaltyPerWeek} a week late, −{c.overspendPenaltyPer50k} per $50k over budget, 0 if never delivered.
+          At the end, the forecast you commit before week 1 is judged three ways: how far off your week was; whether your 80% range held, and how wide it was beside the record&apos;s; and your chance of week 12 against what happened. A narrow range that holds is the goal.
+          Delivery (how the company did): 100, −{c.latePenaltyPerWeek} a week late, −{c.overspendPenaltyPer50k} per $50k over budget, 0 if never delivered.
         </p>
       </div>
     </Card>

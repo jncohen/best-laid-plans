@@ -4,7 +4,7 @@ import { screenData, allForecasts, tabById, tabByLetter, costManagement } from '
 import { Card } from './ui';
 import { money, downloadText } from './format';
 import { RevealChart, ForecastChart, RangeChart } from './charts';
-import { gameFacts, resultsText } from './facts';
+import { gameFacts, resultsText, forecastVerdict } from './facts';
 
 // Each finished game on this browser is a numbered run, so a replay never overwrites the first play's file.
 function nextRun(code) {
@@ -77,6 +77,7 @@ export default function Reveal({ project, onReplay }) {
   const failLine = p.result === 'BANKRUPT' ? `Your company went bankrupt in week ${p.week}.` : p.result === 'TERMINATED' ? `The customer terminated the contract after week ${c.horizon}.` : null;
   const end = Math.ceil(Math.max(outcome, c.deadline, past.p90)) + 1;
   const facts = useMemo(() => gameFacts(p), [p]);
+  const v = useMemo(() => forecastVerdict(p), [p]);
   const code = p.seedInput ?? p.seed;
   const [run, setRun] = useState(1);
   const counted = useRef(false);
@@ -121,20 +122,18 @@ export default function Reveal({ project, onReplay }) {
       </header>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-slate-900 border border-emerald-500/40 rounded-xl p-3">
-          <div className="text-[11px] uppercase tracking-wider text-slate-400">Forecast score</div>
-          <div className="text-2xl font-bold font-mono text-white">{s.forecast}</div>
-          {s.parts ? (
-            <p className="text-xs text-slate-300 mt-1 font-mono">100 − point {s.parts.point} − range {s.parts.range} − chance {s.parts.chance}</p>
-          ) : (
-            <p className="text-xs text-rose-300 mt-1">0: the contract was never delivered, so the range missed.</p>
-          )}
-          <p className="text-xs text-slate-400 mt-1">
-            Week {f.week}, 80% sure of {f.low}–{f.high}. {f.high - f.low >= 6 ? 'A range that wide costs points even when it holds. ' : ''}You gave {f.onTimeChance}% to week {c.deadline}; {s.onTime ? 'it was made' : "it wasn't made"}.
-          </p>
+        <div className="col-span-2 sm:col-span-1 bg-slate-900 border border-emerald-500/40 rounded-xl p-3">
+          <div className="text-[11px] uppercase tracking-wider text-slate-400">Your forecast, committed before week 1</div>
+          <ul className="text-sm text-slate-100 mt-1 space-y-1">
+            <li><span className="text-slate-400">Week:</span> {v.point.text}.</li>
+            <li><span className="text-slate-400">80% range:</span> <span className={v.range.held ? 'text-emerald-300 font-semibold' : 'text-rose-300 font-semibold'}>{v.range.text}</span>.
+              <div className="text-xs text-slate-400">Beside {v.record.text}.{v.range.held && v.range.width > v.record.width + 2 ? ' Wide ranges hold easily; narrow ones that hold are the skill.' : ''}</div></li>
+            <li><span className="text-slate-400">Chance:</span> {v.chance.text}.</li>
+          </ul>
+          <p className="text-xs text-slate-400 mt-2">One game can't score a forecaster. The score that means something is the room's: of everyone's 80% ranges, about 8 in 10 should hold.</p>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-          <div className="text-[11px] uppercase tracking-wider text-slate-400">Delivery (secondary)</div>
+        <div className="col-span-2 sm:col-span-1 bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div className="text-[11px] uppercase tracking-wider text-slate-400">How the company did (Delivery)</div>
           <div className="text-2xl font-bold font-mono text-slate-300">{s.delivery}</div>
           <p className="text-xs text-slate-400 mt-1">{s.failed ? `Never delivered (${s.failed}).` : s.late > 0 ? `${plural(s.late, 'week')} late.` : 'On time.'} Spent {money(p.spent)} of {money(c.budget)}.</p>
         </div>
