@@ -5,6 +5,7 @@ import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/p
 import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, isCheck, forecastScore } from '../frontend/src/plan/engine.js';
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
+import { gameFacts, luckReplay } from '../frontend/src/plan/facts.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond) => { if (cond) { pass++; console.log(`  ok   ${name}`); } else { fail++; console.log(`  FAIL ${name}`); } };
@@ -441,6 +442,53 @@ console.log('The Forecast score: one score, and wide ranges cost points');
   // Bankruptcy is reported on its own; the range is graded against the projected week.
   const b = new Project('render-broke'); b.commit({ week: 14, low: 12, high: 16, onTimeChance: 0 }); while (!b.done) b.play({ hire: 3, shift: true });
   t('a bankrupt contract is graded against its projected week, and reported as failed', b.result === 'BANKRUPT' && b.scores().failed === 'bankrupt' && b.scores().held === (b.outcomeWeek() >= 12 && b.outcomeWeek() <= 16));
+}
+
+console.log('Your game in 8 facts');
+{
+  // Fixed scenarios on ledger, with fixed luck: a pace-anchored student and a Mabel follower.
+  const game = ({ commit, desk, pol, luck = 7, forecastAt = null }) => {
+    const p = new Project('ledger', CONFIG, luck);
+    p.commit({ ...commit, plan: { crews: 3, inspect: 0.1, shift: 'none' }, desk });
+    while (!p.done) {
+      const w = p.week + 1, fc = forecastAt ? forecastAt(w, p) : null;
+      p.play({ ...pol(w), forecast: fc ? fc.week : Math.max(w, commit.week), range: fc || { low: Math.max(w, commit.low), high: Math.max(w, commit.high), chance: commit.onTimeChance, carried: commit.week < w } });
+    }
+    return p;
+  };
+  const plan = (w) => ({ hire: w === 1 ? 3 : 0, inspect: 0.1 });
+  const a = game({ commit: { week: 10, low: 10, high: 11, onTimeChance: 90 }, desk: { tool: 'a', source: 'Status Report', tabs: 1, minutes: 2, order: ['status'] }, pol: plan });
+  const fa = gameFacts(a), byKey = (fs, k) => fs.find((x) => x.key === k);
+  t('fact 1: week 10 is close to the line\'s pace (10.5) and not the median', byKey(fa, 'start').value.near.join() === 'close to the line\'s pace' && byKey(fa, 'start').text === 'You committed week 10: close to the line\'s pace.');
+  t('fact 2: opened Status Report only, so Records no and Last 5 no', byKey(fa, 'record').text === 'You opened Records: no. You opened Last 5 Contracts: no.');
+  const ninety = a.history.find((r) => r.reported >= 0.9), rej = a.history.reduce((s, r) => s + r.rejected, 0);
+  t('fact 3: the 90% week and the units rejected, from the history', byKey(fa, 'ninety').value.week === ninety.week && byKey(fa, 'ninety').value.rejected === rej && rej > 0
+    && byKey(fa, 'ninety').text === `Your dashboard passed 90% in week ${ninety.week}; the customer then rejected ${rej} units.`);
+  t('fact 4: ledger adds 15 units in week 4; a forecast never moved is "no"', byKey(fa, 'surprise').text === 'The customer added 15 units in week 4. You changed your forecast afterwards: no.');
+  t('fact 5: the Status Report numbers', byKey(fa, 'advice').text === 'You used the Status Report numbers.');
+  t('fact 6: the range against the outcome', byKey(fa, 'range').value.held === a.scores().held && byKey(fa, 'range').value.missBy === a.scores().missBy);
+  t('fact 7: not bankrupt; over budget only if spent more than $5.00M', byKey(fa, 'money').value.bankruptWeek === null && byKey(fa, 'money').value.over === Math.max(0, a.spent - CONFIG.budget));
+  const b = game({ commit: { week: 13, low: 12, high: 15, onTimeChance: 30 }, desk: { tool: 'f', source: "Mabel's", tabs: 2, minutes: 3, order: ['records', 'chat'] }, pol: plan,
+    forecastAt: (w) => (w >= 6 ? { week: 14, low: 13, high: 15, chance: 20, touched: true } : null) });
+  const fb = gameFacts(b);
+  t('fact 1 for week 13: close to the past contracts\' median (14)', byKey(fb, 'start').value.near.join() === 'close to the past contracts\' median');
+  t('facts 2, 4, 5 for a Mabel follower who moved the forecast in week 6', byKey(fb, 'record').value.records && !byKey(fb, 'record').value.last5
+    && byKey(fb, 'surprise').value.changedAfter === true && byKey(fb, 'advice').text === "You used Mabel's numbers.");
+  const coast = gameFacts(game({ commit: { week: 13, low: 12, high: 15, onTimeChance: 29 }, desk: { tool: 'j', source: 'Records', tabs: 2, minutes: 5, order: ['records', 'last5'] }, pol: plan }));
+  t('fact 4: the calendar moving a range forward is not the student changing the forecast', byKey(coast, 'surprise').value.changedAfter === false && byKey(coast, 'advice').text === 'You used the Records numbers.');
+  const fd = gameFacts(game({ commit: { week: 12, low: 11, high: 13, onTimeChance: 50 }, desk: { tool: '', tabs: 0, minutes: 1, order: [] }, pol: plan }));
+  t('fact 1 for week 12 is "at the deadline"; fact 5 is your own numbers', byKey(fd, 'start').value.near.includes('at the deadline') && byKey(fd, 'advice').text === 'You used your own numbers.');
+  // Fact 7 and 8 on a bankrupt game: +2 crews with a shift every week.
+  const br = game({ commit: { week: 12, low: 11, high: 13, onTimeChance: 50 }, desk: { tool: '', tabs: 0, minutes: 1, order: [] }, pol: (w) => ({ hire: w === 1 ? 2 : 0, shift: true }) });
+  const fbr = gameFacts(br);
+  t('fact 7: bankrupt, with the week', br.result === 'BANKRUPT' && byKey(fbr, 'money').text.startsWith(`Bankrupt: yes, in week ${br.week}.`));
+  t('fact 8: the luck replay counts are deterministic and plausible', JSON.stringify(luckReplay(a)) === JSON.stringify(luckReplay(a)) && byKey(fbr, 'luck').value.bankrupt >= 90 && byKey(fa, 'luck').value.draws === 100
+    && byKey(fa, 'luck').text === `With exactly your decisions, other luck would have made week 12 in ${byKey(fa, 'luck').value.onTime} of 100 games, and gone bankrupt in ${byKey(fa, 'luck').value.bankrupt}.`);
+  t('fact 8 replays the student\'s own decisions: replaying with the student\'s own luck reproduces the outcome', (() => {
+    const q = new Project('ledger', CONFIG, 7); let w = 0; while (!q.done) { q.play(a.decisions[w] || { hire: 0, inspect: 0.1 }); w++; } return q.outcomeWeek() === a.outcomeWeek() && q.spent === a.spent; })());
+  t('the facts never change an outcome', (() => { const before = JSON.stringify(a.history); gameFacts(a); return JSON.stringify(a.history) === before; })());
+  const t0 = Date.now(); for (let i = 0; i < 10; i++) luckReplay(a);
+  t(`the luck replay is fast (${((Date.now() - t0) / 10).toFixed(1)} ms for 100 games here)`, (Date.now() - t0) / 10 < 50);
 }
 
 console.log('Playtest fixes: arithmetic, fatigue, acceptance');

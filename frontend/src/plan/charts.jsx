@@ -85,12 +85,20 @@ export function ProgressSpark({ history, deadline, end }) {
   const pts = [[0, 0], ...history.map((r) => [r.week, Math.round(r.reported * 100)])];
   const line = pts.map(([w, v]) => `${x(w)},${y(v)}`).join(' ');
   const area = `${x(0)},${y(0)} ${line} ${x(pts[pts.length - 1][0])},${y(0)}`;
+  const ninety = history.find((r) => !r.bankrupt && r.reported >= 0.9);
   return (
     <svg viewBox={`0 0 ${W} ${h}`} className={CHART_CLASS} role="img" aria-label="Reported progress so far">
       {axes({ x, y, end, h })}
       {vline(x(deadline), h, { color: '#fb7185' })}
       <polygon points={area} fill="#0ea5e9" fillOpacity="0.15" />
       <polyline points={line} fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeLinejoin="round" />
+      {ninety && (
+        // The week the dashboard first passed 90%.
+        <g>
+          <circle cx={x(ninety.week)} cy={y(Math.round(ninety.reported * 100))} r="5" fill="none" stroke="#e0f2fe" strokeWidth="2" />
+          <text x={x(ninety.week) - 8} y={y(Math.round(ninety.reported * 100)) + 4} textAnchor="end" fontSize="12" fontWeight="600" fill="#e0f2fe">Dashboard: 90% done</text>
+        </g>
+      )}
     </svg>
   );
 }

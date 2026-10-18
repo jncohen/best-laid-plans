@@ -67,7 +67,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const commit = () => {
     const given = loaded ? loaded.numbers : null;
     const edited = !given || given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
-    const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', tabs: opened.filter(isCheck).length, minutes: (Date.now() - startedAt) / 60000, edited, order: opened };
+    const source = loaded ? (loaded.id === 'chat' && loaded.label ? `${loaded.label}'s` : tabById(loaded.id)?.name || '') : '';
+    const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', source, tabs: opened.filter(isCheck).length, minutes: (Date.now() - startedAt) / 60000, edited, order: opened };
     onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim());
   };
   const deskPlan = planReady ? plan : { crews: 0, inspect: 0, shift: 'none' };

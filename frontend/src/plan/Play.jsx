@@ -80,6 +80,8 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
   const current = { crews: Math.max(0, crewsNext - c.crews), inspect, shift: shift ? 'every' : 'none' };
 
   const late = nextWeek > c.deadline;
+  // The scope change and an acceptance rejection get their own cards; the rest stay in the week's log.
+  const logLines = last ? last.events.filter((e) => !/^Customer acceptance test|changed the requirement/.test(e)) : [];
   const weeksLeft = c.deadline - p.week;
   const lateShift = p.plan && p.plan.shift === 'late' && nextWeek >= 9 && nextWeek <= 11;
 
@@ -130,6 +132,18 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
         </details>
       </Card>
 
+      {/* The week's big moments, as cards rather than log lines. */}
+      {last && last.shock > 0 && (
+        <div role="status" className="rounded-xl border-2 border-amber-400 bg-amber-500/15 px-4 py-3 text-amber-100 font-bold">
+          The customer added {last.shock} units in week {last.week}.
+        </div>
+      )}
+      {last && last.rejected > 0 && (
+        <div role="status" className="rounded-xl border-2 border-rose-400 bg-rose-500/15 px-4 py-3 text-rose-100 font-bold">
+          Customer acceptance test: {last.rejected} unit{last.rejected === 1 ? '' : 's'} rejected. Fixing {last.rejected === 1 ? 'it' : 'them'} now takes {last.rejected * c.lateFixMultiplier} units of work.
+        </div>
+      )}
+
       <Card title="Dashboard">
         <div className="flex items-end justify-between mb-1">
           <span className="text-sm text-slate-300">Reported complete</span>
@@ -149,11 +163,11 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
             <ProgressSpark history={p.history} deadline={c.deadline} end={Math.max(c.deadline, p.week) + 1} />
           </div>
         )}
-        {last && last.events.length > 0 && (
+        {logLines.length > 0 && (
           <div className="mt-3">
             <div className="text-[11px] uppercase tracking-wider text-slate-500">What happened in week {last.week}</div>
             <ul className="mt-1 space-y-1 text-sm">
-              {last.events.map((e, i) => (
+              {logLines.map((e, i) => (
                 <li key={i} className={/rejected|changed the requirement/.test(e) ? 'text-amber-300' : 'text-slate-400'}>{e}</li>
               ))}
             </ul>

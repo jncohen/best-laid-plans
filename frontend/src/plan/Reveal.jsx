@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, firstCloseWeek, playSummary } from './engine';
 import { screenData, allForecasts, tabById, tabByLetter } from './desk.js';
 import { Card } from './ui';
 import { money } from './format';
 import { RevealChart, ForecastChart, RangeChart } from './charts';
+import { gameFacts } from './facts';
 
 // What each tool sees and can't see: shown here, after the outcome, not on the tabs.
 const TOOL_TAB = { status: 'status', last5: 'last5', 'records-all': 'records', 'records-plan': 'records' };
@@ -62,9 +64,22 @@ export default function Reveal({ project, onReplay }) {
   const ended = delivered ? `It was accepted in week ${outcome}.` : `It was never delivered; it would have taken until week ${outcome}.`;
   const failLine = p.result === 'BANKRUPT' ? `Your company went bankrupt in week ${p.week}.` : p.result === 'TERMINATED' ? `The customer terminated the contract after week ${c.horizon}.` : null;
   const end = Math.ceil(Math.max(outcome, c.deadline, past.p90)) + 1;
+  const facts = useMemo(() => gameFacts(p), [p]);
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      {/* Numbered, so the room can answer "hands up if fact 3 happened to you". */}
+      <Card title="Your game in 8 facts" tone="amber">
+        <ol className="space-y-2">
+          {facts.map((x) => (
+            <li key={x.n} className="flex gap-3 text-sm text-slate-100 leading-snug">
+              <span className="shrink-0 w-7 h-7 rounded-full bg-amber-500/20 text-amber-200 font-bold flex items-center justify-center" aria-hidden="true">{x.n}</span>
+              <span><span className="text-amber-200 font-semibold">{x.title}.</span> {x.text}</span>
+            </li>
+          ))}
+        </ol>
+      </Card>
+
       <header>
         <p className="text-xs uppercase tracking-wider text-slate-500">The lesson</p>
         <h1 className="text-2xl font-bold text-white mt-1 leading-snug">
@@ -76,21 +91,19 @@ export default function Reveal({ project, onReplay }) {
         <p className="text-xs text-slate-400 mt-2">"Said" means the week the dashboard first read 100%, and the median of the past contracts that were delivered ({past.p10}–{past.p90} for most; {past.failed.total} of {past.n} never delivered). Keep this screen open: your instructor will ask the room for a show of hands.</p>
       </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Card title="Forecast score" tone="emerald">
-          <div className="text-4xl font-bold font-mono text-white">{s.forecast}</div>
-          <p className="text-sm text-slate-300 mt-1">
-            Your week-1 prediction: week {f.week}, 80% sure of {f.low}–{f.high}.{' '}
-            {s.held ? `The range held${delivered ? '' : ' (against the week it would have taken)'}.` : `It missed by ${plural(Math.abs(s.missBy), 'week')} (${s.missBy > 0 ? 'late' : 'early'}).`}{' '}{f.high - f.low >= 6 ? 'A range that wide costs points even when it holds. ' : ''}
-            You gave {f.onTimeChance}% to week {c.deadline}; {s.onTime ? 'it was made' : "it wasn't made"}.
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-slate-900 border border-emerald-500/40 rounded-xl p-3">
+          <div className="text-[11px] uppercase tracking-wider text-slate-400">Forecast score</div>
+          <div className="text-2xl font-bold font-mono text-white">{s.forecast}</div>
+          <p className="text-xs text-slate-400 mt-1">
+            Week {f.week}, 80% sure of {f.low}–{f.high}. {f.high - f.low >= 6 ? 'A range that wide costs points even when it holds. ' : ''}You gave {f.onTimeChance}% to week {c.deadline}; {s.onTime ? 'it was made' : "it wasn't made"}.
           </p>
-        </Card>
-        <Card title="Delivery score (secondary)">
-          <div className="text-4xl font-bold font-mono text-slate-300">{s.delivery}</div>
-          <p className="text-sm text-slate-300 mt-1">
-            {s.failed ? `Never delivered (${s.failed}).` : s.late > 0 ? `${plural(s.late, 'week')} late.` : 'On time.'} You spent {money(p.spent)} of {money(c.budget)}.
-          </p>
-        </Card>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div className="text-[11px] uppercase tracking-wider text-slate-400">Delivery (secondary)</div>
+          <div className="text-2xl font-bold font-mono text-slate-300">{s.delivery}</div>
+          <p className="text-xs text-slate-400 mt-1">{s.failed ? `Never delivered (${s.failed}).` : s.late > 0 ? `${plural(s.late, 'week')} late.` : 'On time.'} Spent {money(p.spent)} of {money(c.budget)}.</p>
+        </div>
       </div>
 
       <Card title="How each tool on the desk would have done">

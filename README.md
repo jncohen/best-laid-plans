@@ -55,9 +55,29 @@ sample) is on `decision-desk`.
    running forecast (week, range and chance). The forecast committed before week 1
    remains the one that is scored. The contract ends when the customer accepts it,
    when the customer terminates it after week 22, or when the company goes bankrupt.
+   During play the big moments are cards, not log lines: "The customer added 15 units
+   in week 4." and "Customer acceptance test: 17 units rejected. Fixing them now takes
+   34 units of work." The progress chart marks the week the dashboard first passed 90%
+   ("Dashboard: 90% done").
 5. At the end the finish screen states what happened ("Accepted in full in week 14.",
    or bankrupt, or terminated, never delivered) and holds the results until the class
-   reveals together. The reveal is ordered for a phone:
+   reveals together. The reveal opens with **Your game in 8 facts**, numbered so the
+   instructor can ask "hands up if fact 3 happened to you":
+   1. your starting point ("You committed week 10: close to the line's pace", or close
+      to the past contracts' median, at the deadline, or your own number);
+   2. whether you opened Records and Last 5 Contracts;
+   3. the week the dashboard passed 90%, and the units the customer then rejected;
+   4. the scope change, and whether you changed your forecast afterwards (only your own
+      moves count, not the calendar's);
+   5. whose numbers you committed (Mabel's, the Records numbers, or your own);
+   6. whether your 80% range held, or by how many weeks it missed;
+   7. bankrupt or not, and any overspend;
+   8. luck: your exact weekly decisions replayed under 100 other personal-luck draws in
+      the same shared world ("other luck would have made week 12 in 61 of 100 games, and
+      gone bankrupt in 0"). It takes about 2 ms on a laptop, so well under 50 ms on a
+      phone.
+
+   Below the facts the reveal is ordered for a phone:
    1. one lesson line: "Your dashboard said week X. The past contracts said week Y. It
       was accepted in week Z." (X is the week the dashboard first read 100%, Y the
       delivered past contracts' median);

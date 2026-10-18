@@ -53,6 +53,21 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     if (h.includes('🔒') || /views? left|used your|Round 1/.test(h)) throw new Error('a limit still shows');
     return h;
   });
+  // The big moments are cards: the scope change, an acceptance rejection; and the 90% marker on the chart.
+  {
+    const m = new Project('ledger');
+    m.commit({ week: 14, low: 12, high: 16, onTimeChance: 20, plan: { crews: 0, inspect: 0, shift: 'none' } });
+    const show = () => renderToString(<Play project={m} onPlay={() => {}} />).replace(/<!-- -->/g, '');
+    while (m.week < 4) m.play({});
+    ok('Play: the scope change is a card', () => { const h = show(); if (!/border-amber-400[^>]*>The customer added 15 units in week 4\./.test(h)) throw new Error('no scope card'); return h; });
+    while (!m.done && !m.history.some((r) => r.rejected > 0)) m.play({});
+    ok('Play: an acceptance rejection is a card, and the 90% marker shows', () => {
+      const h = show(), r = m.history[m.history.length - 1];
+      if (!new RegExp(`border-rose-400[^>]*>Customer acceptance test: ${r.rejected} units rejected\. Fixing them now takes ${r.rejected * 2} units of work\.`).test(h)) throw new Error('no rejection card');
+      if (!h.includes('Dashboard: 90% done')) throw new Error('no 90% marker');
+      return h;
+    });
+  }
   ok('Play, on a tool tab: the way back is open', () => {
     const h = renderToString(<Play project={p} onPlay={() => {}} initialSeen={['status', 'records', 'last5']} initialTab="records" />).replace(/&#x27;/g, "'");
     if (!h.includes("Back to This Week's Decisions") || /<button[^>]*disabled=""[^>]*>[^<]*This Week/.test(h)) throw new Error('no way back');
@@ -89,10 +104,10 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   const C3I = { crews: 3, inspect: 0.1, shift: 'none' }, HO = { crews: 0, inspect: 0, shift: 'none' };
   const pace = { week: 11, low: 10, high: 12, onTimeChance: 75 };
   const cases = [
-    ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, ['The range held.', 'You changed it before playing week 1', 'Your committed numbers came from Status Report'], false],
-    ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, ['The range held.', 'Week 1 ran as stated', 'Your committed numbers came from Records, and you then changed them'], false],
-    ['all 40, hands-off stated and played', { week: 15, low: 11, high: 22, onTimeChance: 20 }, HO, {}, ['The range held.', 'A range that wide costs points even when it holds.', 'Week 1 ran as stated'], true],
-    ['pace, hands-off stated and played', pace, HO, {}, ['It missed by 5 weeks (late).', 'Week 1 ran as stated', 'Sees ', 'You set your committed numbers yourself.'], true],
+    ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, ['): held.', 'You changed it before playing week 1', 'Your committed numbers came from Status Report'], false],
+    ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, ['): held.', 'Week 1 ran as stated', 'Your committed numbers came from Records, and you then changed them'], false],
+    ['all 40, hands-off stated and played', { week: 15, low: 11, high: 22, onTimeChance: 20 }, HO, {}, ['): held.', 'A range that wide costs points even when it holds.', 'Week 1 ran as stated'], true],
+    ['pace, hands-off stated and played', pace, HO, {}, ['missed by 5 weeks (late)', 'Week 1 ran as stated', 'Sees ', 'You set your committed numbers yourself.'], true],
   ];
   for (const [i, [label, f, plan, pol, verdict, coaster]] of cases.entries()) {
     const p = new Project('ledger');
@@ -106,9 +121,10 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
       if (h.includes('past managers also ran it hands-off') !== coaster) throw new Error('coaster line wrong');
       // The phone order: lesson, scores, tools, your range, the dashboard, then More detail.
       const at = (x) => h.indexOf(x);
-      const order = ['Your dashboard said', 'Forecast score', 'Delivery score (secondary)', 'How each tool on the desk would have done', 'Your range against the record', 'What your dashboard told you', 'More detail'];
+      const order = ['Your game in 8 facts', 'Your dashboard said', 'Forecast score', 'Delivery (secondary)', 'How each tool on the desk would have done', 'Your range against the record', 'What your dashboard told you', 'More detail'];
       if (order.some((x) => at(x) < 0) || order.some((x, k) => k && at(x) < at(order[k - 1]))) throw new Error('reveal order wrong');
       const fw = p.history.find((r) => r.rejected > 0 || r.reported >= 0.999).week;
+      if (!/Your game in 8 facts/.test(h) || (h.match(/aria-hidden="true">[1-8]<\/span>/g) || []).length !== 8) throw new Error('8 numbered facts missing');
       for (const x of [`Your dashboard said week ${fw}.`, `It was accepted in week ${p.scores().outcome}.`, `The past contracts said week 14`, `You gave ${f.onTimeChance}% to week 12; it`, 'first passed 90% in week']) if (!h.replace(/<[^>]+>/g, '').includes(x)) throw new Error(`"${x}" missing`);
       if (h.includes('BLP') || h.includes('result code')) throw new Error('a result code is still shown');
       return h;

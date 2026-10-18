@@ -170,6 +170,7 @@ export class Project {
     this.deskLog = [];         // decision-support tabs opened during play: { week, tab }, and prompt copies
     this.weekSeconds = {};     // roughly how long each week took on the play screen
     this.forecastLog = [];
+    this.decisions = [];       // each week's decisions as played (crews hired or released, shift, inspection), for the luck replay
     this.history = [];
     this.spent = 0;
   }
@@ -238,6 +239,7 @@ export class Project {
 
     // Staffing
     hire = Math.max(-(this.crews - 1), Math.min(c.maxHirePerWeek, Math.round(hire), c.maxCrews - this.crews));
+    this.decisions.push({ hire, shift: !!shift, inspect: c.inspectionOptions.includes(+inspect) ? +inspect : 0 });
     const cost = this.weekCost({ hire, shift });
     if (this.budget - cost < -c.creditLine) {
       // The week's payroll would go past the credit line. Nothing is built; the contract ends.
@@ -503,7 +505,9 @@ export function failuresLine(sum, what = '') {
 // whether they changed the numbers they were given (the tool's, or the defaults).
 export function normalizeDesk(d) {
   const tool = /^[a-z]$/.test(d.tool || '') ? d.tool : '';
-  return { tool, tabs: Math.max(0, Math.min(99, Math.round(+d.tabs || 0))), minutes: Math.max(0, Math.min(99, Math.round(+d.minutes || 0))), edited: !!d.edited, copied: !!d.copied, seconds: Math.max(0, Math.round((+d.minutes || 0) * 60)), order: Array.isArray(d.order) ? d.order.map(String) : [] };
+  // Whose numbers were committed, in words: "Mabel's", "Records", or '' for the student's own.
+  const source = typeof d.source === 'string' ? d.source.slice(0, 40) : '';
+  return { tool, source, tabs: Math.max(0, Math.min(99, Math.round(+d.tabs || 0))), minutes: Math.max(0, Math.min(99, Math.round(+d.minutes || 0))), edited: !!d.edited, copied: !!d.copied, seconds: Math.max(0, Math.round((+d.minutes || 0) * 60)), order: Array.isArray(d.order) ? d.order.map(String) : [] };
 }
 
 // ── Plans ────────────────────────────────────────────────────────────────────
