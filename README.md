@@ -7,7 +7,7 @@ A classroom game about forecasting. You manage a production contract: 200 units,
 will accept the work. Then you run the project week by week and find out how right
 you were.
 
-Written for DATA 790, Module 05: Imagining, Modeling, and Prediction. It runs in any
+Written for DATA 790, Module 05: Prediction. It runs in any
 browser, on a phone or a laptop, with nothing to install and no sign-in.
 
 ## For students
@@ -38,13 +38,14 @@ browser, on a phone or a laptop, with nothing to install and no sign-in.
    what you're judged on. You can move your forecast during play, but only the first
    one counts.
 6. **Play week by week.** Each week, add or release crews, set inspection and the
-   shift, then play the week. A tile counts down the weeks to the promised week 12. When something big happens (the customer adds work, the
-   dashboard passes 90%, units are rejected, money runs short), you'll be asked whether
-   to keep or change your forecast.
+   shift, then play the week. A tile counts down the weeks to the promised week 12.
+   When something big happens (the customer adds work, the dashboard passes 90%, units
+   are rejected, money runs short), you'll be asked whether to keep or change your
+   forecast.
 7. **When it says "finished," wait.** Don't reveal until your instructor says so.
 8. **After the reveal,** read "Your game in 9 facts" and click **Download my results
-   (.txt)**. Keep that file: it has your plan, your forecast and how it did, and every week, for the
-   class discussion. If you play again, the next file is saved as a new run, so your
+   (.txt)**. Keep that file: it has your plan, your forecast and how it did, and every
+   week, for the class discussion. If you play again, the next file is saved as a new run, so your
    first play is never lost.
 
 ### How your forecast is judged
@@ -76,8 +77,7 @@ budget, and zero if the company goes bankrupt or the customer cancels.
   a show of hands ("hands up if fact 3 happened to you"). It covers each student's plan,
   what they checked (how often, whether they stopped looking, and whether they used
   AI), the 90% moment, the surprise, whose advice they took, whether their range held,
-  money, and luck: their own decisions replayed under 100 other
-  draws.
+  money, and luck: their own decisions replayed under 100 other draws.
 - **Collect the results files** (`best-laid-plans-<code>-run1.txt`) if you want each
   student's first play in writing.
 - **The game is not rigged, and every deploy checks it.** `tools/fairness-audit.mjs`
@@ -89,13 +89,20 @@ budget, and zero if the company goes bankrupt or the customer cancels.
   stores is a run counter on that device. Anything a student pastes into an AI
   assistant is their choice and goes to that service.
 
+## Running it locally
+
+```bash
+cd frontend
+npm install
+npm run dev       # local server
+npm run verify    # lint, tests, fairness audit, render checks, build
+npm run plan      # balance sweep
+```
+
 ## How it was made
 
 The game was designed by Joseph N. Cohen and built with the help of Claude (an AI
 model from Anthropic), which wrote much of the code and tests under his direction.
-
-How the game works, its rules, its balance targets and how to develop it are in
-[docs/DESIGN.md](docs/DESIGN.md).
 
 ## Licence
 

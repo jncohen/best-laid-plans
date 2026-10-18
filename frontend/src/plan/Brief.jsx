@@ -22,7 +22,7 @@ function Choice({ label, options, value, onChange }) {
   );
 }
 
-// The comparison card appears once these three have been opened (nothing is locked).
+// The comparison card appears once these three have been opened.
 const TOUR = ['chat', 'last5', 'records'];
 const range = (f) => (f.low === f.high ? `week ${f.low}` : `${f.low}–${f.high}`);
 
@@ -85,7 +85,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
     onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim());
   };
   const deskPlan = planReady ? plan : { crews: 0, inspect: 0, shift: 'none' };
-  const rows = planReady ? comparisonRows(S, plan, null) : [];
+  const rows = planReady ? comparisonRows(S, plan) : [];
   const spread = rows.length ? Math.max(...rows.map((r) => r.f.week)) - Math.min(...rows.map((r) => r.f.week)) : 0;
   // The stated plan's cost, as the Status Report projects it: the plan run week by week from week 0.
   const cm = planReady ? costManagement(S, plan) : null;

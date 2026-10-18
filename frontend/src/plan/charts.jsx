@@ -107,7 +107,7 @@ export function ProgressSpark({ history, deadline, end }) {
 }
 
 /**
- * The prediction chart — the centre of the game. x: the week of play. y: the week you
+ * The prediction chart, the centre of the game. x: the week of play. y: the week you
  * predicted the customer would accept it. Behind everything, the past contracts' range;
  * at week 0, the 80% range you committed to. When `outcome` is known it is drawn as the
  * line your forecast was chasing.

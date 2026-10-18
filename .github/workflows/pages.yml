@@ -33,7 +33,7 @@ jobs:
       # optional packages that only Linux needs.
       - run: npm install --no-audit --no-fund
       - run: npm run verify
-      # The balance sweep reports its targets in the log. Known misses (see docs/DESIGN.md)
+      # The balance sweep reports its targets in the log. Its known misses
       # don't stop the deploy; lint, tests and render checks above still do.
       - run: npm run plan
         continue-on-error: true

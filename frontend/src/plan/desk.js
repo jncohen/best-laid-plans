@@ -433,11 +433,10 @@ export function allForecasts(S, plan, L = null) {
 }
 
 /**
- * Every forecast the desk shows, side by side, for the commit screen. Fixed order: the gut forecast,
- * then the tabs in their usual order. No row is marked right or best.
+ * Every forecast the desk shows, side by side, for the commit screen, in the tabs' usual order. No row is marked right or best.
  */
-export function comparisonRows(S, plan, gut) {
-  const rows = gut ? [{ key: 'gut', id: null, name: 'Your gut forecast', f: { week: gut.week, low: gut.low, high: gut.high, chance: gut.onTimeChance } }] : [];
+export function comparisonRows(S, plan) {
+  const rows = [];
   rows.push({ key: 'status', id: 'status', name: 'Status Report', f: statusReport(S, null, plan).forecast });
   for (const c of teamChat(S, plan)) rows.push({ key: `chat-${c.key}`, id: 'chat', label: c.name, name: `Team Chat: ${c.name}`, f: c.forecast });
   rows.push({ key: 'last5', id: 'last5', name: 'Last 5 Contracts', f: lastFive(S).forecast });

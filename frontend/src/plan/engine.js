@@ -1,11 +1,11 @@
 /**
- * Best Laid Plans — one insight.
+ * Best Laid Plans: one insight.
  *
  *   Your dashboard said you were almost done. The past contracts knew better,
  *   and they were on your screen from the start.
  *
  * The mechanism is a hidden stock. Work counts as "complete" the week it is built,
- * but a share of it is defective and nobody knows until it is inspected — or until
+ * but a share of it is defective and nobody knows until it is inspected, or until
  * the customer's acceptance test finds it all at once. The dashboard is therefore a
  * flattering model of the project, and a forecast built on it (the inside view)
  * runs early for every player whatever they do. The record of past contracts (the
@@ -160,7 +160,7 @@ export class Project {
     this.budget = cfg.budget;
     this.totalScope = cfg.scope;
     this.backlog = cfg.scope;  // known work left to build, including known rework
-    this.hidden = 0;           // built, counted complete, actually defective — not shown
+    this.hidden = 0;           // built, counted complete, actually defective; not shown
     this.done = false;
     this.result = 'PLAYING';   // PLAYING | DELIVERED | TERMINATED | BANKRUPT
     this.finishWeek = null;
@@ -171,7 +171,6 @@ export class Project {
     this.weekSeconds = {};     // roughly how long each week took on the play screen
     this.forecastLog = [];
     this.checkpoints = [];     // Keep/Change taps during play: { week, event, choice }
-    this.gutForecast = null;
     this.decisions = [];       // each week's decisions as played (crews hired or released, shift, inspection), for the luck replay
     this.history = [];
     this.spent = 0;
@@ -197,11 +196,9 @@ export class Project {
    * The forecast and the plan the student says they will play. Neither is read by
    * play(): they are recorded, never acted on.
    */
-  commit({ week, low, high, onTimeChance, plan = null, desk = null, gut = null }) {
+  commit({ week, low, high, onTimeChance, plan = null, desk = null }) {
     const lo = Math.min(+low, +high), hi = Math.max(+low, +high);
     this.forecast = { week: +week, low: lo, high: hi, onTimeChance: Math.max(0, Math.min(100, +onTimeChance || 0)) };
-    // The gut forecast, made after seeing only The Contract and the Status Report: recorded, never scored.
-    this.gutForecast = gut ? { week: +gut.week, low: +gut.low, high: +gut.high, onTimeChance: +gut.onTimeChance } : null;
     this.forecastLog = [{ week: 0, forecast: +week, low: +low, high: +high, chance: +onTimeChance }];
     this.plan = plan ? normalizePlan(plan) : null;
     this.desk = desk ? normalizeDesk(desk) : null;

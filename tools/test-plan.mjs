@@ -517,16 +517,15 @@ console.log('Your game in 8 facts');
   t(`the luck replay is fast (${((Date.now() - t0) / 10).toFixed(1)} ms for 100 games here)`, (Date.now() - t0) / 10 < 50);
 }
 
-console.log('Fix 13: gut then final, the tour, checkpoints');
+console.log('The comparison card and the Keep/Change checkpoints');
 {
   // The comparison card: fixed order, every row from what the tabs show, none marked best.
-  const S = screenData(), plan = { crews: 3, inspect: 0.1, shift: 'none' }, gut = { week: 11, low: 10, high: 12, onTimeChance: 70 };
-  const rows = comparisonRows(S, plan, gut);
-  t('the comparison card: gut first, then Status Report, the five colleagues, Last 5 and Records, in order', rows.map((r) => r.key).join() === 'gut,status,chat-supervisor,chat-planner,chat-sales,chat-veteran,chat-quality,last5,records'
-    && rows[1].f.week === statusReport(S, null, plan).forecast.week && rows[8].f.week === records(S, plan).matched.week && rows.every((r) => !('best' in r)));
-  // Gut vs final: the gut forecast is recorded, never scored; fact 1 shows the path.
+  const S = screenData(), plan = { crews: 3, inspect: 0.1, shift: 'none' };
+  const rows = comparisonRows(S, plan);
+  t('the comparison card: Status Report, the five colleagues, Last 5 and Records, in order', rows.map((r) => r.key).join() === 'status,chat-supervisor,chat-planner,chat-sales,chat-veteran,chat-quality,last5,records'
+    && rows[0].f.week === statusReport(S, null, plan).forecast.week && rows[7].f.week === records(S, plan).matched.week && rows.every((r) => !('best' in r)));
   const p = new Project('ledger', CONFIG, 7);
-  p.commit({ week: 14, low: 12, high: 16, onTimeChance: 20, plan: { crews: 3, inspect: 0.1, shift: 'none' }, gut: { week: 11, low: 10, high: 12, onTimeChance: 70 },
+  p.commit({ week: 14, low: 12, high: 16, onTimeChance: 20, plan: { crews: 3, inspect: 0.1, shift: 'none' },
     desk: { tool: 'j', source: 'Records', tabs: 4, minutes: 6, order: ['status', 'chat', 'last5', 'records'] } });
   const q = new Project('ledger', CONFIG, 7);
   q.commit({ week: 14, low: 12, high: 16, onTimeChance: 20, plan: { crews: 3, inspect: 0.1, shift: 'none' } });
@@ -534,9 +533,6 @@ console.log('Fix 13: gut then final, the tour, checkpoints');
   // Checkpoint taps: logged with week and event, never acted on.
   playOut(p, (x, w) => { const last = x.history[x.history.length - 1]; if (last && last.shock > 0) x.noteCheckpoint(w, 'scope', 'keep'); if (last && last.rejected > 0) x.noteCheckpoint(w, 'reject', 'change'); });
   playOut(q);
-  t('the gut forecast is recorded and never scored', p.gutForecast.week === 11 && p.scores().forecast === q.scores().forecast && JSON.stringify(p.history) === JSON.stringify(q.history));
-  const f1 = gameFacts(p).find((x) => x.key === 'start');
-  t('fact 1 shows gut then final', f1.text.startsWith('Gut: week 11. Final: week 14 (after the tour)') && f1.value.gut === 11);
   t('checkpoint taps are logged with week, event and choice', p.checkpoints.some((k) => k.event === 'scope' && k.choice === 'keep' && k.week === 5) && p.checkpoints.some((k) => k.event === 'reject' && k.choice === 'change'));
   const fs = gameFacts(p);
   t('facts 3 and 4 report the taps', fs.find((x) => x.key === 'surprise').text.endsWith('You saw it, and you kept your forecast.') && fs.find((x) => x.key === 'ninety').text.includes('At the rejection: You saw it, and you changed your forecast.'));

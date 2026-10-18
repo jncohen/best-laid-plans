@@ -72,7 +72,7 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
   const tapped = (event) => (p.checkpoints || []).find((k) => k.event === event) || null;
   const saw = (k) => `You saw it, and you ${k.choice === 'change' ? 'changed' : 'kept'} your forecast.`;
 
-  // 1. The starting point: the gut forecast, then the final one after the tour.
+  // The starting point: what the committed week is close to.
   const paceWeeks = c.scope / historyMean(c, p.seedInput), past = pastContracts(c, p.seedInput);
   const near = [
     Math.abs(f.week - paceWeeks) <= 1 && 'close to the line\'s pace',
@@ -128,10 +128,8 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
   const facts = [
     { n: 0, key: 'plan', title: 'Your plan', value: { plan: p.plan, ranAsStated, changed },
       text: planText },
-    { n: 1, key: 'start', title: 'Your starting point', value: { week: f.week, near: start, gut: p.gutForecast ? p.gutForecast.week : null },
-      text: p.gutForecast
-        ? `Gut: week ${p.gutForecast.week}. Final: week ${f.week}${p.gutForecast.week === f.week && p.gutForecast.low === f.low && p.gutForecast.high === f.high ? ', kept after the tour' : ' (after the tour)'}: ${start.join(' and ')}.`
-        : `You committed week ${f.week}: ${start.join(' and ')}.` },
+    { n: 1, key: 'start', title: 'Your starting point', value: { week: f.week, near: start },
+      text: `You committed week ${f.week}: ${start.join(' and ')}.` },
     { n: 2, key: 'record', title: 'What you checked', value: { records: openedBefore.has('records'), last5: openedBefore.has('last5'), ...checking },
       text: `Before week 1 you checked information sources ${plural(checking.before, 'time')} (Records: ${openedBefore.has('records') ? 'yes' : 'no'}; Last 5 Contracts: ${openedBefore.has('last5') ? 'yes' : 'no'}). `
         + (checking.during ? `During play, ${plural(checking.during, 'more check')} in ${checking.weeksChecked} of ${plural(checking.weeks, 'week')}; ` : 'During play you checked nothing; ')

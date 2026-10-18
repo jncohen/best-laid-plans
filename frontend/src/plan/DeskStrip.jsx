@@ -13,8 +13,7 @@ const TAB_TONE = {
  * Decisions during play): a filled button, first in the strip, so it never reads as one
  * more tool.
  */
-/** `locked`: tab ids not open yet (before the gut forecast), with `lockedWhy` as their tooltip. */
-export default function TabStrip({ tab, opened, onOpen, front = TABS[0], tabs = TABS.slice(1), sticky = true, locked = [], lockedWhy = '' }) {
+export default function TabStrip({ tab, opened, onOpen, front = TABS[0], tabs = TABS.slice(1), sticky = true }) {
   const groups = [];
   for (const t of tabs) {
     const g = t.group || '';
@@ -41,11 +40,10 @@ export default function TabStrip({ tab, opened, onOpen, front = TABS[0], tabs = 
               {g.tabs.map((t) => {
                 const active = tab === t.id;
                 const [txt, bd] = TAB_TONE[t.tone] || ['text-white', 'border-white'];
-                const lock = locked.includes(t.id);
                 return (
-                  <button key={t.id} type="button" role="tab" aria-selected={active} disabled={lock} aria-disabled={lock} title={lock ? lockedWhy : undefined} aria-label={lock ? `${t.name} (${lockedWhy.toLowerCase()})` : undefined} onClick={() => onOpen(t.id)}
-                    className={`whitespace-nowrap px-2.5 py-1.5 rounded-lg text-xs border ${active ? `bg-slate-800 ${bd} ${txt} font-semibold` : lock ? 'border-slate-900 text-slate-600 cursor-not-allowed' : `border-slate-800 ${opened.includes(t.id) ? 'text-slate-300' : 'text-slate-400'}`}`}>
-                    {lock ? '🔒 ' : opened.includes(t.id) ? '✓ ' : ''}{t.name}
+                  <button key={t.id} type="button" role="tab" aria-selected={active} onClick={() => onOpen(t.id)}
+                    className={`whitespace-nowrap px-2.5 py-1.5 rounded-lg text-xs border ${active ? `bg-slate-800 ${bd} ${txt} font-semibold` : `border-slate-800 ${opened.includes(t.id) ? 'text-slate-300' : 'text-slate-400'}`}`}>
+                    {opened.includes(t.id) ? '✓ ' : ''}{t.name}
                   </button>
                 );
               })}
