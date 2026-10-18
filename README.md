@@ -58,7 +58,11 @@ sample) is on `decision-desk`.
    During play the big moments are cards, not log lines: "The customer added 15 units
    in week 4." and "Customer acceptance test: 17 units rejected. Fixing them now takes
    34 units of work." The progress chart marks the week the dashboard first passed 90%
-   ("Dashboard: 90% done").
+   ("Dashboard: 90% done"), and banners say when the dashboard passed 90% and reached
+   100%. These cards sit at the top of the week screen and stay for two weeks. The
+   weekly screen also says "Money lasts to week N at this spend", in red when that is
+   before the student's forecast, and warns a week before payroll would go past the
+   credit line.
 5. At the end the finish screen states what happened ("Accepted in full in week 14.",
    or bankrupt, or terminated, never delivered) and holds the results until the class
    reveals together. The reveal opens with **Your game in 8 facts**, numbered so the
@@ -66,15 +70,21 @@ sample) is on `decision-desk`.
    1. your starting point ("You committed week 10: close to the line's pace", or close
       to the past contracts' median, at the deadline, or your own number);
    2. whether you opened Records and Last 5 Contracts;
-   3. the week the dashboard passed 90%, and the units the customer then rejected;
-   4. the scope change, and whether you changed your forecast afterwards (only your own
-      moves count, not the calendar's);
-   5. whose numbers you committed (Mabel's, the Records numbers, or your own);
+   3. the week the dashboard passed 90% (its peak reading that week: 100% in a week
+      whose acceptance test rejected units), the units the customer then rejected, and
+      whether you changed your forecast within 2 weeks of the rejection;
+   4. the scope change against the record's spread (+10 to +52), and whether you
+      changed your forecast within 2 weeks (only your own moves count, not the
+      calendar's);
+   5. whose numbers you committed (Mabel's, the Records numbers, or your own and the
+      desk forecast closest to them), and any you used during play;
    6. whether your 80% range held, or by how many weeks it missed;
-   7. bankrupt or not, and any overspend;
+   7. bankrupt or not (with the payroll that went past the credit line), and any
+      overspend;
    8. luck: your exact weekly decisions replayed under 100 other personal-luck draws in
-      the same shared world ("other luck would have made week 12 in 61 of 100 games, and
-      gone bankrupt in 0"). It takes about 2 ms on a laptop, so well under 50 ms on a
+      the same shared world: the typical week and its spread, how many of the 100 you
+      were luckier than, and how often week 12 was made, the company went bankrupt and
+      your range held. It takes about 2 ms on a laptop, so well under 50 ms on a
       phone.
 
    Below the facts the reveal is ordered for a phone:
@@ -141,9 +151,10 @@ for projecting a tab in class.
   the point mid-range: on an outcome of week 15, 12–17 scores 75, 6–24 scores 44 and
   10–11 scores 0; on week 13, 75, 28 and 11–19. **Delivery** (secondary) = 100 − 12
   per week late − 1 per $50k over budget, or 0 if the contract was terminated or the
-  company went bankrupt. A contract never delivered is graded against the week it
-  would have taken at its final pace, and the bankruptcy is reported on its own line
-  ("Your company went bankrupt in week N").
+  company went bankrupt. A contract never delivered (bankrupt or terminated) misses
+  its range and scores 0; the reveal says so, and reports the bankruptcy on its own
+  line ("Your company went bankrupt in week N"). The reveal shows the score's three
+  parts: 100 − point − range − chance.
 
 ## The Decision Desk
 
