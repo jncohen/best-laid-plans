@@ -126,9 +126,10 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
 
   const rangeText = shownRange.low === shownRange.high ? `week ${shownRange.low}` : `weeks ${shownRange.low}–${shownRange.high}`;
   const defects = last ? Math.round(last.found + last.rejected) : 0;
+  const onFront = deskTab === 'decide';
 
   return (
-    <div className={`${deskTab === 'decide' ? 'max-w-6xl' : 'max-w-2xl'} mx-auto px-4 py-5 space-y-4`}>
+    <div className="max-w-6xl mx-auto px-4 py-5 space-y-4">
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <div>
           <div className="text-[11px] uppercase tracking-wider text-slate-500">Contract · {p.totalScope} units · deadline week {c.deadline}</div>
@@ -142,15 +143,7 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
 
       <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} front={DECIDE} tabs={TABS.slice(1)} />
 
-      {deskTab !== 'decide' ? (
-        <>
-          <DeskTab id={deskTab} S={S} plan={current} planReady onUse={useTool} live={live} />
-          <button type="button" onClick={() => openTab('decide')} className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
-            Back to This Week's Decisions
-          </button>
-        </>
-      ) : (<>
-
+      {/* The event card: one per event, in the week it happens, above everything. */}
       {pending.length > 0 && (
         <div role="dialog" aria-label="What happened" className="rounded-xl border-2 border-amber-400 bg-slate-900 px-4 py-3 space-y-2">
           {pending.map((d) => <p key={d.event} className="font-bold text-amber-100">{d.text}</p>)}
@@ -162,7 +155,9 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
         </div>
       )}
 
-      {/* KPI row */}
+      {/* Desktop: your forecast and decisions always on the left; the information on the right (the dashboard,
+          or the tab you choose). Phone: one at a time, as the tabs choose; the KPI row comes first. */}
+      {onFront && <div className="lg:hidden">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         <Kpi label="Reported complete" value={pct(p.reportedPct())} tone="text-sky-300">
           <div className="h-1.5 bg-slate-950 rounded-full overflow-hidden mt-1"><div className="h-full bg-sky-500" style={{ width: pct(p.reportedPct()) }} /></div>
@@ -173,35 +168,10 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
         <Kpi label="Money lasts to" value={`wk ${lastsTo}`} sub={lastsTo < shownForecast ? `before your forecast (wk ${shownForecast})` : 'at this spend'} tone={lastsTo < shownForecast ? 'text-rose-400' : 'text-white'} />
         <Kpi label="Defects found" value={defects} sub={last ? `in week ${last.week}` : 'none yet'} tone={last && last.rejected > 0 ? 'text-rose-400' : 'text-white'} />
       </div>
+      </div>}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-4 items-start">
-        {/* Outcomes */}
-        <div className="space-y-4 min-w-0">
-          <Card title="Progress: reported complete">
-            {p.history.length > 0
-              ? <ProgressSpark history={p.history} deadline={c.deadline} end={Math.max(c.deadline, p.week) + 1} />
-              : <p className="text-sm text-slate-400">No weeks played yet.</p>}
-          </Card>
-          <Card title="Your forecast, week by week">
-            <ForecastChart
-              compact log={[...p.forecastLog, { week: nextWeek, forecast: shownForecast }]} interval={p.forecast}
-              band={[past.p10, past.p90]} deadline={c.deadline} xEnd={Math.max(c.deadline, nextWeek)}
-            />
-            <p className="text-[11px] text-slate-500 mt-1">Amber band: where most delivered past contracts landed{past.failed.total ? `; ${failuresLine(past)}` : ''}.</p>
-          </Card>
-          {logLines.length > 0 && (
-            <Card title={`What happened in week ${last.week}`}>
-              <ul className="space-y-1 text-sm">
-                {logLines.map((e, i) => (
-                  <li key={i} className={/rejected|changed the requirement/.test(e) ? 'text-amber-300' : 'text-slate-300'}>{e}</li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </div>
-
-        {/* Inputs: beside the outcomes on a desktop, straight after the KPI row on a phone */}
-        <div className="space-y-4 lg:sticky lg:top-4 order-first lg:order-none">
+      <div className="grid grid-cols-1 lg:grid-cols-[400px_minmax(0,1fr)] gap-4 items-start">
+        <div className={`${onFront ? '' : 'hidden lg:block'} space-y-4 lg:sticky lg:top-4 min-w-0`}>
       <Card title="Your forecast" tone="emerald">
         <div className="flex items-baseline justify-between mb-2">
           <span className="text-sm text-slate-300">The customer accepts it in</span>
@@ -284,12 +254,54 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
             className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold">
             Play week {nextWeek} · {money(cost)}
           </button>
-          {pending.length > 0 && <p className="text-xs text-slate-400 text-center -mt-2">Keep or change your forecast at the top first.</p>}
+          {pending.length > 0 && <p className="text-xs text-slate-400 text-center -mt-2">Keep or change your forecast first (the card above).</p>}
         </div>
       </Card>
         </div>
+
+        <div className="space-y-4 min-w-0">
+          {!onFront ? (<>
+            <DeskTab id={deskTab} S={S} plan={current} planReady onUse={useTool} live={live} />
+            <button type="button" onClick={() => openTab('decide')} className="lg:hidden w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
+              Back to This Week's Decisions
+            </button>
+          </>) : (<>
+            <div className="hidden lg:block">
+      <div className="grid grid-cols-3 xl:grid-cols-6 gap-2">
+        <Kpi label="Reported complete" value={pct(p.reportedPct())} tone="text-sky-300">
+          <div className="h-1.5 bg-slate-950 rounded-full overflow-hidden mt-1"><div className="h-full bg-sky-500" style={{ width: pct(p.reportedPct()) }} /></div>
+        </Kpi>
+        <Kpi label="Units left" value={Math.round(p.backlog)} sub={`of ${p.totalScope}`} />
+        <Kpi label="Crews" value={crewsNext} sub={hire > 0 ? `${p.crews} + ${hire} this week` : hire < 0 ? `${p.crews} − ${-hire} this week` : p.onboarding > 0 ? 'onboarding' : 'this week'} />
+        <Kpi label="Budget left" value={money(p.budget)} sub={p.budget < 0 ? `credit left ${money(c.creditLine + p.budget)}` : `+ ${money(c.creditLine)} credit`} tone={p.budget < 0 ? 'text-rose-400' : 'text-emerald-300'} />
+        <Kpi label="Money lasts to" value={`wk ${lastsTo}`} sub={lastsTo < shownForecast ? `before your forecast (wk ${shownForecast})` : 'at this spend'} tone={lastsTo < shownForecast ? 'text-rose-400' : 'text-white'} />
+        <Kpi label="Defects found" value={defects} sub={last ? `in week ${last.week}` : 'none yet'} tone={last && last.rejected > 0 ? 'text-rose-400' : 'text-white'} />
       </div>
-      </>)}
+            </div>
+          <Card title="Progress: reported complete">
+            {p.history.length > 0
+              ? <ProgressSpark history={p.history} deadline={c.deadline} end={Math.max(c.deadline, p.week) + 1} />
+              : <p className="text-sm text-slate-400">No weeks played yet.</p>}
+          </Card>
+          <Card title="Your forecast, week by week">
+            <ForecastChart
+              compact log={[...p.forecastLog, { week: nextWeek, forecast: shownForecast }]} interval={p.forecast}
+              band={[past.p10, past.p90]} deadline={c.deadline} xEnd={Math.max(c.deadline, nextWeek)}
+            />
+            <p className="text-[11px] text-slate-500 mt-1">Amber band: where most delivered past contracts landed{past.failed.total ? `; ${failuresLine(past)}` : ''}.</p>
+          </Card>
+          {logLines.length > 0 && (
+            <Card title={`What happened in week ${last.week}`}>
+              <ul className="space-y-1 text-sm">
+                {logLines.map((e, i) => (
+                  <li key={i} className={/rejected|changed the requirement/.test(e) ? 'text-amber-300' : 'text-slate-300'}>{e}</li>
+                ))}
+              </ul>
+            </Card>
+          )}
+          </>)}
+        </div>
+      </div>
     </div>
   );
 }

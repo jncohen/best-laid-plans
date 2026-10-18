@@ -175,7 +175,9 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   ok('Brief, front tab: inputs only', () => {
     const h = renderToString(<Brief onCommit={() => {}} />);
     for (const s of ['1 · Your plan', 'Your gut forecast', 'Commit gut forecast', 'Read The Contract and the Status Report']) if (!h.includes(s) && !h.includes(s.replace("'", '&#x27;'))) throw new Error(`missing "${s}"`);
-    for (const s of ['What you decide each week', 'a week</strong>', 'two scores', 'Two scores']) if (h.includes(s)) throw new Error(`front tab still shows "${s}"`);
+    for (const s of ['two scores', 'Two scores']) if (h.includes(s)) throw new Error(`front tab still shows "${s}"`);
+    // On a desktop the right panel starts on The Contract; on a phone it is hidden until the tab is chosen.
+    if (!/<div class="hidden lg:block">.*What you decide each week/s.test(h)) throw new Error('the default right panel is not The Contract, desktop only');
     if (!h.replace(/<[^>]+>/g, '').includes('Your score is your forecast. Delivery shows how the company did.') || h.includes('Three scores') || h.includes('Updating')) throw new Error('scoring line wrong before commit');
     return h;
   });

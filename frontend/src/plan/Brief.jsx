@@ -117,10 +117,12 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
               <p className="text-xs text-slate-300 mt-1">These disagree by {spread} week{spread === 1 ? '' : 's'}. Pick one to use, or set your own.</p>
             </Card>
           ) : null;
-  const wide = tab === 'commit' && !!comparison;
+  // Desktop: the plan and forecast always on the left, the information (a tab, or the comparison) on the right.
+  // Phone: one at a time, as the tabs choose.
+  const onFront = tab === 'commit';
 
   return (
-    <div className={`${wide ? 'max-w-6xl' : 'max-w-2xl'} mx-auto px-4 py-6 space-y-4`}>
+    <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
       <header>
         <h1 className="text-2xl font-bold text-white">Best Laid Plans</h1>
         <p className="text-lg text-white mt-2 leading-snug">
@@ -130,14 +132,6 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
 
       <TabStrip tab={tab} opened={opened} onOpen={open} locked={locked} lockedWhy="Opens after your gut forecast" />
 
-      {tab !== 'commit' ? (
-        <>
-          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} />
-          <button type="button" onClick={() => open('commit')} className="w-full py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
-            Back to Your Plan and Prediction
-          </button>
-        </>
-      ) : (<>
       {!gut ? (
         <p className="text-sm text-slate-200 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2">
           <strong className="text-white">Step 1: your gut forecast.</strong> Read The Contract and the Status Report, choose a plan and set your numbers. The other tabs open after this.
@@ -149,7 +143,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
         </p>
       )}
 
-      <div className={wide ? 'grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 items-start' : ''}>
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] gap-4 items-start">
+      <div className={`${onFront ? '' : 'hidden lg:block'} lg:sticky lg:top-4 min-w-0`}>
       <Card tone="emerald">
         <div className="space-y-4">
           <div className="space-y-2">
@@ -214,9 +209,19 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
           </>)}
         </div>
       </Card>
-      {comparison && <div className="order-first lg:order-last lg:sticky lg:top-4">{comparison}</div>}
       </div>
-      </>)}
+      <div className={`${onFront ? 'order-first lg:order-none' : ''} space-y-4 min-w-0`}>
+        {!onFront ? (<>
+          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} />
+          <button type="button" onClick={() => open('commit')} className="lg:hidden w-full py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
+            Back to Your Plan and Prediction
+          </button>
+        </>) : comparison || (
+          // Nothing chosen yet: on a desktop the right panel starts on The Contract.
+          <div className="hidden lg:block"><DeskTab id="contract" S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} /></div>
+        )}
+      </div>
+      </div>
     </div>
   );
 }

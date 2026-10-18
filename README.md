@@ -67,12 +67,12 @@ sample) is on `decision-desk`.
    running forecast (week, range and chance). The forecast committed before week 1
    remains the one that is scored. The contract ends when the customer accepts it,
    when the customer terminates it after week 22, or when the company goes bankrupt.
-   The week screen is laid out as a management dashboard: a row of KPI tiles (reported
-   complete, units left, crews, budget left, money lasts to, defects found), the
-   outcomes (progress chart, forecast chart, the week's events) on the left and the
-   inputs (forecast and decisions) on the right on a desktop; on a phone they stack,
-   inputs first. The final-commit screen likewise puts the form and the comparison card
-   side by side on a desktop.
+   On a desktop both screens have two panels: the student's own inputs always on the
+   left (the plan and forecast before week 1; the forecast and decisions during play)
+   and the information on the right (the tab chosen, or by default The Contract or the
+   comparison card before week 1, and the dashboard during play: a row of KPI tiles,
+   the progress and forecast charts and the week's events). On a phone the tabs switch
+   the whole screen, as before, with the KPI row first on This Week's Decisions.
    **Keep/Change checkpoints.** After the scope change, the dashboard first passing 90%,
    an acceptance rejection (one card a week at most) and the first time the money runs
    out before the forecast, a card states what happened and the current forecast, and
