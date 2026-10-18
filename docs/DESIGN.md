@@ -1,5 +1,7 @@
 # Best Laid Plans: design notes
 
+NOTE: This is an AI-generated document, designed to set up AI sessions to work on the game. 
+
 For players and instructors, see the [README](../README.md). This file is for whoever maintains the game.
 
 A classroom game about forecasting. Students run a 200-unit production contract with
