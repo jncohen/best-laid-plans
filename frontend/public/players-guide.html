@@ -1,0 +1,274 @@
+<title>Best Laid Plans Player's Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&family=Newsreader:ital,opsz,wght@0,6..72,600;1,6..72,400&display=swap">
+<style>
+/* Layout: two US-letter sheets (front: how to play; back: after the reveal), stacked on screen,
+   one per printed page. A single, deliberate light look so it prints the same everywhere. */
+:root{
+  --paper:#ffffff; --ink:#16202a; --ink-2:#3b4855; --ink-3:#6b7783; --rule:#d5dbe2; --tint:#f1f4f7;
+  --go:#1f6f5c; --line:#2F6FB0; --deadline:#b3261e; --warm:#B7791F;
+  --head:"Newsreader", Georgia, serif;
+  --sans:"IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme:light;
+}
+html{background:#e9edf1}
+body{background:#e9edf1;color:var(--ink);font-family:var(--sans);font-size:12.5px;line-height:1.33;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px}
+.sheet{background:var(--paper);max-width:8.5in;margin:0 auto 24px;padding:0.4in 0.5in;box-shadow:0 1px 3px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:10px}
+@media (max-width:700px){ .sheet{padding:22px 16px} }
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;border-bottom:2.5px solid var(--ink);padding-bottom:8px}
+.top h1{font-family:var(--head);font-weight:600;font-size:27px;line-height:1;margin:0}
+.top .tag{font-weight:600;letter-spacing:.09em;text-transform:uppercase;font-size:11px;color:var(--ink-3)}
+.mission{font-family:var(--head);font-size:17px;line-height:1.3;margin:0}
+.mission em{font-style:italic}
+h2{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);margin:0 0 6px}
+p{margin:0}
+.grid{display:grid;gap:10px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:700px){ .g2,.g3{grid-template-columns:minmax(0,1fr)} }
+.box{border:1.5px solid var(--rule);border-radius:4px;padding:8px 11px;min-width:0}
+.box.tint{background:var(--tint);border-color:var(--tint)}
+ul,ol{margin:0;padding-left:1.15em} li{margin:2px 0}
+/* Flow of the session */
+.flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:700px){ .flow{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.step{position:relative;border-top:4px solid var(--ink);padding-top:6px}
+.step .k{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.step b{display:block;font-size:14px;margin:1px 0 2px}
+.step span{color:var(--ink-2);font-size:12.5px}
+/* Week ruler */
+.ruler svg{display:block;width:100%;height:auto}
+.ruler text{font-family:var(--sans);font-size:10px;fill:var(--ink-2)}
+.ruler .wk{font-family:var(--mono);font-size:9px;fill:var(--ink-3)}
+/* Commit card */
+.commit{border:2px solid var(--go);border-radius:4px;padding:10px 12px}
+.commit h2{color:var(--go)}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:6px}
+@media (max-width:520px){ .three{grid-template-columns:minmax(0,1fr)} }
+.three div{background:var(--tint);border-radius:3px;padding:7px 9px}
+.three b{display:block;font-size:13px}
+.three span{font-size:12px;color:var(--ink-2)}
+.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+table{border-collapse:collapse;width:100%;font-size:11.5px}
+td,th{padding:2px 5px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+td.n,th.n{text-align:right}
+.rules{font-size:11.5px;color:var(--ink-2)}
+.fold{display:flex;align-items:center;gap:10px;color:var(--ink-3);font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.fold::before,.fold::after{content:"";flex:1;border-top:1.5px dashed var(--ink-3)}
+.thesis{font-family:var(--head);font-size:19px;line-height:1.28;margin:0;text-wrap:balance}
+.frames{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:700px){ .frames{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.frame{border-left:4px solid var(--c);padding:4px 0 4px 9px;min-width:0}
+.frame b{display:block;font-size:13px}
+.frame .s{font-size:11.5px;color:var(--ink-2)}
+.frame .s i{font-style:normal;font-weight:600;color:var(--ink)}
+.moves{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;counter-reset:m}
+@media (max-width:700px){ .moves{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.move{background:var(--tint);border-radius:3px;padding:8px 10px}
+.move b{display:block;font-size:14px}
+.move span{font-size:12px;color:var(--ink-2)}
+.cal svg{display:block;width:100%;height:auto}
+.cal text{font-family:var(--sans);font-size:10.5px;fill:var(--ink-2)}
+.foot{margin-top:auto;font-size:10.5px;color:var(--ink-3);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--rule);padding-top:6px}
+@page{size:letter;margin:0}
+@media print{
+  html,body{background:#fff;padding:0}
+  .sheet{box-shadow:none;margin:0;max-width:none;width:8.5in;height:11in;break-after:page;page-break-after:always}
+  .sheet:last-child{break-after:auto;page-break-after:auto}
+}
+</style>
+
+<!-- ───────────────────────── FRONT ───────────────────────── -->
+<section class="sheet" aria-label="Front: how to play">
+  <div class="top">
+    <h1>Best Laid Plans</h1>
+    <div class="tag">Player's guide · DATA 790 · Week 6</div>
+  </div>
+
+  <p class="mission">Your job is to predict, <em>before you start</em>, the week the customer will accept your work. Then run the project and find out how right you were.</p>
+
+  <div class="flow" aria-label="How the session runs">
+    <div class="step"><div class="k">Step 1</div><b>Open and read</b><span>Open the link, enter the code on the board, and read The Contract tab. Every tab is open from the start.</span></div>
+    <div class="step"><div class="k">Step 2</div><b>Plan, then commit</b><span>Choose a plan, check whatever you think you need on the desk, then commit three numbers.</span></div>
+    <div class="step"><div class="k">Step 3</div><b>Run the line</b><span>One decision round per week until the customer accepts, or the contract is cancelled.</span></div>
+    <div class="step"><div class="k">Step 4</div><b>Stop and sketch</b><span>At "finished," don't reveal. Sketch your answer and wait. Then download your results.</span></div>
+  </div>
+
+  <div class="ruler box" aria-label="The contract on a timeline">
+    <h2>The contract</h2>
+    <svg viewBox="0 0 640 74" role="img" aria-label="Weeks 1 to 22. Deadline at week 12. Customer cancels after week 22.">
+      <rect x="20" y="30" width="600" height="10" rx="2" fill="#f1f4f7"/>
+      <rect x="20" y="30" width="327" height="10" rx="2" fill="#dbe7f3"/>
+      <g id="ticks"></g>
+      <line x1="347" x2="347" y1="20" y2="50" stroke="#b3261e" stroke-width="2.5"/>
+      <text x="347" y="14" text-anchor="middle" style="fill:#b3261e;font-weight:600">Deadline: end of week 12</text>
+      <line x1="620" x2="620" y1="20" y2="50" stroke="#16202a" stroke-width="2"/>
+      <text x="616" y="14" text-anchor="end">Cancelled if not accepted by week 22</text>
+      <text x="20" y="66">200 units · 4 crews to start · $5.00M budget + $0.5M credit (past it: bankrupt) · each crew costs $50k a week</text>
+    </svg>
+  </div>
+
+  <div class="commit">
+    <h2>Before week 1: your plan, then three numbers</h2>
+    <p><b>Your plan:</b> crews to add at the start (none, +1, +2, +3); inspection (0, 10, 20 or 30%); second shift (none, late weeks, every week). You can change course later.</p>
+    <p style="margin-top:4px"><b>The desk:</b> The Contract · Status Report · Project Controls (burn-down, defect control chart) · What-if Planner · Team Chat (five approaches) · Ask an AI · Last 5 Contracts · Records (40 past contracts, downloadable as a CSV) · Risk Register (yours). They disagree; deciding which to trust is the exercise.</p>
+    <div class="three">
+      <div><b>① The week</b><span>The week you think the customer accepts all 200 units.</span></div>
+      <div><b>② An 80% range</b><span>Earliest to latest week, so that you'd bet <strong>4 to 1</strong> the outcome lands inside it.</span></div>
+      <div><b>③ Chance of week 12</b><span>Your honest probability, 0–100%, that it's accepted by the deadline.</span></div>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="box">
+      <h2>Each week you may</h2>
+      <table>
+        <thead><tr><th>Move</th><th>Effect</th><th class="n">Cost</th></tr></thead>
+        <tbody>
+          <tr><td>Add crews (up to 3)</td><td>More capacity, but the whole line runs at 70% for 2 weeks while they learn. Beyond 4 crews, every crew gets a bit less efficient.</td><td class="n">$100k each</td></tr>
+          <tr><td>Release a crew</td><td>Lower weekly cost</td><td class="n">$50k</td></tr>
+          <tr><td>Second shift</td><td>+30% output. From the second straight week, tired crews make more defects.</td><td class="n">$20k / crew</td></tr>
+          <tr><td>Inspect 0–30%</td><td>Moves capacity from building to checking. Finds defects while they're cheap.</td><td class="n">capacity</td></tr>
+          <tr><td>Move your forecast</td><td>Update your estimate. Only your week-1 commitment is scored. After key events, tap Keep or Change.</td><td class="n">free</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="box">
+      <h2>How you're scored</h2>
+      <p style="margin-bottom:6px"><b>Forecast</b>: the score that counts most. It measures how right you were about your own project.</p>
+      <table>
+        <tbody>
+          <tr><td>Start</td><td class="n">100</td></tr>
+          <tr><td>For each week your point forecast was off</td><td class="n">−8</td></tr>
+          <tr><td>Your 80% range: for each week of its width</td><td class="n">−3</td></tr>
+          <tr><td>…and for each week the outcome fell outside it</td><td class="n">−30</td></tr>
+          <tr><td>Chance-of-week-12 error: 40 × (your % − what happened)²</td><td class="n">up to −40</td></tr>
+        </tbody>
+      </table>
+      <p style="margin:6px 0 2px">Never delivered (bankrupt or cancelled): Forecast 0. <b>Delivery</b>: 100, minus 12 per week late and 1 per $50k over budget. Zero if never delivered.</p>
+      <p class="rules">Two separate scores. You can deliver late and still forecast well.</p>
+    </div>
+  </div>
+
+  <div class="grid g3">
+    <div class="box tint">
+      <h2>What an 80% range means</h2>
+      <p>If you made ten forecasts like this one, about <b>eight</b> should land inside your range and about <b>two</b> outside. A range that never misses is too wide; one that usually misses is too narrow.</p>
+    </div>
+    <div class="box tint">
+      <h2>Honest beats bold</h2>
+      <p>Say 80% and it happens: you lose <span class="n">0.04 × 40 ≈ 2</span>. Say 80% and it doesn't: you lose <span class="n">0.64 × 40 ≈ 26</span>. Say what you actually believe.</p>
+    </div>
+    <div class="box tint">
+      <h2>Room rules</h2>
+      <ul>
+        <li>Play alone. No talking about numbers until the reveal.</li>
+        <li>Use the code on the board.</li>
+        <li>Only your <b>first</b> play counts. Download its results file (run 1) before you replay.</li>
+        <li>At the end, keep your results screen open: your instructor will ask for a show of hands.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>The sketch (on paper, before you reveal)</h2>
+    <p>The week you think it was accepted: ______ &nbsp;&nbsp; Did your 80% range hold? &nbsp;Yes / No &nbsp;&nbsp; How sure are you? ____ / 100<br>
+    What did you mostly look at when you committed? ____________________________________________<br>
+    What was your plan, and why? _________________________________________________________</p>
+  </div>
+
+  <div class="foot"><span>Best Laid Plans · © 2026 Joseph N. Cohen · CC BY-NC-SA 4.0</span><span>Back of this page: read after the reveal</span></div>
+</section>
+
+<!-- ───────────────────────── BACK ───────────────────────── -->
+<section class="sheet" aria-label="Back: after the reveal">
+  <div class="fold">After the reveal</div>
+
+  <p class="thesis">Every forecast is seen through a frame that can see some things and is blind to others.</p>
+
+  <div>
+    <h2>Frames you could have used tonight</h2>
+    <div class="frames">
+      <div class="frame" style="--c:var(--line)"><b>The pace</b><div class="s">Extrapolate the current rate. <i>Sees</i> output so far. <i>Blind to</i> defects and scope changes. The trap: anchoring.</div></div>
+      <div class="frame" style="--c:var(--line)"><b>The plan</b><div class="s">Run the movie step by step. <i>Sees</i> your choices. <i>Blind to</i> everything outside the plan. A plan is a chain: ten 90% steps ≈ 35%.</div></div>
+      <div class="frame" style="--c:var(--line)"><b>The dashboard</b><div class="s">"Percent complete." <i>Sees</i> what was built. <i>Blind to</i> what will pass. The 90% syndrome.</div></div>
+      <div class="frame" style="--c:var(--warm)"><b>One vivid case</b><div class="s">"Last time it took…" <i>Sees</i> one real outcome. <i>Blind to</i> whether you'll play like it.</div></div>
+      <div class="frame" style="--c:var(--warm)"><b>The record</b><div class="s">What happened to things like this. <i>Sees</i> what the plan forgot. <i>Blind to</i> plans no one has tried, and to true novelty.</div></div>
+      <div class="frame" style="--c:var(--go)"><b>Models, crowds, AI</b><div class="s">Regression, simulation, colleagues, chatbots. <i>Only as good as</i> what they're fed, and averaging helps only if they err differently.</div></div>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="box cal" aria-label="Calibration versus accuracy">
+      <h2>Calibration is not accuracy</h2>
+      <svg viewBox="0 0 330 92" role="img" aria-label="Two forecasters. A: point close, range missed. B: point off, range held.">
+        <text x="0" y="12">wk 10</text><text x="196" y="12" text-anchor="end">wk 20</text>
+        <line x1="0" x2="200" y1="18" y2="18" stroke="#d5dbe2"/>
+        <text x="0" y="38" style="font-weight:600">A</text>
+        <rect x="45" y="29" width="48" height="10" rx="2" fill="#2F6FB0"/>
+        <circle cx="120" cy="34" r="4.5" fill="#16202a"/>
+        <text x="210" y="38">near, range missed</text>
+        <text x="0" y="68" style="font-weight:600">B</text>
+        <rect x="60" y="59" width="130" height="10" rx="2" fill="#B7791F"/>
+        <circle cx="180" cy="64" r="4.5" fill="#16202a"/>
+        <text x="210" y="68">off, range held</text>
+        <text x="0" y="88" style="font-size:9.5px;fill:#6b7783">Bar = 80% range · dot = what happened</text>
+      </svg>
+      <p class="rules">Hire forecaster B. Judge forecasters on many forecasts, never on one outcome.</p>
+    </div>
+    <div class="box">
+      <h2>What a 90% forecast means</h2>
+      <p>In 2016 forecasters gave Clinton roughly 85–90%. She lost. That alone doesn't make them wrong. A 10–15% event happens one time in seven to ten. The question is never "did the 90% happen?" It's "of all the 90% calls, how many came true?"</p>
+    </div>
+  </div>
+
+  <div>
+    <h2>The four moves: for any date you'll be held to</h2>
+    <div class="moves">
+      <div class="move"><b>1 · Record</b><span>What happened to things like this? Find 5–40 comparable cases. Pick the class before you look at its answer.</span></div>
+      <div class="move"><b>2 · Difference</b><span>What makes this one different, and is that evidence or hope? Intentions don't count.</span></div>
+      <div class="move"><b>3 · Range</b><span>Would you bet 4 to 1? Then widen it for what your frame can't see. Try a premortem: "It failed. Why?"</span></div>
+      <div class="move"><b>4 · Score</b><span>Write it down with a date. Update in small steps. Check how your 80% calls actually did.</span></div>
+    </div>
+  </div>
+
+  <div class="grid g2">
+    <div class="box tint">
+      <h2>Reading your results screen</h2>
+      <ul>
+        <li><b>Your game in 9 facts.</b> Numbered for a show of hands: your plan, your starting point, what you checked (how often, whether you stopped, and your AI use), the 90% week and the rejections, the scope change, whose numbers you used, whether your range held, money, and luck (your decisions replayed under 100 other draws).</li>
+        <li><b>Your risk register.</b> Which of your risks happened, and which happened that you didn't list.</li>
+        <li><b>The lesson line.</b> "Your dashboard said week X. The past contracts said week Y. It was accepted in week Z."</li>
+        <li><b>Forecast and Delivery scores.</b> Each with the points every part cost, as on the front.</li>
+        <li><b>How each tool on the desk would have done,</b> with what each could and couldn't see.</li>
+        <li><b>"What your dashboard told you."</b> The gap between 100% on the dashboard and acceptance is the rework it couldn't see.</li>
+        <li><b>Download my results (.txt).</b> Keep it for the discussion; a replay saves as a new run.</li>
+      </ul>
+    </div>
+    <div class="box tint">
+      <h2>Take it with you</h2>
+      <p style="margin-bottom:6px">What's one date you've already promised someone this month?</p>
+      <p>Which frame produced it? _______________________________</p>
+      <p style="margin-top:6px">What does the record of things like it say? ______________________</p>
+      <p style="margin-top:6px">Next week: judge the decision, not the outcome.</p>
+    </div>
+  </div>
+
+  <div class="foot"><span>Readings: Knight 1921 · Tversky &amp; Kahneman 1974 · Petropoulos et al. 2022 · Mellers et al. 2015 · Schoemaker 1995 · Taleb 2007</span><span>DATA 790 · Imagining, Modeling, and Prediction</span></div>
+</section>
+
+<script>
+(function(){
+  var g=document.getElementById('ticks'),ns='http://www.w3.org/2000/svg';
+  for(var w=1;w<=22;w++){
+    var x=20+600*(w-0.5)/22;
+    var t=document.createElementNS(ns,'text');
+    t.setAttribute('x',x);t.setAttribute('y',54);t.setAttribute('text-anchor','middle');t.setAttribute('class','wk');t.textContent=w;g.appendChild(t);
+  }
+})();
+</script>
