@@ -176,5 +176,18 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   console.log(`  ok   plan fuzz: ${n}/40 reveals rendered`);
 }
 
+{
+  // Personal luck: one code, several students, each reveal reads sensibly against that student's own outcome.
+  for (let i = 1; i <= 12; i++) {
+    const p = new Project('ledger', undefined, i);
+    p.commit({ week: 13, low: 11, high: 14, onTimeChance: 40, plan: { crews: i % 4, inspect: (i % 3) / 10, shift: 'none' } });
+    playPolicy(p, { hire: i % 4, inspect: (i % 3) / 10 });
+    ok(`Reveal with personal luck ${i}`, () => {
+      const h = renderToString(<Reveal project={p} onReplay={() => {}} />);
+      if (!h.includes('How each tool on the desk would have done') || !h.includes(`week ${p.scores().outcome}`)) throw new Error('comparison missing');
+      return h;
+    });
+  }
+}
 console.log(fails ? `\n${fails} FAILED` : '\nAll render checks passed');
 process.exit(fails ? 1 : 0);

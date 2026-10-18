@@ -108,6 +108,14 @@ for projecting a tab in class.
   their sample found defective. The sample reads the true defect rate with about 8%
   relative error, drawn from the scenario code before play; it changes what the screen
   says, never what happens. A careful reader can narrow the forecast from week 2.
+- **Personal luck.** Everyone on a code shares the contract: the scope change, the
+  events, how fast and defect-prone the line is, the record and the last contract.
+  Each student's line also has its own week-to-week luck, in output (about 7%) and in
+  the share of built units that turn out defective (about 10%), persisting from week to
+  week. It comes from a stream seeded by the code plus a draw made once, at commit, so
+  the world is fixed before play and forecasts never change outcomes. On one code a
+  good plan sometimes fails and a reckless one sometimes wins: judge the decision, not
+  the outcome. The Contract says: "Your line also has its own week-to-week luck."
 - **Events.** About half of contracts lose a crew for 2 weeks (still paid), somewhere
   in weeks 3–9. About 40% hit a parts delay that idles half the line for a week, in
   weeks 4–10. Both are drawn from the scenario code before play.

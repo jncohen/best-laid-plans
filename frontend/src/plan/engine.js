@@ -79,6 +79,15 @@ export const CONFIG = {
   // units they found defective. It reads the true defect rate with this relative error.
   sampleError: 0.08,
 
+  // Personal luck: each student's line has its own week-to-week luck, from a stream seeded by
+  // the code plus a draw made when the student commits. The contract (scope change, events,
+  // how fast and defect-prone this contract's line is), the record and the last contract stay
+  // shared. Weekly output and the share of built units that turn out defective each wobble by
+  // these relative amounts, with week-to-week persistence.
+  luckOutput: 0.07,
+  luckDefects: 0.1,
+  luckPersistence: 0.7,
+
   // Updating score: weight on the interval score of each weekly 80% range
   updatingIntervalWeight: 3,
 
@@ -122,10 +131,15 @@ const between = (r, [lo, hi]) => lo + r() * (hi - lo);
 
 // ── The project ──────────────────────────────────────────────────────────────
 export class Project {
-  constructor(seedInput = null, cfg = CONFIG) {
+  /**
+   * `luck`: the student's own luck draw (a number), made once at commit. null plays the
+   * shared world alone (the past record, the last contract, the tests' fixed runs).
+   */
+  constructor(seedInput = null, cfg = CONFIG, luck = null) {
     this.cfg = cfg;
     this.seedInput = seedInput;
     this.seed = seedFromString(seedInput);
+    this.luck = luck === null || luck === undefined ? null : luck >>> 0;
     const r = mulberry32(this.seed);
     this._r = r;
 
@@ -146,6 +160,16 @@ export class Project {
     // The inspectors' sampling error, one per week, drawn last so every earlier draw keeps its value.
     // It changes what the screen reports, never what happens.
     this._sample = Array.from({ length: cfg.horizon + 1 }, () => (r() + r() + r() - 1.5) * 2);
+    // Personal luck, from its own stream, so nothing above moves: this line's weekly output
+    // wobble (replacing the shared one) and the share of its built units that turn out defective.
+    this._defectLuck = Array(cfg.horizon + 1).fill(1);
+    if (this.luck !== null) {
+      const L = mulberry32((this.seed ^ Math.imul(this.luck, 2654435761)) >>> 0);
+      const z = () => (L() + L() + L() - 1.5) * 2;
+      const ar = () => { let x = z(); const rho = cfg.luckPersistence, k = Math.sqrt(1 - rho * rho); return Array.from({ length: cfg.horizon + 1 }, () => (x = rho * x + k * z())); };
+      this._noise = ar().map((x) => Math.max(0.5, 1 + cfg.luckOutput * x));
+      this._defectLuck = ar().map((x) => Math.max(0, 1 + cfg.luckDefects * x));
+    }
 
     this.week = 0;
     this.crews = cfg.crews;
@@ -182,7 +206,7 @@ export class Project {
   defectRate(shift) {
     const c = this.cfg;
     const streak = shift ? this.shiftStreak + 1 : 0;
-    return c.baseDefectRate * this.defectProne + Math.min(c.shiftDefectCap, Math.max(0, streak - 1) * c.shiftDefectPerStreak);
+    return (c.baseDefectRate * this.defectProne + Math.min(c.shiftDefectCap, Math.max(0, streak - 1) * c.shiftDefectPerStreak)) * this._defectLuck[this.week];
   }
 
   /**

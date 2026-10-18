@@ -79,7 +79,7 @@ function ContractTab() {
         <p>Your company can overspend the budget by up to {money(c.creditLine)} on credit. Past that, it can't make payroll: the company goes bankrupt and the contract ends.</p>
         <p>Customers on this line add to the requirement partway through: every past contract on record had a scope change. Nobody knows in advance which week it comes or how many units it adds.</p>
         <p>Some built units turn out defective. The dashboard counts them complete until inspection or the customer's acceptance test finds them.</p>
-        <p>Contracts differ: some lines build faster or slower than others, and some turn out more defects. Each week's output and inspection finds show how this one runs. In any week you inspect, the inspectors also report the share of that week's units their sample found defective.</p>
+        <p>Contracts differ: some lines build faster or slower than others, and some turn out more defects. Each week's output and inspection finds show how this one runs. Your line also has its own week-to-week luck. In any week you inspect, the inspectors also report the share of that week's units their sample found defective.</p>
         {eventRules(c).map((e) => <p key={e}>{e}</p>)}
       </div>
       <div className="mt-4 pt-3 border-t border-slate-800">

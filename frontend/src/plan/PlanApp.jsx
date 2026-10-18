@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Project, decodePlan } from './engine';
+import { Project, CONFIG, decodePlan } from './engine';
 import { tabById } from './desk.js';
 import Brief from './Brief';
 import Play from './Play';
@@ -26,7 +26,8 @@ export default function PlanApp() {
   const [first, setFirst] = useState(true);
 
   const commit = (forecast, seed) => {
-    const p = new Project(seed || null);
+    // The room shares the code's contract; each play draws its own luck, once, at commit.
+    const p = new Project(seed || null, CONFIG, (Math.random() * 4294967296) >>> 0);
     p.commit(forecast);
     setProject(p);
     setLastSeed(seed);

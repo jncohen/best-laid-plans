@@ -468,5 +468,20 @@ console.log("Inspectors' sample: a plain observation, drawn before play, never c
   t("the reference forecaster reads only the screen and the week's decision", /screenForecast\(S, L, d/.test(fc) && !/\bp\.|Project|productivity|defectProne|_noise|_sample|shockWeek|cfg\b/.test(fc));
 }
 
+console.log('Personal luck: a shared contract, each student with their own week-to-week luck');
+{
+  const plan = (p) => { p.commit({ week: 13, low: 11, high: 14, onTimeChance: 40 }); while (!p.done) p.play({ hire: p.week === 0 ? 3 : 0, inspect: 0.1, forecast: 13 }); return p; };
+  const a = new Project('ledger', CONFIG, 1), b = new Project('ledger', CONFIG, 2), z = new Project('ledger');
+  const shared = (p) => JSON.stringify([p.shockWeek, p.shockSize, p.shockTail, p.productivity, p.defectProne, p.crewOutWeek, p.delayWeek]);
+  t('the contract is shared: scope change, events, productivity and defect-proneness match whatever the luck', shared(a) === shared(b) && shared(a) === shared(z));
+  plan(a); plan(b); plan(z);
+  t('luck differs between students on one code', JSON.stringify(a.history.map((r) => r.built)) !== JSON.stringify(b.history.map((r) => r.built)));
+  t('the same luck draw plays the same world', JSON.stringify(plan(new Project('ledger', CONFIG, 1)).history) === JSON.stringify(a.history));
+  t('without a luck draw the shared world is unchanged (the record and the last contract use it)', JSON.stringify(plan(new Project('ledger')).history) === JSON.stringify(z.history) && pastContracts().median === 14 && lastContract().deliveredWeek === 16);
+  const f = (fc) => { const p = new Project('ledger', CONFIG, 7); p.commit({ week: fc, low: fc - 2, high: fc + 2, onTimeChance: 10 }); while (!p.done) p.play({ hire: p.week === 0 ? 3 : 0, inspect: 0.1, forecast: fc + p.week }); return p; };
+  t('forecasts never change outcomes under luck', JSON.stringify(f(10).history) === JSON.stringify(f(18).history));
+  t('the Contract discloses it', readFileSync(new URL('../frontend/src/plan/DeskTabs.jsx', import.meta.url), 'utf8').includes('Your line also has its own week-to-week luck.'));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -6,7 +6,7 @@
 export function adaptive(p, w, k = {}) {
   k = { ...JSON.parse((typeof process !== 'undefined' && process.env.ADAPT) || '{}'), ...k };
   const c = p.cfg, h = p.history;
-  const A = { open: 3, inspect: 0.1, target: 11.6, scope: 17, rework: 3.5, reworkInspected: 1.8, findsTypical: 0.07, findsHigh: 0.11, findsLow: 0.04, lastHire: 8, releaseFrom: 4, release: 1.2, cash: 0.55, ...k };
+  const A = { open: 3, inspect: 0.1, target: 11.2, scope: 17, rework: 3.5, reworkInspected: 1.8, findsTypical: 0.07, findsHigh: 0.11, findsLow: 0.04, lastHire: 8, releaseFrom: 4, release: 1.2, cash: 0.45, ...k };
   if (w === 1) return { hire: A.open, inspect: A.inspect, projected: null };
   // The line's rate per crew-week, from clean weeks: no onboarding, no crew out, no parts delay.
   let built = 0, effort = 0;
@@ -67,7 +67,7 @@ export function adaptive(p, w, k = {}) {
  */
 export function screenForecast(S, L, d, k = {}) {
   const R = S.rules, rows = L.rows, w = L.week + 1;
-  const K = { runs: 60, prior: 0.12, pad: 0.5, ...k };
+  const K = { runs: 60, prior: 0.12, pad: 0.5, rateLuck: 0.5, defectLuck: 0.15, ...JSON.parse((typeof process !== 'undefined' && process.env.FCK) || '{}'), ...k };
   // Build rate per crew-week, from weeks without onboarding, a crew out or a parts delay.
   let built = 0, effort = 0;
   rows.forEach((r, i) => {
@@ -97,7 +97,12 @@ export function screenForecast(S, L, d, k = {}) {
   let seed = 7 + w;
   const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   const sims = [];
+  // The line's own luck: how much its output has wobbled week to week, and a disclosed wobble in defects.
+  const perWeek = rows.filter((r) => r.built > 0 && r.backlog >= 0.5).map((r) => r.built / Math.max(0.5, r.crews * (1 - r.inspect)));
+  const wobble = perWeek.length > 2 ? Math.sqrt(perWeek.reduce((a, x) => a + (x - perCrew) ** 2, 0) / (perWeek.length - 1)) / perCrew : 0.05;
+  const gauss = () => (rnd() + rnd() + rnd() - 1.5) * 2;
   for (let i = 0; i < K.runs; i++) {
+    const rateF = 1 + K.rateLuck * wobble * gauss(), defF = Math.max(0, 1 + K.defectLuck * gauss());
     const sc = !scopeSeen && future.length ? future[Math.floor(rnd() * future.length)] : null;
     const outAt = !outSeen && rnd() < R.crewOutChance ? Math.max(w, R.crewOutWeekRange[0] + Math.floor(rnd() * (R.crewOutWeekRange[1] - R.crewOutWeekRange[0] + 1))) : null;
     const delayAt = !delaySeen && rnd() < R.delayChance ? R.delayWeekRange[0] + Math.floor(rnd() * (R.delayWeekRange[1] - R.delayWeekRange[0] + 1)) : null;
@@ -108,9 +113,9 @@ export function screenForecast(S, L, d, k = {}) {
       const shift = wk === w && d.shift;
       const out = outAt !== null && wk >= outAt && wk < outAt + R.crewOutWeeks ? 1 : 0;
       const atWork = (onboard > 0 ? crews - adding * (1 - R.onboardingFactor) : crews) - out;
-      const cap = atWork * perCrew * (1 - R.coordinationLoss * Math.max(0, crews - R.crews)) * (wk === delayAt ? 1 - R.delayShare : 1) * (shift ? R.shiftBoost : 1);
+      const cap = atWork * perCrew * rateF * (1 - R.coordinationLoss * Math.max(0, crews - R.crews)) * (wk === delayAt ? 1 - R.delayShare : 1) * (shift ? R.shiftBoost : 1);
       const b = Math.min(left, cap * (1 - insp));
-      left -= b; H += b * rate;
+      left -= b; H += b * rate * defF;
       if (sc && wk === sc.scopeWeek) left += sc.scopeUnits;
       if (onboard > 0) onboard--;
       if (left < 0.5) {

@@ -38,13 +38,16 @@
  *   12. Bankruptcy (past the credit line) never hits a plan that wins: no strategy
  *      on time >= 40% of the time goes bankrupt in more than 5% of runs.
  */
-import { Project, CONFIG, COMMON_PLANS, pastContracts, historyMean, lastContract, matchContracts, planFromProject, playedPlan } from '../frontend/src/plan/engine.js';
+import { Project, CONFIG, seedFromString, COMMON_PLANS, pastContracts, historyMean, lastContract, matchContracts, planFromProject, playedPlan } from '../frontend/src/plan/engine.js';
 import { screenData, liveScreen, allForecasts, statusReport, records } from '../frontend/src/plan/desk.js';
 import { adaptive as adaptivePolicy, screenForecast } from './adaptive-policy.mjs';
 // SWEEP_CFG='{"budget":4600000,...}' tries candidate CONFIG values (exploration only; the game uses CONFIG as committed).
 if (process.env.SWEEP_CFG) Object.assign(CONFIG, JSON.parse(process.env.SWEEP_CFG));
 
 const N = Number(process.env.N || 1000);
+// Every run plays with a student's own luck draw, as the game does (NOLUCK=1 plays the shared world alone).
+const luckOf = (seed) => (process.env.NOLUCK ? null : seedFromString(`luck-${seed}`));
+const play = (seed) => new Project(seed, CONFIG, luckOf(seed));
 const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
 const pct = (x) => `${(100 * x).toFixed(0)}%`;
 const rng = (a, b) => `${a}-${b}`;
@@ -92,7 +95,7 @@ function insideView(s) {
 }
 
 function run(s, seed) {
-  const p = new Project(seed);
+  const p = play(seed);
   const iv = insideView(s);
   p.commit({ ...iv, onTimeChance: 70 });
   while (!p.done) {
@@ -173,7 +176,7 @@ const binomP = (k, n, r) => { const pk = (j) => choose(n, j) * r ** j * (1 - r) 
 const failFit = (r) => { const m = matchContracts(COMMON_PLANS.find((cp) => cp.key === r.plan)); return { k: m.failed.total, n: m.n, p: binomP(m.failed.total, m.n, Math.min(0.999, Math.max(0.001, r.failRate))) }; };
 // The screen-only adaptive reference (tools/adaptive-policy.mjs), on the same codes as the strategies.
 const ADAPT = (() => {
-  const ps = Array.from({ length: N }, (_, i) => { const p = new Project(20000 + i); p.commit({ week: 13, low: 11, high: 15, onTimeChance: 40 }); while (!p.done) p.play(adaptivePolicy(p, p.week + 1)); return p; });
+  const ps = Array.from({ length: N }, (_, i) => { const p = play(20000 + i); p.commit({ week: 13, low: 11, high: 15, onTimeChance: 40 }); while (!p.done) p.play(adaptivePolicy(p, p.week + 1)); return p; });
   const sc = ps.map((p) => p.scores());
   return { onTime: mean(sc.map((x) => +x.onTime)), deliv: mean(sc.map((x) => x.delivery)), broke: mean(ps.map((p) => +(p.result === 'BANKRUPT'))), spent: mean(ps.map((p) => p.spent)) / 1e6 };
 })();
@@ -212,7 +215,7 @@ const deskHold = {};
 const deskBrier = {};
 for (const cp of COMMON_PLANS) {
   const pol = PLAYS[cp.key];
-  const outs = Array.from({ length: N }, (_, i) => { const p = new Project(70000 + i); while (!p.done) { const w = p.week + 1; p.play({ hire: w === 1 ? pol.hire || 0 : 0, inspect: pol.insp || 0, shift: w >= (pol.shiftFrom ?? 99) && w <= (pol.shiftTo ?? 99) }); } return p; });
+  const outs = Array.from({ length: N }, (_, i) => { const p = play(70000 + i); while (!p.done) { const w = p.week + 1; p.play({ hire: w === 1 ? pol.hire || 0 : 0, inspect: pol.insp || 0, shift: w >= (pol.shiftFrom ?? 99) && w <= (pol.shiftTo ?? 99) }); } return p; });
   for (const f of allForecasts(SCREEN, cp)) {
     (deskHold[f.name] ||= {})[cp.key] = mean(outs.map((p) => { const o = p.outcomeWeek(); return o >= f.low && o <= f.high ? 1 : 0; }));
     (deskBrier[f.name] ||= []).push(mean(outs.map((p) => (f.chance / 100 - (p.result === 'DELIVERED' && p.outcomeWeek() <= CONFIG.deadline ? 1 : 0)) ** 2)));
@@ -251,7 +254,7 @@ const asForecast = (f) => ({ week: f.week, low: f.low, high: f.high, onTimeChanc
 // Every tab is open, but a coaster opens only a few before asking the AI: 2 to 6 of them, varying by code.
 const pickTabs = (i) => { const r = ((i * 2654435761) >>> 0) / 4294967296; const n = 2 + Math.floor(r * 5); const s = [...ALL_TOOLS].sort((a, b) => ((a.charCodeAt(0) * 31 + i) % 7) - ((b.charCodeAt(0) * 31 + i) % 7) || a.localeCompare(b)); return s.slice(0, n); };
 function playStudent(type, seed, i) {
-  const p = new Project(seed);
+  const p = play(seed);
   const opened = type === 'ai-coast' ? pickTabs(i) : type === 'anchor' ? ['status'] : ['records', 'last5', 'status'];
   const f0 = type === 'anchor' ? statusReport(SCREEN).forecast
     : type === 'ai-coast' ? (opened.includes('records') || opened.includes('last5') ? records(SCREEN, PLAN).matched : statusReport(SCREEN).forecast)
@@ -299,6 +302,37 @@ checks.push(
   ['15. Neither coasting type is best on both Updating and Delivery', !['record-coast', 'ai-coast'].some((k) => bestOn('updating') === k && bestOn('delivery') === k),
     `best Updating: ${STUDENTS[bestOn('updating')]}; best Delivery: ${STUDENTS[bestOn('delivery')]}`],
   ['16. A careful player is calibrated reading two tabs a week (adaptive weekly ranges hold >= 70%)', A.weeklyHeld >= 0.7, `adaptive weekly ranges held ${pct(A.weeklyHeld)} (from week 2: ${pct(A.heldWeek2)}); week-1 range held ${pct(A.held)}`],
+);
+
+// ── Luck: one code (ledger), many students, each with their own luck (targets 17-19) ──
+// Judge the decision, not the outcome: on one code, good plans sometimes fail and reckless ones sometimes win.
+const LUCK_N = Number(process.env.LUCK_N || 400);
+const bestStatic = S[bestStaticName];
+const LUCKY = {
+  'Build flat out (4 crews)': () => ({}),
+  'Inspect 30%, no crews (careless)': () => ({ inspect: 0.3 }),
+  '+3 crews, no inspection (reckless)': (p, w) => ({ hire: w === 1 ? 3 : 0 }),
+  '+3 crews, shift every week (deadline-chaser)': (p, w) => ({ hire: w === 1 ? 3 : 0, shift: true }),
+  [`${bestStaticName.trim()} (best static)`]: (p, w) => ({ hire: w === 1 ? bestStatic.hire : 0, inspect: bestStatic.insp, shift: w >= (bestStatic.shiftFrom ?? 99) && w <= (bestStatic.shiftTo ?? 99) }),
+  'Adaptive reference': (p, w) => adaptivePolicy(p, w),
+};
+const luckRows = {};
+for (const [name, pol] of Object.entries(LUCKY)) {
+  const ps = Array.from({ length: LUCK_N }, (_, i) => { const p = new Project('ledger', CONFIG, i + 1); p.commit({ week: 13, low: 11, high: 15, onTimeChance: 40 }); while (!p.done) p.play(pol(p, p.week + 1)); return p; });
+  const sc = ps.map((p) => p.scores()), q = quantiles(sc.map((x) => x.outcome));
+  luckRows[name] = { onTime: mean(sc.map((x) => +x.onTime)), broke: mean(ps.map((p) => +(p.result === 'BANKRUPT'))), deliv: mean(sc.map((x) => x.delivery)), p10: q(0.1), med: q(0.5), p90: q(0.9) };
+}
+console.log(`\nOne code ("ledger"), ${LUCK_N} students with their own luck`);
+console.log('Strategy'.padEnd(46) + 'OnTime'.padStart(7) + 'Late/broke'.padStart(11) + 'Broke'.padStart(7) + 'Deliv'.padStart(7) + '  weeks p10-med-p90');
+for (const [k, r] of Object.entries(luckRows)) console.log(k.padEnd(46) + pct(r.onTime).padStart(7) + pct(1 - r.onTime).padStart(11) + pct(r.broke).padStart(7) + r.deliv.toFixed(1).padStart(7) + `  ${r.p10}-${r.med}-${r.p90}`);
+const LA = luckRows['Adaptive reference'], LB = luckRows[`${bestStaticName.trim()} (best static)`], LF = luckRows['Build flat out (4 crews)'], LR = luckRows['+3 crews, no inspection (reckless)'];
+checks.push(
+  ['17. On one code, good strategies sometimes fail: adaptive and the best static plan are late or bankrupt >= 30%', 1 - LA.onTime >= 0.3 && 1 - LB.onTime >= 0.3,
+    `adaptive ${pct(1 - LA.onTime)} late or bankrupt (${pct(LA.broke)} bankrupt); best static ${pct(1 - LB.onTime)} (${pct(LB.broke)} bankrupt)`],
+  // Flat out and careless are reported, not gated: on ledger they run 6 and 9 weeks late, which no small luck closes.
+  ['18. On one code, a reckless plan sometimes wins: +3 crews with no inspection on time >= 5%', LR.onTime >= 0.05,
+    `reckless ${pct(LR.onTime)} on time, ${pct(LR.broke)} bankrupt; flat out ${pct(LF.onTime)} (weeks ${LF.p10}-${LF.p90}); careless ${pct(luckRows['Inspect 30%, no crews (careless)'].onTime)}`],
+  ['19. Strategy still matters: adaptive beats flat out on mean Delivery by >= 20 points', LA.deliv - LF.deliv >= 20, `adaptive ${LA.deliv.toFixed(1)}, flat out ${LF.deliv.toFixed(1)}: +${(LA.deliv - LF.deliv).toFixed(1)}`],
 );
 
 console.log('\n=== TARGETS ===');
