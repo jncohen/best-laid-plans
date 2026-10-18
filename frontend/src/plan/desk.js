@@ -125,14 +125,18 @@ export function statusReport(S, L = null, plan = null) {
   // Money, from Cost Management: spend, what is left of the budget and the credit line, and when it would run out.
   const cm = costManagement(S, plan, L);
   const spi = +last.spi.toFixed(2), cpi = +(ev / ac).toFixed(2);
-  // The light flags the worse of schedule and cost: green on both, amber if either is a little off, red if either is well off.
-  const level = (x) => (x >= 1 ? 0 : x >= 0.9 ? 1 : 2);
-  const worst = Math.max(level(spi), level(cpi));
+  // The light, as a project office sets it: the projected finish against the promised week,
+  // and the projected spend against the budget and the credit line. Green on both; amber if
+  // the finish is a week late or the spend runs onto credit; red if worse.
+  const finishLevel = eac <= R.deadline ? 0 : eac <= R.deadline + 1 ? 1 : 2;
+  const spendAtFinish = cm.cost.toFinish;
+  const moneyLevel = spendAtFinish <= R.budget ? 0 : spendAtFinish <= R.budget + R.creditLine ? 1 : 2;
+  const worst = Math.max(finishLevel, moneyLevel);
   const scope = L ? L.totalScope : R.scope;
   return {
     money: { spent: cm.spent, budgetLeft: R.budget - cm.spent, creditLeft: R.budget + R.creditLine - cm.spent, plannedCost: cm.cost.bac, brokeWeek: cm.brokeWeek, budget: R.budget, creditLine: R.creditLine },
     scope, scopeAdded: scope - R.scope, scopeWeek: L ? (L.rows.find((r) => r.shock > 0) || {}).week ?? null : null,
-    behind: { schedule: level(spi) > 0, cost: level(cpi) > 0 },
+    behind: { schedule: finishLevel > 0, cost: moneyLevel > 0 }, spendAtFinish,
     forecast: clampF({ week: Math.round(eac), low: Math.floor(Math.min(...eacs)), high: Math.ceil(Math.max(...eacs)), chance: eac <= R.deadline - 0.5 ? 90 : eac <= R.deadline ? 60 : 20 }),
     live: !!L, pace: +pace(S).toFixed(1), weeksAtPace: +(R.scope / pace(S)).toFixed(1), eacWeeks: +eac.toFixed(1), weekly,
     earnedPct, plannedPct, weeksShown: wk, built: earnedPct * scope, planned: plannedPct * scope,
@@ -276,8 +280,10 @@ export function teamChat(S, plan, L = null) {
       says: L ? `Re-planned from here, your plan finishes in week ${sc.week}.` : `On paper your plan finishes in week ${sc.week}. That's before any surprises.`,
       reasoning: `Your plan week by week under the stated rules${L ? ', from the units left and the rate so far' : ''}: onboarding, coordination, shift, inspection. No defects or scope change.` },
     { key: 'sales', name: 'Kim', role: 'Sales lead', frame: 'The promise', approach: 'goes by what the customer was promised', confidence: 60, forecast: { week: Math.max(R.deadline, now + 1), low: Math.max(R.deadline - 1, now + 1), high: Math.max(R.deadline + 1, now + 2), chance: now < R.deadline ? 70 : 0 },
-      says: now >= R.deadline ? `Week ${now} is done and we're past week ${R.deadline}. The customer calls every day; the dashboard says ${shown}%.`
-        : L ? `Week ${now} is done and the dashboard says ${shown}%. We promised week ${R.deadline}; the customer asked again how it's going.` : `We promised week ${R.deadline}.`,
+      says: now > R.deadline ? `Week ${now} is done: ${word(now - R.deadline)} week${now - R.deadline === 1 ? '' : 's'} past what we promised. The customer calls every day and asks why we said week ${R.deadline}. The dashboard says ${shown}%.`
+        : now === R.deadline ? `Week ${R.deadline} is done and it isn't accepted. We broke the promise. The customer wants a new date, and it had better be one we can keep. The dashboard says ${shown}%.`
+        : L && R.deadline - now <= 3 ? `Week ${now} is done and the dashboard says ${shown}%. ${word(R.deadline - now)} week${R.deadline - now === 1 ? '' : 's'} to week ${R.deadline}. The customer wants a firm yes from us this week: are we going to make it?`
+        : L ? `Week ${now} is done and the dashboard says ${shown}%. We promised week ${R.deadline}; the customer asked again how it's going.` : `We promised the customer week ${R.deadline}. Our name is on it.`,
       reasoning: 'What the customer was told.' },
     { key: 'veteran', name: 'Mabel', role: 'Veteran on the line', frame: 'The record', approach: 'goes by the record of past contracts', confidence: 80, forecast: { week: Math.max(m.week, now + 1), low: Math.max(m.low, now + 1), high: Math.max(m.high, now + 1), chance: m.chance, fail: m.fail },
       says: `Twenty-odd years on this line. These take about ${word(all.week)} weeks, give or take ${spread <= 2 ? 'a couple' : word(spread)}. I've seen ${all.chance / 100 < 0.08 ? '' : 'maybe '}${inWords(all.chance / 100)} make ${word(R.deadline)}.${yours}`

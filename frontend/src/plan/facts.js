@@ -203,6 +203,17 @@ export function forecastVerdict(p) {
   };
 }
 
+/** The promise (week 12), kept or broken: what the customer was told, against what happened. */
+export function promiseVerdict(p) {
+  const c = p.cfg || CONFIG, s = p.scores();
+  const kept = s.onTime;
+  const text = p.result === 'BANKRUPT' ? `You promised week ${c.deadline}. The company went bankrupt in week ${p.week}: the promise was broken, and never kept.`
+    : p.result === 'TERMINATED' ? `You promised week ${c.deadline}. The customer terminated the contract after week ${c.horizon}.`
+    : kept ? `You promised week ${c.deadline}, and kept it: accepted in week ${p.finishWeek}.`
+    : `You promised week ${c.deadline}. Accepted in week ${p.finishWeek}: ${plural(p.finishWeek - c.deadline, 'week')} late.`;
+  return { kept, text };
+}
+
 /**
  * The run as a plain text file, for the student to keep (so a replay doesn't lose the first game):
  * the plan, the forecast and how it did, the facts, and the game week by week.
@@ -219,6 +230,7 @@ export function resultsText(p, facts, { run = 1, date = new Date() } = {}) {
     `Your week: ${v.point.text}`,
     `Your 80% range: ${v.range.text}; ${v.record.text}`,
     `Your chance: ${v.chance.text}`,
+    `The promise: ${promiseVerdict(p).text}`,
     `How the company did (Delivery): ${s.delivery}`,
     '',
     'Your game in facts:',

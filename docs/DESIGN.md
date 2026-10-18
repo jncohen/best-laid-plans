@@ -68,6 +68,11 @@ sample) is on `decision-desk`.
      shows the past contracts run like it (median, range, how many, and "loose" when
      the match is). During play the options run from next week, and crews can only be
      added.
+   **The promise.** The Contract opens with it: all 200 units accepted by the end of
+   week 12. During play a tile counts down ("3 wks left", amber in the last three
+   weeks, red once past), Kim grows sharper in the last three weeks and after, and the
+   reveal states the promise kept or broken. No rule changes: lateness costs Delivery
+   points only.
    **Ask an AI** holds a plain prompt to copy into any AI assistant: the contract and
    its rules, the last contract's first six weeks, the student's plan and, during play,
    the dashboard week by week. It holds no past contracts: **Records** has a
@@ -254,7 +259,7 @@ Colours:
 | **The Brief** | | |
 | The Contract | contract summary card: the terms (200 units, week 12, 4 crews, $5.00M), every disclosure (acceptance test, termination after week 22, credit line and bankruptcy, scope changes, defects), what you decide each week with its costs, and both scores. No forecast | The contract, every rule and both scores · how long it will take |
 | **Dashboards** | | |
-| Status Report | status report: a red/amber/green light that flags schedule or cost, in plain words (schedule efficiency, below 1 = behind plan; cost efficiency, below 1 = over budget for the work done; projected finish, 12 weeks ÷ schedule efficiency), the current scope, money tiles (spent, budget left, credit left, cost efficiency; before week 1 the plan's cost), when the money would run out, a burn-up chart; during play, units built per crew and defects found so far. The standard abbreviations (SPI, CPI, EAC) appear only in small grey text | Progress and money: units reported complete against plan, spend, the credit line · whether those units will pass acceptance |
+| Status Report | status report: a red/amber/green light set from the projected finish against the promised week 12 (amber a week late, red later) and the projected spend against the budget (amber on credit, red past it), so good early play reads green; plus tiles in plain words (schedule efficiency, below 1 = behind plan; cost efficiency, below 1 = over budget for the work done; projected finish, 12 weeks ÷ schedule efficiency), the current scope, money tiles (spent, budget left, credit left, cost efficiency; before week 1 the plan's cost), when the money would run out, a burn-up chart; during play, units built per crew and defects found so far. The standard abbreviations (SPI, CPI, EAC) appear only in small grey text | Progress and money: units reported complete against plan, spend, the credit line · whether those units will pass acceptance |
 | **People** | | |
 | Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap), updated each week. In order: Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan re-planned from now; Kim (sales) from the promise; Mabel, a veteran on the line, from the record; Priya (quality) from rework, the last contract's or this one's | Five colleagues, each from where they sit · which view to weigh most |
 | Project Controls | a burn-down of units left against the plan line, and a defect control chart (c-chart limits from the weeks before any acceptance test) | Units left and defects found · defects no one has found yet |

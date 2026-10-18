@@ -63,6 +63,11 @@ function ContractTab() {
   const Rule = ({ k, children }) => <li><strong className="text-white">{k}</strong> {children}</li>;
   return (
     <Card title="The Contract" tone="slate">
+      <div className="rounded-xl border-2 border-rose-400/70 bg-rose-500/10 px-3 py-2 mb-3">
+        <div className="text-[11px] uppercase tracking-wider text-rose-200">The promise</div>
+        <div className="text-lg font-bold text-white leading-snug">You told the customer: all {c.scope} units accepted by the end of week {c.deadline}.</div>
+        <p className="text-xs text-rose-100 mt-1">Your company&apos;s name is on it. Each week late costs {c.latePenaltyPerWeek} Delivery points and the customer&apos;s patience; after week {c.horizon} the customer terminates the contract.</p>
+      </div>
       <div className="grid grid-cols-4 gap-2 text-center">
         <div><div className="text-lg font-bold text-white">{c.scope}</div><div className="text-[11px] text-slate-500">units</div></div>
         <div><div className="text-lg font-bold text-white">{c.deadline}</div><div className="text-[11px] text-slate-500">weeks</div></div>
@@ -99,7 +104,7 @@ function StatusTab({ S, plan, onUse, live }) {
   const st = statusReport(S, live, plan);
   const R = S.rules;
   const light = { green: 'bg-emerald-400', amber: 'bg-amber-400', red: 'bg-rose-500' }[st.light];
-  const flags = [st.behind.schedule && 'behind schedule', st.behind.cost && 'over budget for the work done'].filter(Boolean);
+  const flags = [st.behind.schedule && `projected to finish after week ${R.deadline}`, st.behind.cost && (st.spendAtFinish > R.budget + R.creditLine ? 'projected to run past the credit line' : 'projected over budget')].filter(Boolean);
   // Burn-up: units reported complete each week (against the scope of the time), then the projection to the finish.
   const scopeAt = (w) => R.scope + (st.scopeWeek !== null && w >= st.scopeWeek ? st.scopeAdded : 0);
   const cum = live ? [0, ...live.rows.map((r) => r.reported * scopeAt(r.week))] : S.history.reduce((a, v) => [...a, a[a.length - 1] + v], [0]);
@@ -111,13 +116,13 @@ function StatusTab({ S, plan, onUse, live }) {
       <div className="flex items-center gap-3 mb-3">
         <span className={`w-10 h-10 rounded-full ${light} shadow-lg shrink-0`} aria-label={`status ${st.light}`} />
         <div>
-          <div className="text-lg font-bold text-white">{st.light.toUpperCase()}: {flags.length ? flags.join(' and ') : 'on schedule and on budget'}</div>
+          <div className="text-lg font-bold text-white">{st.light.toUpperCase()}: {flags.length ? flags.join(' and ') : `on track for week ${R.deadline} and on budget`}</div>
           <div className="text-xs text-slate-400">Week {st.weeksShown} of {live ? 'this contract' : 'the last contract'} · reported complete {Math.round(100 * st.earnedPct)}% vs planned {Math.round(100 * st.plannedPct)}%</div>
         </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <Tile label="Reported complete" value={`${Math.round(100 * st.earnedPct)}%`} sub={`of ${st.scope} units`} tone="text-sky-300" />
-        <Tile label="Schedule efficiency" value={st.spi} sub="below 1 = behind plan · SPI" tone={st.behind.schedule ? 'text-amber-300' : 'text-sky-300'} />
+        <Tile label="Schedule efficiency" value={st.spi} sub="below 1 = behind plan · SPI" tone={st.spi < 0.95 ? 'text-amber-300' : 'text-sky-300'} />
         <Tile label="Projected finish" value={`wk ${Math.ceil(st.eacWeeks)}`} sub={`12 weeks ÷ schedule efficiency · EAC`} tone="text-sky-300" />
         <Tile label="Scope" value={st.scope} sub={st.scopeAdded ? `${R.scope} + ${st.scopeAdded} added in week ${st.scopeWeek}` : 'units, no change yet'} tone="text-sky-300" />
       </div>
@@ -131,7 +136,7 @@ function StatusTab({ S, plan, onUse, live }) {
           <Tile label="Budget" value={money(m.budget)} />
           <Tile label="Credit line" value={money(m.creditLine)} sub="past it: bankrupt" />
         </>)}
-        <Tile label="Cost efficiency" value={st.cpi} sub="below 1 = over budget for the work done · CPI" tone={st.behind.cost ? 'text-amber-300' : 'text-white'} />
+        <Tile label="Cost efficiency" value={st.cpi} sub="below 1 = over budget for the work done · CPI" tone={st.cpi < 0.9 ? 'text-amber-300' : 'text-white'} />
       </div>
       <p className="text-xs text-slate-400 mt-2">
         {m.brokeWeek ? <span className="text-rose-300">At this rate of spending the money runs out in week {m.brokeWeek}: past the credit line the company goes bankrupt.</span> : `At this rate of spending the money lasts past week ${R.horizon}.`}

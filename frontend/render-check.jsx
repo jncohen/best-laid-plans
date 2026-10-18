@@ -184,6 +184,19 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     if (!w.includes('Option A') || !w.includes('Option B') || !w.includes('Done on paper') || !w.includes('contracts')) throw new Error('what-if wrong');
     return c + w;
   });
+  ok('The Contract leads with the promise', () => {
+    const h = renderToString(<Brief onCommit={() => {}} initialTab="contract" />).replace(/<!-- -->/g, '');
+    const at = h.indexOf('The promise'), terms = h.indexOf('>units<');
+    if (at < 0 || terms < 0 || at > terms || !h.includes('You told the customer: all 200 units accepted by the end of week 12.')) throw new Error('the promise is not first');
+    return h;
+  });
+  ok('Play: the countdown tile', () => {
+    const q = new Project('ledger'); q.commit({ week: 13, low: 12, high: 15, onTimeChance: 30, plan: { crews: 0, inspect: 0, shift: 'none' } });
+    for (let w = 1; w <= 9; w++) q.play({});
+    const h = renderToString(<Play project={q} onPlay={() => {}} />).replace(/<!-- -->/g, '');
+    if (!h.includes('Promised week 12') || !h.includes('3 wks left') || !h.includes('units left')) throw new Error('countdown tile wrong');
+    return h;
+  });
   ok('Team Chat: each colleague says what they go by', () => {
     const h = renderToString(<Brief onCommit={() => {}} initialTab="chat" />).replace(/<!-- -->/g, '');
     for (const x of ['goes by the pace of the line', 'goes by the plan on paper', 'goes by what the customer was promised', 'goes by the record of past contracts', 'goes by defects and rework']) if (!h.includes(x)) throw new Error(`missing "${x}"`);

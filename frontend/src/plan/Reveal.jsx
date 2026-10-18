@@ -4,7 +4,7 @@ import { screenData, allForecasts, tabById, tabByLetter, costManagement } from '
 import { Card } from './ui';
 import { money, downloadText } from './format';
 import { RevealChart, ForecastChart, RangeChart } from './charts';
-import { gameFacts, resultsText, forecastVerdict } from './facts';
+import { gameFacts, resultsText, forecastVerdict, promiseVerdict } from './facts';
 
 // Each finished game on this browser is a numbered run, so a replay never overwrites the first play's file.
 function nextRun(code) {
@@ -133,7 +133,9 @@ export default function Reveal({ project, onReplay }) {
           <p className="text-xs text-slate-400 mt-2">One game can't score a forecaster. The score that means something is the room's: of everyone's 80% ranges, about 8 in 10 should hold.</p>
         </div>
         <div className="col-span-2 sm:col-span-1 bg-slate-900 border border-slate-800 rounded-xl p-3">
-          <div className="text-[11px] uppercase tracking-wider text-slate-400">How the company did (Delivery)</div>
+          <div className="text-[11px] uppercase tracking-wider text-slate-400">The promise</div>
+          <p className={`text-sm font-semibold mt-1 ${promiseVerdict(p).kept ? 'text-emerald-300' : 'text-rose-300'}`}>{promiseVerdict(p).text}</p>
+          <div className="text-[11px] uppercase tracking-wider text-slate-400 mt-2">How the company did (Delivery)</div>
           <div className="text-2xl font-bold font-mono text-slate-300">{s.delivery}</div>
           <p className="text-xs text-slate-400 mt-1">{s.failed ? `Never delivered (${s.failed}).` : s.late > 0 ? `${plural(s.late, 'week')} late.` : 'On time.'} Spent {money(p.spent)} of {money(c.budget)}.</p>
         </div>

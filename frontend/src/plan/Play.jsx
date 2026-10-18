@@ -53,6 +53,11 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
   const moveRange = (f) => { setRange((r) => (typeof f === 'function' ? f(r) : f)); setTouched(true); };
 
   const nextWeek = p.week + 1;
+  // The promise, counted down: weeks left to the promised week, or weeks past it.
+  const weeksLeft = c.deadline - p.week;
+  const promiseValue = weeksLeft > 0 ? `${weeksLeft} wk${weeksLeft === 1 ? '' : 's'} left` : `${1 - weeksLeft} wk${weeksLeft === 0 ? '' : 's'} late`;
+  const promiseSub = weeksLeft > 1 ? `week ${nextWeek} of ${c.deadline}` : weeksLeft === 1 ? `week ${c.deadline} is the last` : weeksLeft === 0 ? 'if accepted this week: the promise is broken' : 'if accepted this week; the customer calls daily';
+  const promiseTone = weeksLeft > 3 ? 'text-white' : weeksLeft > 0 ? 'text-amber-300' : 'text-rose-400';
   const lastWeek = c.horizon;
   // A forecast earlier than the week about to be played is no longer possible: the calendar moves it, and says so.
   const shownForecast = Math.min(lastWeek, Math.max(forecast, nextWeek));
@@ -123,7 +128,6 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
     if (choice === 'change') setRangeOpen(true);
     setTaps((n) => n + 1);
   };
-  const weeksLeft = c.deadline - p.week;
   const lateShift = p.plan && p.plan.shift === 'late' && nextWeek >= 9 && nextWeek <= 11;
 
   const rangeText = shownRange.low === shownRange.high ? `week ${shownRange.low}` : `weeks ${shownRange.low}–${shownRange.high}`;
@@ -163,8 +167,9 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
         <Kpi label="Reported complete" value={pct(p.reportedPct())} tone="text-sky-300">
           <div className="h-1.5 bg-slate-950 rounded-full overflow-hidden mt-1"><div className="h-full bg-sky-500" style={{ width: pct(p.reportedPct()) }} /></div>
+          <div className="text-[11px] text-slate-500 leading-tight mt-0.5">{Math.round(p.backlog)} of {p.totalScope} units left</div>
         </Kpi>
-        <Kpi label="Units left" value={Math.round(p.backlog)} sub={`of ${p.totalScope}`} />
+        <Kpi label={`Promised week ${c.deadline}`} value={promiseValue} sub={promiseSub} tone={promiseTone} />
         <Kpi label="Crews" value={crewsNext} sub={hire > 0 ? `${p.crews} + ${hire} this week` : hire < 0 ? `${p.crews} − ${-hire} this week` : p.onboarding > 0 ? 'onboarding' : 'this week'} />
         <Kpi label="Budget left" value={money(p.budget)} sub={p.budget < 0 ? `credit left ${money(c.creditLine + p.budget)}` : `+ ${money(c.creditLine)} credit`} tone={p.budget < 0 ? 'text-rose-400' : 'text-emerald-300'} />
         <Kpi label="Money lasts to" value={`wk ${lastsTo}`} sub={lastsTo < shownForecast ? `before your forecast (wk ${shownForecast})` : 'at this spend'} tone={lastsTo < shownForecast ? 'text-rose-400' : 'text-white'} />
@@ -272,8 +277,9 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
       <div className="grid grid-cols-3 xl:grid-cols-6 gap-2">
         <Kpi label="Reported complete" value={pct(p.reportedPct())} tone="text-sky-300">
           <div className="h-1.5 bg-slate-950 rounded-full overflow-hidden mt-1"><div className="h-full bg-sky-500" style={{ width: pct(p.reportedPct()) }} /></div>
+          <div className="text-[11px] text-slate-500 leading-tight mt-0.5">{Math.round(p.backlog)} of {p.totalScope} units left</div>
         </Kpi>
-        <Kpi label="Units left" value={Math.round(p.backlog)} sub={`of ${p.totalScope}`} />
+        <Kpi label={`Promised week ${c.deadline}`} value={promiseValue} sub={promiseSub} tone={promiseTone} />
         <Kpi label="Crews" value={crewsNext} sub={hire > 0 ? `${p.crews} + ${hire} this week` : hire < 0 ? `${p.crews} − ${-hire} this week` : p.onboarding > 0 ? 'onboarding' : 'this week'} />
         <Kpi label="Budget left" value={money(p.budget)} sub={p.budget < 0 ? `credit left ${money(c.creditLine + p.budget)}` : `+ ${money(c.creditLine)} credit`} tone={p.budget < 0 ? 'text-rose-400' : 'text-emerald-300'} />
         <Kpi label="Money lasts to" value={`wk ${lastsTo}`} sub={lastsTo < shownForecast ? `before your forecast (wk ${shownForecast})` : 'at this spend'} tone={lastsTo < shownForecast ? 'text-rose-400' : 'text-white'} />

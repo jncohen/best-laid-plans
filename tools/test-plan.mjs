@@ -5,7 +5,7 @@ import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/p
 import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, isCheck, forecastScore, forecastParts, dashboardPeak } from '../frontend/src/plan/engine.js';
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
-import { gameFacts, luckReplay, resultsText, checkingSummary, forecastVerdict } from '../frontend/src/plan/facts.js';
+import { gameFacts, luckReplay, resultsText, checkingSummary, forecastVerdict, promiseVerdict } from '../frontend/src/plan/facts.js';
 import { comparisonRows, aiPrompt, recordsCsv, projectControls, whatIf } from '../frontend/src/plan/desk.js';
 
 let pass = 0, fail = 0;
@@ -586,6 +586,22 @@ console.log('The forecast is judged in words, not scored');
   const b = new Project('ledger'); b.commit({ week: 13, low: 12, high: 14, onTimeChance: 30 });
   while (!b.done) b.play({ hire: b.week < 3 ? 3 : 0, shift: true });
   if (b.result !== 'DELIVERED') t('a contract never delivered: the range missed, the point has no error', forecastVerdict(b).range.text.endsWith('missed, never delivered') && forecastVerdict(b).point.off === null);
+}
+
+console.log('The promise, and the Status Report light');
+{
+  const S = screenData(CONFIG, 'ledger');
+  const lights = (pl) => { const q = new Project('ledger', CONFIG, 12345), out = []; while (!q.done) { const w = q.week + 1; q.play({ hire: w === 1 ? pl.crews : 0, inspect: pl.inspect }); if (!q.done) out.push(statusReport(S, liveScreen(q), pl).light); } return out; };
+  const a = lights({ crews: 3, inspect: 0.1, shift: 'none' }), b = lights({ crews: 1, inspect: 0.2, shift: 'none' }), h = lights({ crews: 0, inspect: 0, shift: 'none' });
+  t('the light judges the projected finish against week 12 and the spend against the budget: not red from week 1 for good play',
+    statusReport(S, null, { crews: 3, inspect: 0.1, shift: 'none' }).light === 'green' && a.filter((x) => x === 'green').length >= 8 && b.every((x) => x === 'red') && h[0] === 'green' && h[h.length - 1] === 'red');
+  const k = (p) => teamChat(S, { crews: 0, inspect: 0, shift: 'none' }, liveScreen(p)).find((c) => c.key === 'sales').says;
+  const q = new Project('ledger'); for (let w = 1; w <= 10; w++) q.play({}); const near = k(q);
+  q.play({}); q.play({}); const at12 = k(q); q.play({}); const past = k(q);
+  t('Kim gets sharper near week 12, at it, and past it', near.includes('two weeks to week 12') && near.includes('are we going to make it?') && at12.includes('We broke the promise') && past.includes('one week past what we promised'));
+  const p = new Project('ledger'); p.commit({ week: 14, low: 13, high: 16, onTimeChance: 20 }); while (!p.done) p.play({});
+  t('the promise verdict says kept or how late', promiseVerdict(p).kept === p.scores().onTime && promiseVerdict(p).text === `You promised week 12. Accepted in week ${p.finishWeek}: ${p.finishWeek - 12} weeks late.`
+    && resultsText(p, gameFacts(p)).includes(`The promise: You promised week 12. Accepted in week ${p.finishWeek}`));
 }
 
 console.log('Records CSV, checks, AI use, checking out');

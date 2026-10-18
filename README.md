@@ -22,7 +22,7 @@ browser, on a phone or a laptop, with nothing to install and no sign-in.
 
    | Tab | What it is |
    |---|---|
-   | The Contract | the terms, the rules and the scoring |
+   | The Contract | the promise (week 12) first, then the terms, the rules and how your forecast is judged |
    | Status Report | progress and money, as a project dashboard reports them |
    | Project Controls | a burn-down chart and a defect control chart |
    | What-if Planner | what other plans would cost and when they'd finish on paper |
@@ -38,7 +38,7 @@ browser, on a phone or a laptop, with nothing to install and no sign-in.
    what you're judged on. You can move your forecast during play, but only the first
    one counts.
 6. **Play week by week.** Each week, add or release crews, set inspection and the
-   shift, then play the week. When something big happens (the customer adds work, the
+   shift, then play the week. A tile counts down the weeks to the promised week 12. When something big happens (the customer adds work, the
    dashboard passes 90%, units are rejected, money runs short), you'll be asked whether
    to keep or change your forecast.
 7. **When it says "finished," wait.** Don't reveal until your instructor says so.
