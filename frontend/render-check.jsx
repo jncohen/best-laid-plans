@@ -33,7 +33,7 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     for (const t of TABS.slice(1)) {
       ok(`Desk during play, week ${w}: ${t.name}`, () => {
         const h = renderToString(<DeskTab id={t.id} S={S} plan={p.plan} planReady onUse={() => {}} live={liveScreen(p)} />);
-        if (t.id === 'ai' && !h.includes(`STATUS AFTER WEEK ${w}`)) throw new Error('prompt lacks the current status');
+        if (t.id === 'ai' && !h.replace(/<!-- -->/g, '').includes(`After week ${w}: the dashboard reads`)) throw new Error('prompt lacks the current status');
         if (t.id === 'chat' && !h.includes(`after week ${w}`)) throw new Error('chat not updated for the week');
         return h;
       });
@@ -133,11 +133,13 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
       if (h.includes('How you played') || h.includes('Updating')) throw new Error('How you played or Updating still shown');
       if (h.includes('past managers also ran it hands-off') !== coaster) throw new Error('coaster line wrong');
       // The phone order: lesson, scores, tools, your range, the dashboard, then More detail.
-      const at = (x) => h.indexOf(x);
-      const order = ['Your game in 8 facts', 'Your dashboard said', 'Forecast score', 'Delivery (secondary)', 'How each tool on the desk would have done', 'Your range against the record', 'What your dashboard told you', 'More detail'];
+      const page = h.replace(/<textarea[\s\S]*?<\/textarea>/, '');
+      const at = (x) => page.indexOf(x);
+      const order = ['Your game in 9 facts', 'Your dashboard said', 'Forecast score', 'Delivery (secondary)', 'How each tool on the desk would have done', 'Your range against the record', 'What your dashboard told you', 'More detail'];
       if (order.some((x) => at(x) < 0) || order.some((x, k) => k && at(x) < at(order[k - 1]))) throw new Error('reveal order wrong');
       const fw = p.history.find((r) => r.rejected > 0 || r.reported >= 0.999).week;
-      if (!/Your game in 8 facts/.test(h) || (h.match(/aria-hidden="true">[1-8]<\/span>/g) || []).length !== 8) throw new Error('8 numbered facts missing');
+      if (!/Your game in 9 facts/.test(h) || (h.match(/aria-hidden="true">[1-9]<\/span>/g) || []).length !== 9) throw new Error('9 numbered facts missing');
+      if (!h.includes('Download my results (.txt)') || !h.replace(/<[^>]+>/g, '').includes('You planned ')) throw new Error('the plan fact or the download is missing');
       for (const x of [`Your dashboard said week ${fw}.`, `It was accepted in week ${p.scores().outcome}.`, `The past contracts said week 14`, `You gave ${f.onTimeChance}% to week 12; it`, 'first passed 90% in week']) if (!h.replace(/<[^>]+>/g, '').includes(x)) throw new Error(`"${x}" missing`);
       if (h.includes('BLP') || h.includes('result code')) throw new Error('a result code is still shown');
       return h;
@@ -155,26 +157,31 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
       return h;
     });
   }
-  // Fix 13: the gut forecast first, then the tour, then the final forecast with the comparison card.
-  ok('Brief, step 1: the gut forecast, with Team Chat, Last 5 and Records locked', () => {
-    const h = renderToString(<Brief onCommit={() => {}} />).replace(/<!-- -->/g, '');
-    if (!h.includes('Step 1: your gut forecast.') || !h.includes('Commit gut forecast') || (h.match(/disabled=""[^>]*>🔒 /g) || []).length !== 3) throw new Error('gut stage wrong');
+  // No gut stage: every tab is open; the commit waits for the plan, the forecast and the tour.
+  ok('Brief: every tab open, the commit waits for the tour', () => {
+    const h = renderToString(<Brief onCommit={() => {}} initialPlan={{ crews: 3, inspect: 0.1, shift: 'none' }} initialOpened={['status', 'chat']} />).replace(/<!-- -->/g, '');
+    if (!h.includes('Every tab is open. Before you commit, open Last 5, Records.') || !/disabled=""[^>]*>Commit plan and forecast/.test(h) || h.includes('These disagree by') || h.includes('🔒') || /gut forecast/i.test(h)) throw new Error('tour lock wrong');
     return h;
   });
-  ok('Brief, step 2: the final commit waits for the tour', () => {
-    const h = renderToString(<Brief onCommit={() => {}} initialPlan={{ crews: 3, inspect: 0.1, shift: 'none' }} initialGut={{ week: 11, low: 10, high: 12, onTimeChance: 70 }} initialOpened={['status', 'chat']} />).replace(/<!-- -->/g, '');
-    if (!h.includes('Open Last 5, Records before your final forecast.') || !/disabled=""[^>]*>Commit final forecast/.test(h) || h.includes('These disagree by')) throw new Error('tour lock wrong');
+  ok('Brief after the tour: the comparison card, the plan cost, and the commit open', () => {
+    const h = renderToString(<Brief onCommit={() => {}} initialPlan={{ crews: 3, inspect: 0.1, shift: 'none' }} initialOpened={['chat', 'last5', 'records']} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+    for (const x of ['Status Report', 'Team Chat: Dana', 'Team Chat: Mabel', 'Last 5 Contracts', 'Records, like my plan', 'These disagree by', 'Pick one to use, or set your own.', 'This plan costs about', 'Money lasts']) if (!h.includes(x)) throw new Error(`missing "${x}"`);
+    if (!h.includes('Set the week, both ends of the range and the chance first.') || /Open [^<]* first\./.test(h) || h.includes('Your gut forecast') || /best|right answer/i.test(h.slice(h.indexOf('These disagree'), h.indexOf('These disagree') + 80))) throw new Error('commit waits on the tour, a gut row, or a row marked best');
     return h;
   });
-  ok('Brief, step 2 after the tour: the comparison card, the plan cost, and the final commit open', () => {
-    const h = renderToString(<Brief onCommit={() => {}} initialPlan={{ crews: 3, inspect: 0.1, shift: 'none' }} initialGut={{ week: 11, low: 10, high: 12, onTimeChance: 70 }} initialOpened={['chat', 'last5', 'records']} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-    for (const x of ['Your gut forecast', 'Status Report', 'Team Chat: Dana', 'Team Chat: Mabel', 'Last 5 Contracts', 'Records, like my plan', 'These disagree by', 'Pick one to use, or set your own.', 'This plan costs about', 'Money lasts']) if (!h.includes(x)) throw new Error(`missing "${x}"`);
-    if (/disabled=""[^>]*>Commit final forecast/.test(h) || /best|right answer/i.test(h.slice(h.indexOf('These disagree'), h.indexOf('These disagree') + 80))) throw new Error('final commit locked, or a row marked best');
+  ok('Ask an AI: the prompt, a copy button, and no forecast of its own', () => {
+    const h = renderToString(<Brief onCommit={() => {}} initialTab="ai" initialPlan={{ crews: 3, inspect: 0.1, shift: 'none' }} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+    if (!h.includes('id="ai-prompt"') || !h.includes('When will the customer accept the contract?') || !/Copy/.test(h)) throw new Error('Ask an AI tab wrong');
+    return h;
+  });
+  ok('Team Chat: each colleague says what they go by', () => {
+    const h = renderToString(<Brief onCommit={() => {}} initialTab="chat" />).replace(/<!-- -->/g, '');
+    for (const x of ['goes by the pace of the line', 'goes by the plan on paper', 'goes by what the customer was promised', 'goes by the record of past contracts', 'goes by defects and rework']) if (!h.includes(x)) throw new Error(`missing "${x}"`);
     return h;
   });
   ok('Brief, front tab: inputs only', () => {
     const h = renderToString(<Brief onCommit={() => {}} />);
-    for (const s of ['1 · Your plan', 'Your gut forecast', 'Commit gut forecast', 'Read The Contract and the Status Report']) if (!h.includes(s) && !h.includes(s.replace("'", '&#x27;'))) throw new Error(`missing "${s}"`);
+    for (const s of ['1 · Your plan', '2 · Your forecast', 'Commit plan and forecast', 'Every tab is open']) if (!h.includes(s) && !h.includes(s.replace("'", '&#x27;'))) throw new Error(`missing "${s}"`);
     for (const s of ['two scores', 'Two scores']) if (h.includes(s)) throw new Error(`front tab still shows "${s}"`);
     // On a desktop the right panel starts on The Contract; on a phone it is hidden until the tab is chosen.
     if (!/<div class="hidden lg:block">.*What you decide each week/s.test(h)) throw new Error('the default right panel is not The Contract, desktop only');
@@ -214,7 +221,7 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
         if (t.id === 'status' && (!h.includes('Schedule efficiency') || !h.includes('Cost efficiency') || !h.includes('Projected finish') || !h.includes('Credit line') || /EV ÷|BAC|planned value/.test(h))) throw new Error('status report jargon or money tiles wrong');
         if (t.id === 'simulator' && !h.includes('Include rework')) throw new Error('rework switch missing');
         if (t.id === 'last5' && !/#(<!-- -->)?40/.test(h)) throw new Error('last contract not record #40');
-        if (t.id === 'ai' && (!h.includes('Copy the prompt') || !h.includes('knows what you') || !h.includes('always includes the contract') || h.includes('includes: The Contract') || h.includes('PAST CONTRACTS'))) throw new Error('AI prompt should hold only the rules until tabs are opened');
+        if (t.id === 'ai' && (!h.includes('Copy the prompt') || !h.includes('Past contracts on this line (40)') || !h.includes('gives no forecast of its own') || /reference class|base rate|outside view/i.test(h))) throw new Error('AI prompt: the numbers and situation, no method, no forecast');
         return h;
       });
     }

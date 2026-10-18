@@ -22,23 +22,20 @@ function Choice({ label, options, value, onChange }) {
   );
 }
 
-// Before the gut forecast only The Contract and the Status Report are open; before the final one,
-// the student must have opened each of these.
+// Every tab is open from the start; before committing, // the student must have opened each of these.
 const TOUR = ['chat', 'last5', 'records'];
 const TOUR_NAMES = { chat: 'Team Chat', last5: 'Last 5', records: 'Records' };
 const range = (f) => (f.low === f.high ? `week ${f.low}` : `${f.low}–${f.high}`);
 
-export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit', initialPlan = null, initialGut = null, initialOpened = [] }) {
+export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit', initialPlan = null, initialOpened = [] }) {
   const c = CONFIG;
 
   const S = useMemo(() => screenData(), []);
   // No starting forecast: each number is unset until the student sets it (or a tool's numbers are used).
-  const [week, setWeek] = useState(initialGut ? initialGut.week : null);
-  const [low, setLow] = useState(initialGut ? initialGut.low : null);
-  const [high, setHigh] = useState(initialGut ? initialGut.high : null);
-  const [chance, setChance] = useState(initialGut ? initialGut.onTimeChance : null);
-  // Two stages: the gut forecast (from The Contract and the Status Report), then the final one, after the tour.
-  const [gut, setGut] = useState(initialGut);
+  const [week, setWeek] = useState(null);
+  const [low, setLow] = useState(null);
+  const [high, setHigh] = useState(null);
+  const [chance, setChance] = useState(null);
   // The desk: which tab is showing, the tool tabs opened (in order), when the briefing
   // opened, and the numbers last copied in from a tool.
   const [tab, setTab] = useState(initialTab);
@@ -52,7 +49,6 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const planReady = plan.crews !== null && plan.inspect !== null && plan.shift !== null;
   const setPlanPart = (k) => (v) => setPlan((p) => ({ ...p, [k]: v }));
 
-  const locked = gut ? [] : TOUR;
   const left = TOUR.filter((id) => !opened.includes(id));
 
   const setPoint = (v) => {
@@ -64,7 +60,6 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const intervalOk = forecastSet && low <= week && week <= high;
 
   const open = (id) => {
-    if (locked.includes(id)) return;
     setTab(id);
     if (id !== 'commit') setOpened((o) => (o.includes(id) ? o : [...o, id]));
     window.scrollTo(0, 0);
@@ -77,22 +72,21 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
     setLoaded(id ? { id, label, numbers: n, fail: f.fail || null } : null);
     open('commit');
   };
-  const commitGut = () => { setGut({ week, low, high, onTimeChance: chance }); window.scrollTo(0, 0); };
   const commit = () => {
     const given = loaded ? loaded.numbers : null;
     const edited = !given || given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
     const source = loaded ? (loaded.id === 'chat' && loaded.label ? `${loaded.label}'s` : tabById(loaded.id)?.name || '') : '';
     const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', source, tabs: opened.filter(isCheck).length, minutes: (Date.now() - startedAt) / 60000, edited, order: opened };
-    onCommit({ week, low, high, onTimeChance: chance, plan, desk, gut }, seed.trim());
+    onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim());
   };
   const deskPlan = planReady ? plan : { crews: 0, inspect: 0, shift: 'none' };
-  const rows = gut && planReady ? comparisonRows(S, plan, gut) : [];
+  const rows = planReady ? comparisonRows(S, plan, null) : [];
   const spread = rows.length ? Math.max(...rows.map((r) => r.f.week)) - Math.min(...rows.map((r) => r.f.week)) : 0;
   // The stated plan's cost, as the Status Report projects it: the plan run week by week from week 0.
   const cm = planReady ? costManagement(S, plan) : null;
   const finishWeek = planReady ? schedule(S, plan).forecast.week : null;
 
-  const comparison = gut && rows.length > 0 && !left.length ? (
+  const comparison = rows.length > 0 && !left.length ? (
             <Card title="Every forecast on the desk" tone="amber">
               <table className="w-full text-xs text-slate-200">
                 <thead className="text-slate-400"><tr><th className="text-left font-semibold py-1">Forecast</th><th className="text-right font-semibold">Week</th><th className="text-right font-semibold">80% range</th><th className="text-right font-semibold">Wk 12</th><th /></tr></thead>
@@ -130,18 +124,11 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
         </p>
       </header>
 
-      <TabStrip tab={tab} opened={opened} onOpen={open} locked={locked} lockedWhy="Opens after your gut forecast" />
+      <TabStrip tab={tab} opened={opened} onOpen={open} />
 
-      {!gut ? (
-        <p className="text-sm text-slate-200 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2">
-          <strong className="text-white">Step 1: your gut forecast.</strong> Read The Contract and the Status Report, choose a plan and set your numbers. The other tabs open after this.
-        </p>
-      ) : (
-        <p className={`text-sm rounded-lg px-3 py-2 border ${left.length ? 'text-amber-100 bg-amber-500/15 border-amber-400' : 'text-slate-200 bg-slate-900 border-slate-700'}`} role="status">
-          <strong className="text-white">Step 2: your final forecast.</strong>{' '}
-          {left.length ? `Open ${left.map((id) => TOUR_NAMES[id]).join(', ')} before your final forecast.` : 'Keep your gut numbers, use another row below, or set your own.'}
-        </p>
-      )}
+      <p className={`text-sm rounded-lg px-3 py-2 border ${left.length ? 'text-amber-100 bg-amber-500/15 border-amber-400' : 'text-slate-200 bg-slate-900 border-slate-700'}`} role="status">
+        {left.length ? `Every tab is open. Before you commit, open ${left.map((id) => TOUR_NAMES[id]).join(', ')}.` : 'Use any forecast on the desk, or set your own.'}
+      </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] gap-4 items-start">
       <div className={`${onFront ? '' : 'hidden lg:block'} lg:sticky lg:top-4 min-w-0`}>
@@ -162,7 +149,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
               </p>
             )}
           </div>
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-1">2 · {gut ? 'Your final forecast' : 'Your gut forecast'}</div>
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-1">2 · Your forecast</div>
           {loaded && (
             <p className="text-xs text-slate-300 bg-slate-950 rounded-lg px-3 py-2">
               Loaded from <strong className="text-white">{tabById(loaded.id).name}{loaded.label ? ` (${loaded.label})` : ''}</strong>: week {loaded.numbers.week},{' '}
@@ -183,8 +170,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
             onChange={setChance} format={(v) => `${v}%`}
           />
           <ScoringNote className="bg-slate-950 rounded-lg px-3 py-2" />
-          {gut ? (<>
-            {seedLocked ? (
+          {seedLocked ? (
               <p className="text-sm text-slate-400">Scenario code <span className="font-mono text-white">{seed}</span>{' '}
                 <button type="button" onClick={() => setSeedLocked(false)} className="text-xs text-slate-400 underline">change</button></p>
             ) : (
@@ -194,19 +180,11 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
                   className="min-w-0 flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono" />
               </label>
             )}
-            <p className="text-xs text-slate-400">Your gut forecast: week {gut.week}, {range(gut)}, {gut.onTimeChance}%. The final forecast is the one that is scored.</p>
-            <button type="button" disabled={!intervalOk || !planReady || left.length > 0} onClick={commit}
-              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold">
-              Commit final forecast, start week 1
-            </button>
-            {left.length > 0 && <p className="text-xs text-amber-200 text-center -mt-2">Open {left.map((id) => TOUR_NAMES[id]).join(', ')} first.</p>}
-          </>) : (<>
-            <button type="button" disabled={!intervalOk || !planReady} onClick={commitGut}
-              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold">
-              Commit gut forecast
-            </button>
-            {(!planReady || !forecastSet) && <p className="text-xs text-slate-500 text-center -mt-2">{!planReady ? 'Choose all three parts of your plan' : 'Set the week, both ends of the range and the chance'} first.</p>}
-          </>)}
+          <button type="button" disabled={!intervalOk || !planReady || left.length > 0} onClick={commit}
+            className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold">
+            Commit plan and forecast, start week 1
+          </button>
+          {(!planReady || !forecastSet || left.length > 0) && <p className="text-xs text-amber-200 text-center -mt-2">{!planReady ? 'Choose all three parts of your plan first.' : !forecastSet ? 'Set the week, both ends of the range and the chance first.' : `Open ${left.map((id) => TOUR_NAMES[id]).join(', ')} first.`}</p>}
         </div>
       </Card>
       </div>

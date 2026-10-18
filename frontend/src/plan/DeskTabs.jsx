@@ -1,7 +1,7 @@
 // The Decision Desk's tool tabs. Each is a generic replica of a dashboard genre, fed
 // only by desk.js, which sees only what the briefing shows.
 import { useState } from 'react';
-import { statusReport, lastFive, teamChat, tabById } from './desk.js';
+import { statusReport, lastFive, teamChat, aiPrompt, tabById } from './desk.js';
 import { CONFIG, pastContracts, describePlan, onboardingRule, failuresLine } from './engine';
 import { Card, ScoringNote } from './ui';
 import { CHART_W as W, CHART_CLASS, svgText } from './chartStyle';
@@ -205,13 +205,15 @@ function ChatTab({ S, plan, onUse, planNote, live }) {
   const [open, setOpen] = useState(null);
   return (
     <Frame id="chat" kind="team thread" planNote={planNote}>
+      <p className="text-xs text-slate-400 mb-2">Five colleagues, five ways of answering the same question. Each tag says what that person goes by.{live ? ` Updated after week ${live.week}.` : ''}</p>
       <div className="bg-slate-950 rounded-xl p-3 space-y-3">
         <div className="text-xs text-slate-500"># contract-200 · {live ? `after week ${live.week} · ` : ''}You: When will we be done?</div>
         {people.map((p) => (
           <div key={p.key} className="flex gap-2">
             <div className="w-8 h-8 rounded-full bg-violet-500/30 text-violet-200 text-sm font-bold flex items-center justify-center shrink-0">{p.name[0]}</div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs"><span className="font-semibold text-white">{p.name}</span> <span className="text-slate-500">{p.role}</span></div>
+              <div className="text-xs"><span className="font-semibold text-white">{p.name}</span> <span className="text-slate-500">{p.role}</span>
+                <span className="ml-1 inline-block rounded bg-violet-500/20 text-violet-200 px-1.5 py-0.5 text-[11px]">{p.approach}</span></div>
               <div className="text-sm text-slate-200">{p.says}</div>
               <div className="flex gap-3 mt-1 text-xs">
                 <button type="button" className="text-violet-300 underline" aria-expanded={open === p.key} onClick={() => setOpen(open === p.key ? null : p.key)}>{open === p.key ? 'Hide reasoning' : 'Why?'}</button>
@@ -222,6 +224,26 @@ function ChatTab({ S, plan, onUse, planNote, live }) {
           </div>
         ))}
       </div>
+    </Frame>
+  );
+}
+
+function AiTab({ S, plan, planNote, live }) {
+  const text = aiPrompt(S, plan, live);
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); } catch {
+      // No clipboard (an old browser, or not allowed): select the text so it can be copied by hand.
+      const el = document.getElementById('ai-prompt'); if (el) { el.focus(); el.select(); }
+    }
+  };
+  return (
+    <Frame id="ai" kind="prompt for your AI assistant" planNote={planNote}>
+      <p className="text-sm text-slate-300">Copy this into any AI assistant. It holds the basic numbers and the situation{live ? `, up to week ${live.week}` : ''}, and asks one question. How you question the AI after that is up to you.</p>
+      <button type="button" onClick={copy} className="mt-2 w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">{copied ? 'Copied' : 'Copy the prompt'}</button>
+      <textarea id="ai-prompt" readOnly value={text} rows={10} onFocus={(e) => e.target.select()}
+        className="mt-2 w-full bg-slate-950 border border-slate-700 rounded-xl p-3 font-mono text-[11px] text-slate-300" />
+      <p className="text-[11px] text-slate-500 mt-1">{text.length.toLocaleString()} characters. This tab gives no forecast of its own; type the AI's numbers into your forecast if you want to use them.</p>
     </Frame>
   );
 }
@@ -249,6 +271,7 @@ export default function DeskTab({ id, S, plan, planReady, onUse, live = null }) 
     case 'status': return <StatusTab {...props} />;
     case 'last5': return <Last5Tab {...props} />;
     case 'chat': return <ChatTab {...props} />;
+    case 'ai': return <AiTab {...props} />;
     case 'records': return <RecordsTab plan={plan} planReady={planReady || !!live} onUse={onUse} />;
     default: return null;
   }

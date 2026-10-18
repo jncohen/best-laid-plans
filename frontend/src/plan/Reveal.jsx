@@ -1,10 +1,19 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CONFIG, pastContracts, playedPlan, judgeForecast, describePlan, firstCloseWeek, playSummary, dashboardPeak, matchContracts, isCheck } from './engine';
 import { screenData, allForecasts, tabById, tabByLetter, costManagement } from './desk.js';
 import { Card } from './ui';
 import { money } from './format';
 import { RevealChart, ForecastChart, RangeChart } from './charts';
-import { gameFacts } from './facts';
+import { gameFacts, resultsText } from './facts';
+
+// Each finished game on this browser is a numbered run, so a replay never overwrites the first play's file.
+function nextRun(code) {
+  try {
+    const k = `blp-runs-${code}`, n = (Number(localStorage.getItem(k)) || 0) + 1;
+    localStorage.setItem(k, String(n));
+    return n;
+  } catch { return 1; }
+}
 
 // What each tool sees and can't see: shown here, after the outcome, not on the tabs.
 const TOOL_TAB = { status: 'status', last5: 'last5', 'records-all': 'records', 'records-plan': 'records' };
@@ -68,11 +77,23 @@ export default function Reveal({ project, onReplay }) {
   const failLine = p.result === 'BANKRUPT' ? `Your company went bankrupt in week ${p.week}.` : p.result === 'TERMINATED' ? `The customer terminated the contract after week ${c.horizon}.` : null;
   const end = Math.ceil(Math.max(outcome, c.deadline, past.p90)) + 1;
   const facts = useMemo(() => gameFacts(p), [p]);
+  const code = p.seedInput ?? p.seed;
+  const [run, setRun] = useState(1);
+  const counted = useRef(false);
+  useEffect(() => { if (!counted.current) { counted.current = true; setRun(nextRun(code)); } }, [code]);
+  const text = useMemo(() => resultsText(p, facts, { run }), [p, facts, run]);
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `best-laid-plans-${code}-run${run}.txt`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
       {/* Numbered, so the room can answer "hands up if fact 3 happened to you". */}
-      <Card title="Your game in 8 facts" tone="amber">
+      <Card title="Your game in 9 facts" tone="amber">
         <ol className="space-y-2">
           {facts.map((x) => (
             <li key={x.n} className="flex gap-3 text-sm text-slate-100 leading-snug">
@@ -81,6 +102,17 @@ export default function Reveal({ project, onReplay }) {
             </li>
           ))}
         </ol>
+        {/* A text file of this run, for class discussion: replays get their own run number. */}
+        <div className="mt-3 space-y-2">
+          <button type="button" onClick={download} className="w-full py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold">
+            Download my results (.txt)
+          </button>
+          <p className="text-xs text-slate-400">Run {run} on this browser. Keep the file from your first play; a replay saves as a new run.</p>
+          <details className="text-xs text-slate-300">
+            <summary className="cursor-pointer text-slate-400">Show the text to copy (phones)</summary>
+            <textarea readOnly value={text} rows={10} className="mt-2 w-full rounded bg-slate-950 border border-slate-700 p-2 font-mono text-[11px]" />
+          </details>
+        </div>
       </Card>
 
       <header>

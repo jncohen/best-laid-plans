@@ -3,7 +3,7 @@
  * room "hands up if fact 3 happened to you". Every fact is computed from the finished
  * project and the briefing; nothing here changes a score or an outcome.
  */
-import { CONFIG, Project, pastContracts, historyMean, dashboardPeak } from './engine.js';
+import { CONFIG, Project, pastContracts, historyMean, dashboardPeak, describePlan, playSummary, forecastParts } from './engine.js';
 import { screenData, allForecasts, tabById } from './desk.js';
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -111,7 +111,18 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
   const outcome = s.outcome;
   const luckier = replay.weeks.filter((w) => w > outcome).length;
 
-  return [
+  // 0. The plan: what was stated, whether week 1 ran as stated, and how much changed after.
+  const w1 = rows[0];
+  const ranAsStated = p.plan && w1 ? w1.crews === Math.min(c.maxCrews, c.crews + Math.min(c.maxHirePerWeek, p.plan.crews)) && w1.inspect === p.plan.inspect && w1.shift === (p.plan.shift === 'every') : null;
+  const changed = playSummary(p).weeks.filter((w) => w.week > 1 && w.decided).length;
+  const end = rows[rows.length - 1];
+  const planText = p.plan
+    ? `You planned ${describePlan(p.plan)}. ${ranAsStated ? 'Week 1 ran as planned' : 'You changed it before playing week 1'}; ${changed ? `you changed your decisions in ${plural(changed, 'later week')}` : 'you changed nothing after that'}${end ? `, and finished with ${plural(end.crews, 'crew')} and ${Math.round(end.inspect * 100)}% inspection` : ''}.`
+    : 'You stated no plan.';
+
+  const facts = [
+    { n: 0, key: 'plan', title: 'Your plan', value: { plan: p.plan, ranAsStated, changed },
+      text: planText },
     { n: 1, key: 'start', title: 'Your starting point', value: { week: f.week, near: start, gut: p.gutForecast ? p.gutForecast.week : null },
       text: p.gutForecast
         ? `Gut: week ${p.gutForecast.week}. Final: week ${f.week}${p.gutForecast.week === f.week && p.gutForecast.low === f.low && p.gutForecast.high === f.high ? ', kept after the tour' : ' (after the tour)'}: ${start.join(' and ')}.`
@@ -143,4 +154,36 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
       text: `With exactly your decisions, other luck gave week ${wk(replay.median)} typically (${wk(replay.p10)}–${wk(replay.p90)}); you were luckier than ${luckier} of ${replay.draws}. `
         + `With your decisions and other luck, your 80% range held in ${replay.held} of ${replay.draws}; week ${c.deadline} was made in ${replay.onTime}, and the company went bankrupt in ${replay.bankrupt}.` },
   ];
+  return facts.map((x, i) => ({ ...x, n: i + 1 }));
+}
+
+/**
+ * The run as a plain text file, for the student to keep (so a replay doesn't lose the first game):
+ * the plan, the forecasts, the outcome and scores, the facts, and the game week by week.
+ */
+export function resultsText(p, facts, { run = 1, date = new Date() } = {}) {
+  const c = p.cfg || CONFIG, s = p.scores(), f = p.forecast;
+  const parts = s.parts || forecastParts(f, s.outcome, s.onTime, c);
+  const lines = [
+    'Best Laid Plans: my results',
+    `Scenario code: ${p.seedInput ?? p.seed}   Run: ${run}   Date: ${date.toISOString().slice(0, 10)}`,
+    '',
+    `Plan: ${p.plan ? describePlan(p.plan) : 'none stated'}`,
+    `Forecast committed before week 1: week ${f.week}, 80% range ${f.low}–${f.high}, ${f.onTimeChance}% chance of week ${c.deadline}`,
+    `Outcome: ${p.result === 'DELIVERED' ? `accepted in week ${p.finishWeek}` : p.result === 'BANKRUPT' ? `bankrupt in week ${p.week}, never delivered` : `terminated after week ${c.horizon}, never delivered`}`,
+    `Forecast score: ${s.forecast}${s.parts ? ` (100 − point ${parts.point} − range ${parts.range} − chance ${parts.chance})` : ' (never delivered, so the range missed)'}`,
+    `Delivery score: ${s.delivery}`,
+    '',
+    'Your game in facts:',
+    ...facts.map((x) => `${x.n}. ${x.title}. ${x.text}`),
+    '',
+    'Week by week:',
+    'week,crews,inspection_pct,second_shift,units_built,defects_found,units_rejected,scope_added,dashboard_pct,forecast_week,range',
+    ...p.history.filter((r) => !r.bankrupt).map((r) => {
+      const e = p.forecastLog.find((x) => x.week === r.week);
+      return [r.week, r.crews, Math.round(r.inspect * 100), r.shift ? 'yes' : 'no', Math.round(r.built), Math.round(r.found), r.rejected, r.shock, Math.round(r.reported * 100),
+        e ? e.forecast : '', e && e.low !== undefined ? `${e.low}-${e.high}` : ''].join(',');
+    }),
+  ];
+  return lines.join('\n');
 }

@@ -248,6 +248,10 @@ export function teamChat(S, plan, L = null) {
     : m.week !== all.week ? ` The ones run like yours came in around week ${m.week}.` : '')
     + (m.failed ? ` And ${word(m.failed)} of the ${word(m.n)} run like yours never got delivered.` : '');
   const lastRow = L ? L.rows[L.rows.length - 1] : null;
+  const shown = lastRow ? Math.round(100 * lastRow.reported) : 0;
+  // The record's own last stretch: how long after the dashboard read 100% the customer accepted.
+  const tails = S.contracts.filter((r) => r.delivered && r.dashboardFullWeek).map((r) => r.accepted - r.dashboardFullWeek).sort((a, b) => a - b);
+  const tail = tails.length ? tails[Math.floor(tails.length / 2)] : gap;
   const scopeNews = lastRow && lastRow.shock > 0 ? ` The customer just added ${lastRow.shock} units.` : '';
 
   let priya;
@@ -263,24 +267,64 @@ export function teamChat(S, plan, L = null) {
       reasoning: `The plan from here (week ${sc.week}) plus the rework the last contract needed after its dashboard read 100% (${gap} weeks${p.inspect > 0 ? ', halved for inspection' : ''}).` };
   }
   return [
-    { key: 'supervisor', name: 'Dana', role: 'Line supervisor', frame: 'The pace', confidence: 65, forecast: { week: atPace, low: Math.max(now + 1, atPace - 1), high: atPace + 1, chance: atPace <= R.deadline ? 75 : 30 },
+    { key: 'supervisor', name: 'Dana', role: 'Line supervisor', frame: 'The pace', approach: 'goes by the pace of the line', confidence: 65, forecast: { week: atPace, low: Math.max(now + 1, atPace - 1), high: atPace + 1, chance: atPace <= R.deadline ? 75 : 30 },
       says: L
         ? `We built ${Math.round(lastRow.built)} last week, about ${observedPerCrew(S, L).toFixed(1)} a crew; the last contract did ${(pace(S) / R.crews).toFixed(1)}.${scopeNews} At this pace that's ${word(atPace - now)} more week${atPace - now === 1 ? '' : 's'}: week ${atPace}, if nothing goes wrong.`
         : `At this pace, ${word(atPace)} weeks, if nothing goes wrong.`,
       reasoning: `${Math.round(left)} units left at ${v.toFixed(1)} a week${L ? ' (the last few weeks built)' : " (the last six weeks' pace)"}.` },
-    { key: 'planner', name: 'Sam', role: 'Planner', frame: 'The plan on paper', confidence: 70, forecast: sc,
+    { key: 'planner', name: 'Sam', role: 'Planner', frame: 'The plan on paper', approach: 'goes by the plan on paper', confidence: 70, forecast: sc,
       says: L ? `Re-planned from here, your plan finishes in week ${sc.week}.` : `On paper your plan finishes in week ${sc.week}. That's before any surprises.`,
       reasoning: `Your plan week by week under the stated rules${L ? ', from the units left and the rate so far' : ''}: onboarding, coordination, shift, inspection. No defects or scope change.` },
-    { key: 'sales', name: 'Kim', role: 'Sales lead', frame: 'The promise', confidence: 60, forecast: { week: Math.max(R.deadline, now + 1), low: Math.max(R.deadline - 1, now + 1), high: Math.max(R.deadline + 1, now + 2), chance: now < R.deadline ? 70 : 0 },
-      says: now >= R.deadline ? `We're past week ${R.deadline}. The customer calls every day.` : L ? `We promised week ${R.deadline}. The customer asked how it's going.` : `We promised week ${R.deadline}.`,
+    { key: 'sales', name: 'Kim', role: 'Sales lead', frame: 'The promise', approach: 'goes by what the customer was promised', confidence: 60, forecast: { week: Math.max(R.deadline, now + 1), low: Math.max(R.deadline - 1, now + 1), high: Math.max(R.deadline + 1, now + 2), chance: now < R.deadline ? 70 : 0 },
+      says: now >= R.deadline ? `Week ${now} is done and we're past week ${R.deadline}. The customer calls every day; the dashboard says ${shown}%.`
+        : L ? `Week ${now} is done and the dashboard says ${shown}%. We promised week ${R.deadline}; the customer asked again how it's going.` : `We promised week ${R.deadline}.`,
       reasoning: 'What the customer was told.' },
-    { key: 'veteran', name: 'Mabel', role: 'Veteran on the line', frame: 'The record', confidence: 80, forecast: { week: Math.max(m.week, now + 1), low: Math.max(m.low, now + 1), high: Math.max(m.high, now + 1), chance: m.chance, fail: m.fail },
-      says: `Twenty-odd years on this line. These take about ${word(all.week)} weeks, give or take ${spread <= 2 ? 'a couple' : word(spread)}. I've seen maybe ${inWords(all.chance / 100)} make ${word(R.deadline)}.${yours}`,
+    { key: 'veteran', name: 'Mabel', role: 'Veteran on the line', frame: 'The record', approach: 'goes by the record of past contracts', confidence: 80, forecast: { week: Math.max(m.week, now + 1), low: Math.max(m.low, now + 1), high: Math.max(m.high, now + 1), chance: m.chance, fail: m.fail },
+      says: `Twenty-odd years on this line. These take about ${word(all.week)} weeks, give or take ${spread <= 2 ? 'a couple' : word(spread)}. I've seen maybe ${inWords(all.chance / 100)} make ${word(R.deadline)}.${yours}`
+        + (L ? ` You're at ${shown}% on the dashboard after ${word(now)} week${now === 1 ? '' : 's'}. On this line the customer accepts about ${word(tail)} week${tail === 1 ? '' : 's'} after the dashboard first reads 100%.` : ''),
       reasoning: `The record of ${S.contracts.length} contracts: median week ${all.week}, most between ${all.low} and ${all.high} among those delivered, ${all.chance}% on time${all.fail ? `; ${all.fail}` : ''}. For your plan, the ${m.n} run like it: delivered week ${m.week} (${m.low}–${m.high})${m.fail ? `; ${m.fail}` : ''}.` },
-    { key: 'quality', name: 'Priya', role: 'Quality lead', frame: rejected > 0 ? 'The acceptance test' : 'Rework, from the last contract', confidence: 70, ...priya },
+    { key: 'quality', name: 'Priya', role: 'Quality lead', frame: rejected > 0 ? 'The acceptance test' : 'Rework, from the last contract', approach: 'goes by defects and rework', confidence: 70, ...priya },
   ];
 }
 
+
+// ── Ask an AI ────────────────────────────────────────────────────────────────
+const k$ = (n) => (Math.abs(n) >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : `$${Math.round(n / 1000)}k`);
+/**
+ * A plain prompt with the basic numbers and the situation, for the student to paste into any AI
+ * assistant. It asks one question and says nothing about method: getting a good answer (asking
+ * about the past contracts, or forecasting theory) is up to the student.
+ */
+export function aiPrompt(S, plan, L = null) {
+  const R = S.rules, p = asPlan(plan);
+  const planText = `${p.crews ? `add ${p.crews} crew${p.crews > 1 ? 's' : ''} at the start` : 'add no crews'}, ${p.inspect ? `${Math.round(p.inspect * 100)}% of the line on inspection` : 'no inspection'}, ${p.shift === 'none' ? 'no second shift' : p.shift === 'late' ? 'a second shift in weeks 9–11' : 'a second shift every week'}`;
+  const row = (r) => [r.id, r.crewsAdded, Math.round(r.inspect * 100), r.shiftWeeks, r.scopeWeek, r.scopeUnits, r.dashboardFullWeek, r.rejected, r.delivered ? r.accepted : r.bankrupt ? 'bankrupt' : 'terminated'].join(',');
+  const lines = [
+    'I manage a production contract. Here is the situation.',
+    '',
+    `- Build ${R.scope} units by week ${R.deadline}, starting with ${R.crews} crews and a ${k$(R.budget)} budget (plus ${k$(R.creditLine)} of credit; past that the company goes bankrupt).`,
+    `- The customer accepts the contract when its acceptance test passes every unit; not accepted by week ${R.horizon}, it terminates the contract.`,
+    '- Some built units are defective; the progress dashboard counts them done until inspection or the acceptance test finds them. Units rejected at acceptance take twice the work to fix.',
+    '- The customer will add units once, partway through, at a week and in an amount not known in advance.',
+    `- Each crew costs ${k$(R.crewWeek)} a week; adding one costs ${k$(R.hireFee)} and slows the whole line for ${R.onboardingWeeks} weeks. A second shift adds ${Math.round((R.shiftBoost - 1) * 100)}% output. Inspection moves part of the line from building to checking.`,
+    '',
+    `The line's last contract (same line, ${R.crews} crews, no inspection): its dashboard showed ${S.history.map((v) => v.toFixed(1)).join(', ')} units in its first six weeks, read 100% in week ${S.last.dashboardFullWeek}, and was accepted in week ${S.last.deliveredWeek} with ${S.last.rejected} units rejected.`,
+    '',
+    `Past contracts on this line (${S.contracts.length}):`,
+    'id,crews_added,inspection_pct,second_shift_weeks,scope_change_week,scope_change_units,dashboard_100pct_week,units_rejected,accepted_week',
+    ...S.contracts.map(row),
+    '',
+    `My plan: ${planText}.`,
+  ];
+  if (L) {
+    const last = L.rows[L.rows.length - 1];
+    lines.push('', `After week ${L.week}: the dashboard reads ${Math.round(100 * last.reported)}%, ${Math.round(L.backlog)} of ${L.totalScope} units left, ${L.crews} crews, ${k$(L.spent)} spent.`,
+      'week,units_built,crews,inspection_pct,second_shift,defects_found,units_rejected,scope_added',
+      ...L.rows.map((r) => [r.week, Math.round(r.built), r.crews, Math.round(r.inspect * 100), r.shift ? 'yes' : 'no', Math.round(r.found), Math.round(r.rejected), r.shock].join(',')));
+  }
+  lines.push('', 'When will the customer accept the contract?');
+  return lines.join('\n');
+}
 
 // ── The desk ─────────────────────────────────────────────────────────────────
 /**
@@ -292,6 +336,7 @@ export const TABS = [
   { id: 'contract', letter: 'b', group: 'The Brief', name: 'The Contract', tone: 'brief', forecasts: false, sees: 'The contract, every rule and how you are scored', cant: 'How long it will take' },
   { id: 'status', letter: 'a', group: 'Dashboards', name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Progress and money: units reported complete against plan, spend, the credit line', cant: 'Whether those units will pass acceptance' },
   { id: 'chat', letter: 'f', group: 'People', name: 'Team Chat', tone: 'people', forecasts: true, sees: 'Five colleagues, each from where they sit', cant: 'Which view to weigh most' },
+  { id: 'ai', letter: 'i', group: 'People', name: 'Ask an AI', tone: 'people', forecasts: false, sees: 'Whatever you paste in: the prompt holds the basic numbers and the situation', cant: 'Anything you do not ask it' },
   { id: 'last5', letter: 'e', group: 'History', name: 'Last 5 Contracts', tone: 'record', forecasts: true, sees: 'The five newest contracts, and the story of the last one', cant: 'Whether five is enough' },
   { id: 'records', letter: 'j', group: 'History', name: 'Records', tone: 'record', forecasts: true, sees: 'What actually happened, defects and scope changes included', cant: 'Plans no past manager tried' },
 ];
@@ -322,7 +367,7 @@ export function allForecasts(S, plan, L = null) {
  * then the tabs in their usual order. No row is marked right or best.
  */
 export function comparisonRows(S, plan, gut) {
-  const rows = [{ key: 'gut', id: null, name: 'Your gut forecast', f: { week: gut.week, low: gut.low, high: gut.high, chance: gut.onTimeChance } }];
+  const rows = gut ? [{ key: 'gut', id: null, name: 'Your gut forecast', f: { week: gut.week, low: gut.low, high: gut.high, chance: gut.onTimeChance } }] : [];
   rows.push({ key: 'status', id: 'status', name: 'Status Report', f: statusReport(S, null, plan).forecast });
   for (const c of teamChat(S, plan)) rows.push({ key: `chat-${c.key}`, id: 'chat', label: c.name, name: `Team Chat: ${c.name}`, f: c.forecast });
   rows.push({ key: 'last5', id: 'last5', name: 'Last 5 Contracts', f: lastFive(S).forecast });

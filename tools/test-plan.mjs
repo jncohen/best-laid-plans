@@ -5,8 +5,8 @@ import { filterContracts, filterForPlan, sortContracts } from '../frontend/src/p
 import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, isCheck, forecastScore, forecastParts, dashboardPeak } from '../frontend/src/plan/engine.js';
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
-import { gameFacts, luckReplay } from '../frontend/src/plan/facts.js';
-import { comparisonRows } from '../frontend/src/plan/desk.js';
+import { gameFacts, luckReplay, resultsText } from '../frontend/src/plan/facts.js';
+import { comparisonRows, aiPrompt } from '../frontend/src/plan/desk.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond) => { if (cond) { pass++; console.log(`  ok   ${name}`); } else { fail++; console.log(`  FAIL ${name}`); } };
@@ -274,8 +274,8 @@ console.log('The Decision Desk sees only the screen');
   t('Cost Management implies the Schedule\'s finish, and shows the credit line', JSON.stringify(costManagement(S, COMMON_PLANS[4]).forecast) === JSON.stringify(schedule(S, COMMON_PLANS[4]).forecast)
     && costManagement(S, COMMON_PLANS[4]).limit === CONFIG.budget + CONFIG.creditLine);
   t('Cost Management: +2 crews with a shift every week runs out of money in week 13', costManagement(S, { crews: 2, inspect: 0, shift: 'every' }).brokeWeek === 13);
-  t('every tab has a one-line sees and can\'t-see, except the front tab', TABS.slice(1).every((x) => x.sees && x.cant) && TABS.length === 6 && TABS[1].id === 'contract');
-  t('tab letters are unique', new Set(TABS.map((x) => x.letter).filter(Boolean)).size === 5);
+  t('every tab has a one-line sees and can\'t-see, except the front tab', TABS.slice(1).every((x) => x.sees && x.cant) && TABS.length === 7 && TABS[1].id === 'contract');
+  t('tab letters are unique', new Set(TABS.map((x) => x.letter).filter(Boolean)).size === 6);
 }
 
 console.log('The desk during play sees only the dashboard');
@@ -320,8 +320,8 @@ console.log('Desk numbers on ledger (work order, Oct 17)');
   // Every range from the record carries its failures beside it.
   t('failures beside the ranges: all 40 carries them; ranges with none carry none', records(S).all.fail === '2 of 40 never delivered (2 bankrupt)'
     && records(S, C3I).matched.fail === null && lastFive(S).forecast.fail === null && teamChat(S, HO).find((c) => c.key === 'veteran').reasoning.includes('2 of 40 never delivered'));
-  t('the desk is six tabs: the front tab, The Contract, Status Report, Team Chat, Last 5 Contracts, Records',
-    TABS.map((t) => t.id).join() === 'commit,contract,status,chat,last5,records' && Object.keys(FORECASTERS).join() === 'status,last5,records-all,records-plan');
+  t('the desk is seven tabs: the front tab, The Contract, Status Report, Team Chat, Ask an AI, Last 5 Contracts, Records',
+    TABS.map((t) => t.id).join() === 'commit,contract,status,chat,ai,last5,records' && Object.keys(FORECASTERS).join() === 'status,last5,records-all,records-plan');
   const st = statusReport(S, null, C3I);
   t('the Status Report carries the money: planned cost, budget, credit line, cost efficiency', st.money.plannedCost === costManagement(S, C3I).cost.bac && st.money.budget === CONFIG.budget && st.money.creditLine === CONFIG.creditLine && typeof st.cpi === 'number');
 }
@@ -540,6 +540,25 @@ console.log('Fix 13: gut then final, the tour, checkpoints');
   const fs = gameFacts(p);
   t('facts 3 and 4 report the taps', fs.find((x) => x.key === 'surprise').text.endsWith('You saw it, and you kept your forecast.') && fs.find((x) => x.key === 'ninety').text.includes('At the rejection: You saw it, and you changed your forecast.'));
   t('the checkpoint log never changes an outcome', JSON.stringify(p.history) === JSON.stringify(q.history));
+}
+
+console.log('Ask an AI, the plan fact, the results file, the chat');
+{
+  const S = screenData(), plan = { crews: 3, inspect: 0.1, shift: 'none' };
+  const pr = aiPrompt(S, plan);
+  t('Ask an AI: the basic numbers and the situation, one question, no method', pr.includes('Past contracts on this line (40)') && pr.includes('My plan: add 3 crews at the start') && pr.trim().endsWith('When will the customer accept the contract?')
+    && !/reference class|base rate|outside view|inside view|forecasting/i.test(pr) && !('ai' in FORECASTERS));
+  const p = new Project('ledger', CONFIG, 7);
+  p.commit({ week: 13, low: 12, high: 15, onTimeChance: 30, plan, desk: { tool: 'j', source: 'Records', tabs: 3, minutes: 4, order: ['chat', 'last5', 'records'] } });
+  while (!p.done) { const w = p.week + 1; p.play({ hire: w === 1 ? 3 : 0, inspect: 0.1, ...(w === 9 ? { hire: -1 } : {}) }); }
+  const fs = gameFacts(p);
+  t('the facts open with the plan: stated, week 1 as planned, the later changes', fs[0].key === 'plan' && fs[0].n === 1 && fs.length === 9 && fs[0].text.startsWith('You planned +3 crews at the start, 10% inspection, no second shift. Week 1 ran as planned; you changed your decisions in 1 later week'));
+  const txt = resultsText(p, fs, { run: 2, date: new Date('2026-10-20T10:00:00Z') });
+  t('the results file holds the run, plan, forecast, scores, facts and weeks', txt.includes('Scenario code: ledger   Run: 2   Date: 2026-10-20') && txt.includes('Plan: +3 crews at the start') && txt.includes(`Forecast score: ${p.scores().forecast}`)
+    && txt.includes('1. Your plan.') && txt.includes('9. Luck.') && txt.split('\n').filter((l) => /^\d+,\d+,/.test(l)).length === p.history.length);
+  const chat0 = teamChat(S, plan), q = new Project('ledger'); q.play({ hire: 3, inspect: 0.1 }); q.play({ inspect: 0.1 }); const chat2 = teamChat(S, plan, liveScreen(q));
+  t('Team Chat says each approach, and every colleague updates during play', chat0.every((c) => c.approach && c.approach.startsWith('goes by'))
+    && ['supervisor', 'planner', 'sales', 'veteran'].every((k) => chat0.find((c) => c.key === k).says !== chat2.find((c) => c.key === k).says));
 }
 
 console.log('Playtest fixes: arithmetic, fatigue, acceptance');

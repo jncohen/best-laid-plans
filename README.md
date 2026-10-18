@@ -14,7 +14,7 @@ Written for DATA 790, Module 05: Imagining, Modeling, and Prediction.
 
 **Play it:** <https://jncohen.github.io/best-laid-plans/>. The live site serves the
 `plan-matched-record` branch (version 1.1.0). This README describes `simple-1.2`, the
-simplified 1.2 for class: six tabs, one forecast score, the richer past record with
+simplified 1.2 for class: seven tabs, one forecast score, the richer past record with
 its failures shown, personal luck, bankruptcy, and a show of hands instead of result
 codes. The full 1.2 (more tools, an Updating score, mid-game events, the inspectors'
 sample) is on `decision-desk`.
@@ -36,18 +36,27 @@ sample) is on `decision-desk`.
    - **The Contract** (second) has the terms, every disclosure and the three scores;
    - **Last 5 Contracts** has the last contract's six-week pace and its story;
    - **Records** has all 40 past contracts.
-3. The commit has two stages. **Step 1, the gut forecast:** with only The Contract and
-   the Status Report open (Team Chat, Last 5 and Records show 🔒), the student states a
-   plan and commits a gut forecast. It is recorded, never scored. **Step 2, the final
-   forecast:** the final commit stays locked until Team Chat, Last 5 Contracts and
-   Records have each been opened ("Open Team Chat, Last 5 and Records before your final
-   forecast"). Then a comparison card lists, in a fixed order, the gut forecast, the
-   Status Report, each colleague in Team Chat, Last 5 and Records for plans like theirs,
-   each with its week, 80% range and chance of week 12 (and, for Records, its failures
-   and a note when the match is loose). Under it: "These disagree by N weeks. Pick one to
-   use, or set your own." No row is marked right. The plan's projected cost is shown
-   too: "This plan costs about $X by week N … Money lasts to week M at this spend." The
-   final forecast is the one scored.
+3. There is no gut stage: every tab is open from the start, and the student makes one
+   forecast with all of the information. The commit button stays locked until the plan
+   and the forecast are set and Team Chat, Last 5 Contracts and Records have each been
+   opened ("Every tab is open. Before you commit, open Last 5, Records."). Then a
+   comparison card lists, in a fixed order, the Status Report, each colleague in Team
+   Chat, Last 5 and Records for plans like theirs, each with its week, 80% range and
+   chance of week 12 (and, for Records, its failures and a note when the match is
+   loose). Under it: "These disagree by N weeks. Pick one to use, or set your own." No
+   row is marked right. The plan's projected cost is shown too: "This plan costs about
+   $X by week N … Money lasts to week M at this spend." The committed forecast is the
+   one scored.
+   **Team Chat** says each colleague's approach beside their name (Dana goes by the
+   pace of the line; Sam by the plan on paper; Kim by what the customer was promised;
+   Mabel by the record of past contracts; Priya by defects and rework), and every
+   colleague updates after each week of play with that week's numbers.
+   **Ask an AI** holds a plain prompt to copy into any AI assistant: the contract and
+   its rules, the last contract, the 40 past contracts as a table, the student's plan
+   and, during play, the dashboard week by week. It ends with one question, "When will
+   the customer accept the contract?", and says nothing about method. Getting a good
+   answer (asking about the past contracts, or about forecasting) is up to the
+   student. The tab gives no forecast of its own.
    Before committing they may open any of the open tool tabs, or none. Every tab is
    always open, with no limit. The game records which tabs were opened before
    committing, for the reveal; it never acts on that. Each
@@ -90,28 +99,37 @@ sample) is on `decision-desk`.
    credit line.
 5. At the end the finish screen states what happened ("Accepted in full in week 14.",
    or bankrupt, or terminated, never delivered) and holds the results until the class
-   reveals together. The reveal opens with **Your game in 8 facts**, numbered so the
+   reveals together. The reveal opens with **Your game in 9 facts**, numbered so the
    instructor can ask "hands up if fact 3 happened to you":
-   1. your starting point: the gut forecast and the final one ("Gut: week 11. Final:
-      week 14 (after the tour)"), and whether the final is close to the line's pace, the
+   1. your plan: what you planned, whether week 1 ran as planned, how many later weeks
+      you changed your decisions, and the crews and inspection you finished with (for
+      "What was your plan?");
+   2. your starting point: the forecast, and whether it is close to the line's pace, the
       past contracts' median, the deadline, or your own number;
-   2. whether you opened Records and Last 5 Contracts;
-   3. the week the dashboard passed 90% (its peak reading that week: 100% in a week
+   3. whether you opened Records and Last 5 Contracts;
+   4. the week the dashboard passed 90% (its peak reading that week: 100% in a week
       whose acceptance test rejected units), the units the customer then rejected, and
       whether you changed your forecast within 2 weeks of the rejection;
-   4. the scope change against the record's spread (+10 to +52), and whether you
+   5. the scope change against the record's spread (+10 to +52), and whether you
       changed your forecast within 2 weeks (only your own moves count, not the
       calendar's);
-   5. whose numbers you committed (Mabel's, the Records numbers, or your own and the
+   6. whose numbers you committed (Mabel's, the Records numbers, or your own and the
       desk forecast closest to them), and any you used during play;
-   6. whether your 80% range held, or by how many weeks it missed;
-   7. bankrupt or not (with the payroll that went past the credit line), and any
+   7. whether your 80% range held, or by how many weeks it missed;
+   8. bankrupt or not (with the payroll that went past the credit line), and any
       overspend;
-   8. luck: your exact weekly decisions replayed under 100 other personal-luck draws in
+   9. luck: your exact weekly decisions replayed under 100 other personal-luck draws in
       the same shared world: the typical week and its spread, how many of the 100 you
       were luckier than, and how often week 12 was made, the company went bankrupt and
       your range held. It takes about 2 ms on a laptop, so well under 50 ms on a
       phone.
+
+   Under the facts, **Download my results (.txt)** saves a text file of the run: the
+   scenario code, a run number and the date; the plan, forecast and outcome; the
+   Forecast score and its parts; the Delivery score; the nine facts; and the weeks as a
+   CSV. Each finished game on a browser is a new run (`best-laid-plans-ledger-run1.txt`,
+   then `run2`), so students can replay and still keep their first play for the class
+   discussion. On a phone, the same text can be copied from "Show the text to copy".
 
    Below the facts the reveal is ordered for a phone:
    1. one lesson line: "Your dashboard said week X. The past contracts said week Y. It
@@ -219,6 +237,7 @@ Colours:
 | Status Report | status report: a red/amber/green light that flags schedule or cost, in plain words (schedule efficiency, below 1 = behind plan; cost efficiency, below 1 = over budget for the work done; projected finish, 12 weeks ÷ schedule efficiency), the current scope, money tiles (spent, budget left, credit left, cost efficiency; before week 1 the plan's cost), when the money would run out, a burn-up chart; during play, units built per crew and defects found so far. The standard abbreviations (SPI, CPI, EAC) appear only in small grey text | Progress and money: units reported complete against plan, spend, the credit line · whether those units will pass acceptance |
 | **People** | | |
 | Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap), updated each week. In order: Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan re-planned from now; Kim (sales) from the promise; Mabel, a veteran on the line, from the record; Priya (quality) from rework, the last contract's or this one's | Five colleagues, each from where they sit · which view to weigh most |
+| Ask an AI | a plain prompt (the contract, the last contract, the 40 past contracts, the plan and, during play, the dashboard) to paste into any AI assistant, ending "When will the customer accept the contract?"; no method hints and no forecast of its own | Whatever the student asks it · how to question an AI about a forecast |
 | **History** | | |
 | Last 5 Contracts | the last contract's first six weeks and its pace (19.1 a week, 10.5 weeks to 200 units), an after-action review of it, and a list of the five newest contracts. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |
 | Records | historical-project database: a dot strip of the 40 past contracts with its summary (median, 10th–90th, on-time share), above a sortable, filterable table with "Contracts run like my plan" | What actually happened, defects and scope changes included · plans no past manager tried |
