@@ -67,20 +67,25 @@ sample) is on `decision-desk`.
    running forecast (week, range and chance). The forecast committed before week 1
    remains the one that is scored. The contract ends when the customer accepts it,
    when the customer terminates it after week 22, or when the company goes bankrupt.
+   The week screen is laid out as a management dashboard: a row of KPI tiles (reported
+   complete, units left, crews, budget left, money lasts to, defects found), the
+   outcomes (progress chart, forecast chart, the week's events) on the left and the
+   inputs (forecast and decisions) on the right on a desktop; on a phone they stack,
+   inputs first. The final-commit screen likewise puts the form and the comparison card
+   side by side on a desktop.
    **Keep/Change checkpoints.** After the scope change, the dashboard first passing 90%,
    an acceptance rejection (one card a week at most) and the first time the money runs
    out before the forecast, a card states what happened and the current forecast, and
    the next week stays locked until the student taps **Keep forecast** or **Change
    forecast** (which opens the range sliders). Each tap is logged with its week and
    event; the reveal's facts report "You saw it, and you kept / changed your forecast".
-   A typical game adds 3 to 5 taps: one each for the scope change and 90%, one or two
-   rejections, and sometimes the money.
-   During play the big moments are cards, not log lines: "The customer added 15 units
+   This one card is the only alert at the top: it shows in the week the event happened,
+   and goes once tapped. A typical game adds 3 to 5 taps: one each for the scope change
+   and 90%, one or two rejections, and sometimes the money.
+   The events also stay in the week's log: "The customer added 15 units
    in week 4." and "Customer acceptance test: 17 units rejected. Fixing them now takes
    34 units of work." The progress chart marks the week the dashboard first passed 90%
-   ("Dashboard: 90% done"), and banners say when the dashboard passed 90% and reached
-   100%. These cards sit at the top of the week screen and stay for two weeks. The
-   weekly screen also says "Money lasts to week N at this spend", in red when that is
+   ("Dashboard: 90% done"). The KPI row also says "Money lasts to week N at this spend", in red when that is
    before the student's forecast, and warns a week before payroll would go past the
    credit line.
 5. At the end the finish screen states what happened ("Accepted in full in week 14.",

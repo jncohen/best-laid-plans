@@ -60,6 +60,7 @@ const Tile = ({ label, value, sub, tone = 'text-white' }) => (
 // ── The contract ─────────────────────────────────────────────────────────────
 function ContractTab() {
   const c = CONFIG;
+  const Rule = ({ k, children }) => <li><strong className="text-white">{k}</strong> {children}</li>;
   return (
     <Card title="The Contract" tone="slate">
       <div className="grid grid-cols-4 gap-2 text-center">
@@ -68,26 +69,25 @@ function ContractTab() {
         <div><div className="text-lg font-bold text-white">{c.crews}</div><div className="text-[11px] text-slate-500">crews</div></div>
         <div><div className="text-lg font-bold text-white">{money(c.budget)}</div><div className="text-[11px] text-slate-500">budget</div></div>
       </div>
-      <div className="space-y-2 mt-3 text-sm text-slate-300">
-        <p>The contract is done when the customer's acceptance test passes every unit. If it has not passed by the end of week {c.horizon}, the customer terminates the contract.</p>
-        <p>Your company can overspend the budget by up to {money(c.creditLine)} on credit. Past that, it can't make payroll: the company goes bankrupt and the contract ends. Either way, bankrupt or terminated, the contract is never delivered.</p>
-        <p>Customers on this line add to the requirement partway through: every past contract on record had a scope change. Nobody knows in advance which week it comes or how many units it adds.</p>
-        <p>Some built units turn out defective. The dashboard counts them complete until inspection or the customer's acceptance test finds them.</p>
-        <p>Contracts differ: some lines build faster or slower than others, and some turn out more defects. Each week's output and inspection finds show how this one runs. Your line also has its own week-to-week luck.</p>
-      </div>
+      <ul className="space-y-1.5 mt-3 text-sm text-slate-300 list-disc pl-5">
+        <li>Done when the customer's acceptance test passes every unit. Not accepted by week {c.horizon}: the customer terminates the contract.</li>
+        <li>You can overspend by up to {money(c.creditLine)} on credit. Past that, payroll fails and the company goes bankrupt. Bankrupt or terminated, it is never delivered.</li>
+        <li>The customer will add units once, partway through (a scope change). When, and how many, isn't known.</li>
+        <li>Some built units turn out defective. The dashboard counts them done until inspection or the acceptance test finds them.</li>
+        <li>Lines differ in speed and defects. Your line also has its own week-to-week luck.</li>
+      </ul>
       <div className="mt-4 pt-3 border-t border-slate-800">
         <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">What you decide each week</div>
-        <ul className="space-y-2 text-sm text-slate-300">
-          <li><strong className="text-white">Crews.</strong> Add up to {c.maxHirePerWeek} a week ({money(c.hireFee)} each, {c.maxCrews} crews at most) or
-            release one ({money(c.releaseFee)}). {onboardingRule(c)} Every crew beyond {c.crews} makes all of them a little less efficient. Each crew costs {money(c.crewWeek)} a week.</li>
-          <li><strong className="text-white">Second shift.</strong> +{Math.round((c.shiftBoost - 1) * 100)}% output for {money(c.shiftPremiumPerCrew)} per crew. From the second straight week, tired crews make more defects.</li>
-          <li><strong className="text-white">Inspection.</strong> Move 0–30% of the line from building to checking. You build less, but you find defects while they are cheap. Each unit the customer's test rejects takes {c.lateFixMultiplier} units of work to fix.</li>
-          <li><strong className="text-white">Your forecast.</strong> Each week you may move your finish-week estimate.</li>
+        <ul className="space-y-1.5 text-sm text-slate-300">
+          <Rule k="Crews.">{money(c.crewWeek)} a crew a week. Add up to {c.maxHirePerWeek} a week ({money(c.hireFee)} each, {c.maxCrews} at most) or release one ({money(c.releaseFee)}). {onboardingRule(c)} Each crew past {c.crews} slows them all a little.</Rule>
+          <Rule k="Second shift.">+{Math.round((c.shiftBoost - 1) * 100)}% output for {money(c.shiftPremiumPerCrew)} a crew. From the second straight week, tired crews make more defects.</Rule>
+          <Rule k="Inspection.">0–30% of the line checks instead of building. A defect found early costs 1 unit; each unit the acceptance test rejects takes {c.lateFixMultiplier} units of work to fix.</Rule>
+          <Rule k="Forecast.">Move it any week.</Rule>
         </ul>
         <ScoringNote className="mt-3" />
         <p className="text-xs text-slate-400 mt-1">
-          The forecast is the one you commit before week 1: the week, the 80% range and the chance of week {c.deadline}. It loses points for being far off, for a wide range and for a range that misses: a narrow range that holds scores best.
-          Delivery: −{c.latePenaltyPerWeek} a week late, −{c.overspendPenaltyPer50k} per $50k over budget, 0 if the contract is never delivered.
+          The forecast you commit before week 1 loses points for being far off, for a wide range and for a miss: a narrow range that holds scores best.
+          Delivery: −{c.latePenaltyPerWeek} a week late, −{c.overspendPenaltyPer50k} per $50k over budget, 0 if never delivered.
         </p>
       </div>
     </Card>

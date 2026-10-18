@@ -61,7 +61,7 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     m.commit({ week: 14, low: 12, high: 16, onTimeChance: 20, plan: { crews: 0, inspect: 0, shift: 'none' } });
     const show = () => renderToString(<Play project={m} onPlay={() => {}} />).replace(/<!-- -->/g, '');
     while (m.week < 4) m.play({});
-    ok('Play: the scope change is a card', () => { const h = show(); if (!/border-amber-400[^>]*>The customer added 15 units in week 4\./.test(h)) throw new Error('no scope card'); return h; });
+    ok('Play: the scope change is one card at the top, with Keep / Change', () => { const h = show(); if (!/aria-label="What happened"[^>]*><p[^>]*>The customer added 15 units in week 4\./.test(h) || (h.match(/The customer added 15 units/g) || []).length !== 1) throw new Error('no single scope card'); return h; });
     ok('Play: a Keep/Change checkpoint blocks the next week until tapped', () => {
       const h = show();
       if (!h.includes('Keep forecast') || !h.includes('Change forecast') || !/disabled=""[^>]*>Play week 5/.test(h) || !h.includes('Your forecast: week 14')) throw new Error('checkpoint card wrong');
@@ -73,9 +73,9 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     while (!m.done && !m.history.some((r) => r.rejected > 0)) m.play({});
     ok('Play: an acceptance rejection is a card, and the 90% marker shows', () => {
       const h = show(), r = m.history[m.history.length - 1];
-      if (!new RegExp(`border-rose-400[^>]*>Customer acceptance test, week ${r.week}: ${r.rejected} units rejected\. Fixing them now takes ${r.rejected * 2} units of work\.`).test(h)) throw new Error('no rejection card');
-      if (!/Dashboard: 100% done in week \d+\. The customer ran the acceptance test\./.test(h)) throw new Error('no 100% banner');
-      if (h.indexOf('Customer acceptance test, week') > h.indexOf('Your prediction')) throw new Error('cards are not at the top');
+      const a = h.replace(/&#x27;/g, "'");
+      if (!a.includes(`Your dashboard read 100%, and the customer's acceptance test rejected ${r.rejected} units in week ${r.week}. Fixing them now takes ${r.rejected * 2} units of work.`)) throw new Error('no rejection card');
+      if (a.indexOf('acceptance test rejected') > a.indexOf('Reported complete')) throw new Error('the card is not at the top');
       if (!/Money lasts to week \d+ at this spend/.test(h)) throw new Error('no money runway line');
       if (!h.includes('Dashboard: 90% done')) throw new Error('no 90% marker');
       return h;

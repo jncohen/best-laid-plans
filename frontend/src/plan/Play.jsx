@@ -3,12 +3,24 @@ import { CONFIG, pastContracts, describePlan, onboardingRule, failuresLine, dash
 import { TABS, screenData, liveScreen } from './desk.js';
 import DeskTab from './DeskTabs';
 import TabStrip from './DeskStrip';
-import { Card, Stat, Slider } from './ui';
+import { Card, Slider } from './ui';
 import { money, pct } from './format';
 import { ProgressSpark, ForecastChart } from './charts';
 
 const DECIDE = { id: 'decide', short: "This Week's Decisions" };
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** A KPI tile on the dashboard's top row. */
+function Kpi({ label, value, sub, tone = 'text-white', children }) {
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 min-w-0">
+      <div className="text-[11px] uppercase tracking-wider text-slate-400 leading-tight">{label}</div>
+      <div className={`text-2xl font-bold font-mono leading-tight ${tone}`}>{value}</div>
+      {children}
+      {sub && <div className="text-[11px] text-slate-500 leading-tight mt-0.5">{sub}</div>}
+    </div>
+  );
+}
 
 export default function Play({ project, onPlay, initialSeen = [], initialTab = 'decide' }) {
   const c = CONFIG;
@@ -85,33 +97,22 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
 
   const late = nextWeek > c.deadline;
   const logLines = last ? last.events : [];
-  // The big moments, kept on screen as cards for two weeks: the scope change, the dashboard passing 90%
-  // and reaching 100%, and an acceptance rejection.
   const rows = p.history.filter((r) => !r.bankrupt);
-  const recent = (r) => !!r && r.week >= p.week - 1;
-  const firstNinety = rows.find((r) => dashboardPeak(r) >= 0.9), firstFull = rows.find((r) => dashboardPeak(r) >= 0.9995);
-  const moments = [
-    ...rows.filter((r) => r.shock > 0 && recent(r)).map((r) => ({ key: `s${r.week}`, tone: 'amber', text: `The customer added ${r.shock} units in week ${r.week}.` })),
-    ...(recent(firstNinety) && firstNinety !== firstFull ? [{ key: 'n90', tone: 'sky', text: `Dashboard: 90% done in week ${firstNinety.week} (it read ${Math.round(dashboardPeak(firstNinety) * 100)}%).` }] : []),
-    ...(recent(firstFull) ? [{ key: 'n100', tone: 'sky', text: `Dashboard: 100% done in week ${firstFull.week}. The customer ran the acceptance test.` }] : []),
-    ...rows.filter((r) => r.rejected > 0 && recent(r)).map((r) => ({ key: `r${r.week}`, tone: 'rose',
-      text: `Customer acceptance test, week ${r.week}: ${r.rejected} unit${r.rejected === 1 ? '' : 's'} rejected. Fixing ${r.rejected === 1 ? 'it' : 'them'} now takes ${r.rejected * c.lateFixMultiplier} units of work.` })),
-  ].sort((a, b) => (+a.key.slice(1) || 0) - (+b.key.slice(1) || 0));
-  const TONES = { amber: 'border-amber-400 bg-amber-500/15 text-amber-100', rose: 'border-rose-400 bg-rose-500/15 text-rose-100', sky: 'border-sky-400 bg-sky-500/15 text-sky-100' };
+  const firstNinety = rows.find((r) => dashboardPeak(r) >= 0.9);
   // Fix 3: how long the money lasts at this week's spend, and a warning one week before bankruptcy is unavoidable.
   const avail = p.budget + c.creditLine;
   const steady = crewsNext * c.crewWeek + (shift ? crewsNext * c.shiftPremiumPerCrew : 0);
   const lastsTo = cost > avail ? p.week : nextWeek + Math.floor((avail - cost) / Math.max(1, steady));
   const brokeNext = cost <= avail && avail - cost < steady;
 
-  // Keep/Change checkpoints: after the scope change, the dashboard first passing 90%, an acceptance
-  // rejection (one card a week at most), and the first time the money runs out before the forecast.
-  // Each card says what happened and blocks the next week until the student keeps or changes the forecast.
+  // One card per event, in the week it happens: the scope change, the dashboard first passing 90%, an
+  // acceptance rejection, and the first time the money runs out before the forecast. It says what happened
+  // and holds the next week until the student keeps or changes the forecast.
   const runwayBase = last ? p.week + Math.floor(avail / Math.max(1, p.crews * c.crewWeek + (last.shift ? p.crews * c.shiftPremiumPerCrew : 0))) : lastWeek;
   const due = !last ? [] : [
     last.shock > 0 && { event: 'scope', text: `The customer added ${last.shock} units in week ${last.week}.` },
     firstNinety && firstNinety.week === last.week && { event: 'ninety', text: `Your dashboard passed 90% in week ${last.week} (it read ${Math.round(dashboardPeak(last) * 100)}%).` },
-    last.rejected > 0 && { event: 'reject', text: `The customer's acceptance test rejected ${last.rejected} unit${last.rejected === 1 ? '' : 's'} in week ${last.week}.` },
+    last.rejected > 0 && { event: 'reject', text: `Your dashboard read 100%, and the customer's acceptance test rejected ${last.rejected} unit${last.rejected === 1 ? '' : 's'} in week ${last.week}. Fixing ${last.rejected === 1 ? 'it' : 'them'} now takes ${last.rejected * c.lateFixMultiplier} units of work.` },
     runwayBase < lastForecast && !p.checkpoints.some((k) => k.event === 'runway') && { event: 'runway', text: `At this spend the money lasts to week ${runwayBase}.` },
   ].filter(Boolean);
   const pending = due.filter((d) => !p.checkpoints.some((k) => k.week === nextWeek && k.event === d.event));
@@ -123,13 +124,20 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
   const weeksLeft = c.deadline - p.week;
   const lateShift = p.plan && p.plan.shift === 'late' && nextWeek >= 9 && nextWeek <= 11;
 
+  const rangeText = shownRange.low === shownRange.high ? `week ${shownRange.low}` : `weeks ${shownRange.low}–${shownRange.high}`;
+  const defects = last ? Math.round(last.found + last.rejected) : 0;
+
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold text-white">Week {nextWeek}</h1>
-        <span className={`text-sm font-mono ${late ? 'text-rose-400' : 'text-slate-400'}`}>
-          {late ? `${plural(nextWeek - c.deadline, 'week')} past the deadline` : `${plural(weeksLeft, 'week')} left`}
-        </span>
+    <div className={`${deskTab === 'decide' ? 'max-w-6xl' : 'max-w-2xl'} mx-auto px-4 py-5 space-y-4`}>
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div>
+          <div className="text-[11px] uppercase tracking-wider text-slate-500">Contract · {p.totalScope} units · deadline week {c.deadline}</div>
+          <h1 className="text-xl font-bold text-white">Week {nextWeek}</h1>
+        </div>
+        <div className="flex items-baseline gap-3 text-sm font-mono">
+          <span className={late ? 'text-rose-400' : 'text-slate-400'}>{late ? `${plural(nextWeek - c.deadline, 'week')} past the deadline` : `${plural(weeksLeft, 'week')} left`}</span>
+          <span className="text-emerald-300">Forecast: week {shownForecast}</span>
+        </div>
       </header>
 
       <TabStrip tab={deskTab} opened={seenTabs} onOpen={openTab} front={DECIDE} tabs={TABS.slice(1)} />
@@ -144,76 +152,77 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
       ) : (<>
 
       {pending.length > 0 && (
-        <div role="dialog" aria-label="Checkpoint" className="rounded-xl border-2 border-white bg-slate-800 px-4 py-3 space-y-2">
-          {pending.map((d) => <p key={d.event} className="font-bold text-white">{d.text}</p>)}
-          <p className="text-sm text-slate-300">Your forecast: week {shownForecast}, {shownRange.low === shownRange.high ? `week ${shownRange.low}` : `weeks ${shownRange.low}–${shownRange.high}`}, {shownRange.chance}% for week {c.deadline}.</p>
-          <div className="grid grid-cols-2 gap-2">
+        <div role="dialog" aria-label="What happened" className="rounded-xl border-2 border-amber-400 bg-slate-900 px-4 py-3 space-y-2">
+          {pending.map((d) => <p key={d.event} className="font-bold text-amber-100">{d.text}</p>)}
+          <p className="text-sm text-slate-300">Your forecast: week {shownForecast}, {rangeText}, {shownRange.chance}% for week {c.deadline}.</p>
+          <div className="grid grid-cols-2 gap-2 sm:max-w-sm">
             <button type="button" onClick={() => tap('keep')} className="py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold">Keep forecast</button>
             <button type="button" onClick={() => tap('change')} className="py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">Change forecast</button>
           </div>
         </div>
       )}
 
-      {moments.map((m) => (
-        <div key={m.key} role="status" className={`rounded-xl border-2 px-4 py-3 font-bold ${TONES[m.tone]}`}>{m.text}</div>
-      ))}
+      {/* KPI row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <Kpi label="Reported complete" value={pct(p.reportedPct())} tone="text-sky-300">
+          <div className="h-1.5 bg-slate-950 rounded-full overflow-hidden mt-1"><div className="h-full bg-sky-500" style={{ width: pct(p.reportedPct()) }} /></div>
+        </Kpi>
+        <Kpi label="Units left" value={Math.round(p.backlog)} sub={`of ${p.totalScope}`} />
+        <Kpi label="Crews" value={crewsNext} sub={hire > 0 ? `${p.crews} + ${hire} this week` : hire < 0 ? `${p.crews} − ${-hire} this week` : p.onboarding > 0 ? 'onboarding' : 'this week'} />
+        <Kpi label="Budget left" value={money(p.budget)} sub={p.budget < 0 ? `credit left ${money(c.creditLine + p.budget)}` : `+ ${money(c.creditLine)} credit`} tone={p.budget < 0 ? 'text-rose-400' : 'text-emerald-300'} />
+        <Kpi label="Money lasts to" value={`wk ${lastsTo}`} sub={lastsTo < shownForecast ? `before your forecast (wk ${shownForecast})` : 'at this spend'} tone={lastsTo < shownForecast ? 'text-rose-400' : 'text-white'} />
+        <Kpi label="Defects found" value={defects} sub={last ? `in week ${last.week}` : 'none yet'} tone={last && last.rejected > 0 ? 'text-rose-400' : 'text-white'} />
+      </div>
 
-      <Card title="Your prediction" tone="emerald">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-4 items-start">
+        {/* Outcomes */}
+        <div className="space-y-4 min-w-0">
+          <Card title="Progress: reported complete">
+            {p.history.length > 0
+              ? <ProgressSpark history={p.history} deadline={c.deadline} end={Math.max(c.deadline, p.week) + 1} />
+              : <p className="text-sm text-slate-400">No weeks played yet.</p>}
+          </Card>
+          <Card title="Your forecast, week by week">
+            <ForecastChart
+              compact log={[...p.forecastLog, { week: nextWeek, forecast: shownForecast }]} interval={p.forecast}
+              band={[past.p10, past.p90]} deadline={c.deadline} xEnd={Math.max(c.deadline, nextWeek)}
+            />
+            <p className="text-[11px] text-slate-500 mt-1">Amber band: where most delivered past contracts landed{past.failed.total ? `; ${failuresLine(past)}` : ''}.</p>
+          </Card>
+          {logLines.length > 0 && (
+            <Card title={`What happened in week ${last.week}`}>
+              <ul className="space-y-1 text-sm">
+                {logLines.map((e, i) => (
+                  <li key={i} className={/rejected|changed the requirement/.test(e) ? 'text-amber-300' : 'text-slate-300'}>{e}</li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </div>
+
+        {/* Inputs: beside the outcomes on a desktop, straight after the KPI row on a phone */}
+        <div className="space-y-4 lg:sticky lg:top-4 order-first lg:order-none">
+      <Card title="Your forecast" tone="emerald">
         <div className="flex items-baseline justify-between mb-2">
           <span className="text-sm text-slate-300">The customer accepts it in</span>
           <span className="text-3xl font-bold font-mono text-emerald-300">week {shownForecast}</span>
         </div>
-        <ForecastChart
-          compact log={[...p.forecastLog, { week: nextWeek, forecast: shownForecast }]} interval={p.forecast}
-          band={[past.p10, past.p90]} deadline={c.deadline} xEnd={Math.max(c.deadline, nextWeek)}
-        />
         <Slider label="Move it if the evidence says so" value={shownForecast} min={nextWeek} max={lastWeek} onChange={moveForecast}
           format={(v) => `week ${v}`}
-          hint={`Committed before week 1 (the forecast that is scored): week ${p.forecast.week}, 80% sure of ${p.forecast.low}–${p.forecast.high}. Amber band: where most delivered past contracts landed${past.failed.total ? `; ${failuresLine(past)}` : ''}.`} />
+          hint={`Committed before week 1 (the forecast that is scored): week ${p.forecast.week}, 80% sure of ${p.forecast.low}–${p.forecast.high}.`} />
         {calendarMoved.length > 0 && !touched && (
           <p className="text-xs text-amber-200 mt-1">The calendar moved {calendarMoved.join(', and ')}: those weeks have passed. Nothing else moves your forecast but you.</p>
         )}
         {useNote && <p className="text-xs text-rose-300 mt-1">{useNote}</p>}
         <details className="mt-2 text-sm" open={rangeOpen} onToggle={(e) => setRangeOpen(e.currentTarget.open)}>
-          <summary className="text-slate-300 cursor-pointer">Now: 80% range {shownRange.low === shownRange.high ? `week ${shownRange.low}` : `weeks ${shownRange.low}–${shownRange.high}`}, {shownRange.chance}% for week {c.deadline}</summary>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+          <summary className="text-slate-300 cursor-pointer">Now: 80% range {rangeText}, {shownRange.chance}% for week {c.deadline}</summary>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3 mt-2">
             <Slider label="Earliest (80% sure)" value={shownRange.low} min={nextWeek} max={lastWeek} onChange={(v) => moveRange((r) => ({ ...r, low: Math.min(v, shownForecast) }))} format={(v) => `week ${v}`} />
             <Slider label="Latest" value={shownRange.high} min={nextWeek} max={lastWeek} onChange={(v) => moveRange((r) => ({ ...r, high: Math.max(v, shownForecast) }))} format={(v) => `week ${v}`} />
           </div>
           <p className="text-[11px] text-slate-500 mt-1">Week {lastWeek} is the last: after it the customer terminates the contract.</p>
           <Slider label={`Chance of week ${c.deadline}`} value={shownRange.chance} min={0} max={100} step={5} onChange={(v) => moveRange((r) => ({ ...r, chance: v }))} format={(v) => `${v}%`} />
         </details>
-      </Card>
-
-      <Card title="Dashboard">
-        <div className="flex items-end justify-between mb-1">
-          <span className="text-sm text-slate-300">Reported complete</span>
-          <span className="text-3xl font-bold font-mono text-sky-300">{pct(p.reportedPct())}</span>
-        </div>
-        <div className="h-3 bg-slate-950 rounded-full overflow-hidden">
-          <div className="h-full bg-sky-500 transition-all" style={{ width: pct(p.reportedPct()) }} />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-          <Stat label="Units left" value={Math.round(p.backlog)} sub={`of ${p.totalScope}`} />
-          <Stat label="Crews" value={crewsNext} sub={hire > 0 ? `${p.crews} + ${hire} this week` : hire < 0 ? `${p.crews} − ${-hire} this week` : p.onboarding > 0 ? 'onboarding' : ''} />
-          <Stat label="Budget left" value={money(p.budget)} sub={p.budget < 0 ? `credit left ${money(c.creditLine + p.budget)}` : `+ ${money(c.creditLine)} credit`} tone={p.budget < 0 ? 'text-rose-400' : 'text-emerald-300'} />
-          <Stat label="Defects found" value={last ? Math.round(last.found + last.rejected) : 0} sub={last ? `in week ${last.week}` : 'none yet'} tone={last && last.rejected > 0 ? 'text-rose-400' : 'text-white'} />
-        </div>
-        {p.history.length > 0 && (
-          <div className="mt-4">
-            <ProgressSpark history={p.history} deadline={c.deadline} end={Math.max(c.deadline, p.week) + 1} />
-          </div>
-        )}
-        {logLines.length > 0 && (
-          <div className="mt-3">
-            <div className="text-[11px] uppercase tracking-wider text-slate-500">What happened in week {last.week}</div>
-            <ul className="mt-1 space-y-1 text-sm">
-              {logLines.map((e, i) => (
-                <li key={i} className={/rejected|changed the requirement/.test(e) ? 'text-amber-300' : 'text-slate-400'}>{e}</li>
-              ))}
-            </ul>
-          </div>
-        )}
       </Card>
 
       <Card title={`Decide week ${nextWeek}`}>
@@ -278,6 +287,8 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
           {pending.length > 0 && <p className="text-xs text-slate-400 text-center -mt-2">Keep or change your forecast at the top first.</p>}
         </div>
       </Card>
+        </div>
+      </div>
       </>)}
     </div>
   );

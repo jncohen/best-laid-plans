@@ -92,8 +92,35 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const cm = planReady ? costManagement(S, plan) : null;
   const finishWeek = planReady ? schedule(S, plan).forecast.week : null;
 
+  const comparison = gut && rows.length > 0 && !left.length ? (
+            <Card title="Every forecast on the desk" tone="amber">
+              <table className="w-full text-xs text-slate-200">
+                <thead className="text-slate-400"><tr><th className="text-left font-semibold py-1">Forecast</th><th className="text-right font-semibold">Week</th><th className="text-right font-semibold">80% range</th><th className="text-right font-semibold">Wk 12</th><th /></tr></thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.key} className="border-t border-slate-800 align-top">
+                      <td className="py-1.5 pr-1">
+                        {r.name}
+                        {r.f.fail && <div className="text-[11px] text-rose-300">{r.f.fail}</div>}
+                        {r.note && <div className={`text-[11px] ${r.f.crewsDropped ? 'text-rose-300 font-bold' : 'text-amber-200'}`}>{r.note}</div>}
+                      </td>
+                      <td className="text-right font-mono">{r.f.week}</td>
+                      <td className="text-right font-mono whitespace-nowrap">{range(r.f)}</td>
+                      <td className="text-right font-mono">{r.f.chance}%</td>
+                      <td className="text-right pl-1">
+                        <button type="button" onClick={() => applyNumbers(r.id, r.f, r.label || null)} className="text-emerald-300 underline">Use</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-xs text-slate-300 mt-1">These disagree by {spread} week{spread === 1 ? '' : 's'}. Pick one to use, or set your own.</p>
+            </Card>
+          ) : null;
+  const wide = tab === 'commit' && !!comparison;
+
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+    <div className={`${wide ? 'max-w-6xl' : 'max-w-2xl'} mx-auto px-4 py-6 space-y-4`}>
       <header>
         <h1 className="text-2xl font-bold text-white">Best Laid Plans</h1>
         <p className="text-lg text-white mt-2 leading-snug">
@@ -122,6 +149,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
         </p>
       )}
 
+      <div className={wide ? 'grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 items-start' : ''}>
       <Card tone="emerald">
         <div className="space-y-4">
           <div className="space-y-2">
@@ -140,31 +168,6 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
             )}
           </div>
           <div className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-1">2 · {gut ? 'Your final forecast' : 'Your gut forecast'}</div>
-          {gut && rows.length > 0 && !left.length && (
-            <div className="-mt-2">
-              <table className="w-full text-xs text-slate-200">
-                <thead className="text-slate-400"><tr><th className="text-left font-semibold py-1">Forecast</th><th className="text-right font-semibold">Week</th><th className="text-right font-semibold">80% range</th><th className="text-right font-semibold">Wk 12</th><th /></tr></thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.key} className="border-t border-slate-800 align-top">
-                      <td className="py-1.5 pr-1">
-                        {r.name}
-                        {r.f.fail && <div className="text-[11px] text-rose-300">{r.f.fail}</div>}
-                        {r.note && <div className={`text-[11px] ${r.f.crewsDropped ? 'text-rose-300 font-bold' : 'text-amber-200'}`}>{r.note}</div>}
-                      </td>
-                      <td className="text-right font-mono">{r.f.week}</td>
-                      <td className="text-right font-mono whitespace-nowrap">{range(r.f)}</td>
-                      <td className="text-right font-mono">{r.f.chance}%</td>
-                      <td className="text-right pl-1">
-                        <button type="button" onClick={() => applyNumbers(r.id, r.f, r.label || null)} className="text-emerald-300 underline">Use</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="text-xs text-slate-300 mt-1">These disagree by {spread} week{spread === 1 ? '' : 's'}. Pick one to use, or set your own.</p>
-            </div>
-          )}
           {loaded && (
             <p className="text-xs text-slate-300 bg-slate-950 rounded-lg px-3 py-2">
               Loaded from <strong className="text-white">{tabById(loaded.id).name}{loaded.label ? ` (${loaded.label})` : ''}</strong>: week {loaded.numbers.week},{' '}
@@ -211,6 +214,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
           </>)}
         </div>
       </Card>
+      {comparison && <div className="order-first lg:order-last lg:sticky lg:top-4">{comparison}</div>}
+      </div>
       </>)}
     </div>
   );
