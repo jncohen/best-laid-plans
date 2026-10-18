@@ -350,8 +350,8 @@ npm run build     # static site in frontend/dist/
 ```
 
 `vite.config.js` sets `base: './'`, so the build works from any subpath, including
-GitHub Pages. `.github/workflows/pages.yml` deploys `plan-matched-record` and
-`master`. `verify` (lint, tests, render checks, build) gates the deploy; the `plan`
+GitHub Pages. `.github/workflows/pages.yml` deploys `master` on every
+push. `verify` (lint, tests, render checks, build) gates the deploy; the `plan`
 sweep runs and reports its targets in the build log but does not block it (two targets,
 7 and 17, are known misses).
 

@@ -1,10 +1,10 @@
 # Build the game and publish it to GitHub Pages.
-# Deploys from the class branch on every push, or by hand from the Actions tab.
+# Deploys from master on every push, or by hand from the Actions tab.
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [plan-matched-record, master]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
