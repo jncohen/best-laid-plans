@@ -63,7 +63,11 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
   // Did the student move the forecast in weeks a+1..a+2, the two weeks after something happened in week a?
   const movedWithin = (a) => log.some((e, i) => i > 0 && e.week > a && e.week <= a + 2 && moved(e, log[i - 1], c));
 
-  // 1. The starting point.
+  // Keep/Change checkpoint taps, by event: what the student did when the game showed it to them.
+  const tapped = (event) => (p.checkpoints || []).find((k) => k.event === event) || null;
+  const saw = (k) => `You saw it, and you ${k.choice === 'change' ? 'changed' : 'kept'} your forecast.`;
+
+  // 1. The starting point: the gut forecast, then the final one after the tour.
   const paceWeeks = c.scope / historyMean(c), past = pastContracts(c);
   const near = [
     Math.abs(f.week - paceWeeks) <= 1 && 'close to the line\'s pace',
@@ -108,18 +112,21 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
   const luckier = replay.weeks.filter((w) => w > outcome).length;
 
   return [
-    { n: 1, key: 'start', title: 'Your starting point', value: { week: f.week, near: start },
-      text: `You committed week ${f.week}: ${start.join(' and ')}.` },
+    { n: 1, key: 'start', title: 'Your starting point', value: { week: f.week, near: start, gut: p.gutForecast ? p.gutForecast.week : null },
+      text: p.gutForecast
+        ? `Gut: week ${p.gutForecast.week}. Final: week ${f.week}${p.gutForecast.week === f.week && p.gutForecast.low === f.low && p.gutForecast.high === f.high ? ', kept after the tour' : ' (after the tour)'}: ${start.join(' and ')}.`
+        : `You committed week ${f.week}: ${start.join(' and ')}.` },
     { n: 2, key: 'record', title: 'The record', value: { records: opened.has('records'), last5: opened.has('last5') },
       text: `You opened Records: ${opened.has('records') ? 'yes' : 'no'}. You opened Last 5 Contracts: ${opened.has('last5') ? 'yes' : 'no'}.` },
     { n: 3, key: 'ninety', title: 'The 90% moment', value: { week: ninety ? ninety.week : null, peak: ninety ? dashboardPeak(ninety) : null, rejected, afterReject },
       text: (ninety
         ? `Your dashboard passed 90% in week ${ninety.week} (it read ${Math.round(dashboardPeak(ninety) * 100)}%); ${rejected > 0 ? `the customer then rejected ${plural(rejected, 'unit')}.` : 'the customer rejected no units.'}`
         : `Your dashboard never passed 90%${rejected > 0 ? `; the customer rejected ${plural(rejected, 'unit')}.` : '.'}`)
-        + (firstReject ? ` You changed your forecast within 2 weeks of the rejection: ${afterReject ? 'yes' : 'no'}.` : '') },
+        + (tapped('ninety') ? ` At 90%: ${saw(tapped('ninety'))}` : '')
+        + (firstReject ? (tapped('reject') ? ` At the rejection: ${saw(tapped('reject'))}` : ` You changed your forecast within 2 weeks of the rejection: ${afterReject ? 'yes' : 'no'}.`) : '') },
     { n: 4, key: 'surprise', title: 'The surprise', value: shock ? { units: shock.shock, week: shock.week, spread, changedWithin } : null,
       text: shock
-        ? `The customer added ${shock.shock} units in week ${shock.week} (past contracts: +${spread[0]} to +${spread[1]}). You changed your forecast within 2 weeks: ${changedWithin ? 'yes' : 'no'}.`
+        ? `The customer added ${shock.shock} units in week ${shock.week} (past contracts: +${spread[0]} to +${spread[1]}). ${tapped('scope') ? saw(tapped('scope')) : `You changed your forecast within 2 weeks: ${changedWithin ? 'yes' : 'no'}.`}`
         : 'The contract ended before the customer added any units.' },
     { n: 5, key: 'advice', title: 'Advice', value: { committed, edited: !!p.desk?.edited, midGame, closest: closest ? closest.key : null },
       text: committedText + midText },
@@ -128,11 +135,12 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
         ? `Your 80% range (weeks ${f.low}–${f.high}): missed. The contract was never delivered.`
         : `Your 80% range (weeks ${f.low}–${f.high}): ${s.held ? 'held' : `missed by ${plural(Math.abs(s.missBy), 'week')} (${s.missBy > 0 ? 'late' : 'early'})`}.` },
     { n: 7, key: 'money', title: 'Money', value: { bankruptWeek: broke ? broke.week : null, shortfall: broke ? broke.shortfall : null, over },
-      text: broke
+      text: (broke
         ? `Bankrupt: yes, in week ${broke.week}. Its payroll (${money(broke.payroll)}) would have gone ${money(broke.shortfall)} past the ${money(c.creditLine)} credit line.`
-        : `Bankrupt: no.${over > 0 ? ` Over budget by ${money(over)} (the credit line is ${money(c.creditLine)}).` : ''}` },
+        : `Bankrupt: no.${over > 0 ? ` Over budget by ${money(over)} (the credit line is ${money(c.creditLine)}).` : ''}`)
+        + (tapped('runway') ? ` In week ${tapped('runway').week - 1} the money was due to run out before your forecast: ${saw(tapped('runway')).replace('You saw it, and you', 'you')}` : '') },
     { n: 8, key: 'luck', title: 'Luck', value: { ...replay, weeks: undefined, luckier },
       text: `With exactly your decisions, other luck gave week ${wk(replay.median)} typically (${wk(replay.p10)}–${wk(replay.p90)}); you were luckier than ${luckier} of ${replay.draws}. `
-        + `Week ${c.deadline} was made in ${replay.onTime} of ${replay.draws}, bankruptcy in ${replay.bankrupt}, and your range held in ${replay.held}.` },
+        + `With your decisions and other luck, your 80% range held in ${replay.held} of ${replay.draws}; week ${c.deadline} was made in ${replay.onTime}, and the company went bankrupt in ${replay.bankrupt}.` },
   ];
 }

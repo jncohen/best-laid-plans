@@ -316,3 +316,18 @@ export function allForecasts(S, plan, L = null) {
   for (const c of teamChat(S, plan, L)) out.push({ key: `chat-${c.key}`, name: `Team Chat: ${c.name}, ${c.role.toLowerCase()}`, ...c.forecast });
   return out;
 }
+
+/**
+ * Every forecast the desk shows, side by side, for the commit screen. Fixed order: the gut forecast,
+ * then the tabs in their usual order. No row is marked right or best.
+ */
+export function comparisonRows(S, plan, gut) {
+  const rows = [{ key: 'gut', id: null, name: 'Your gut forecast', f: { week: gut.week, low: gut.low, high: gut.high, chance: gut.onTimeChance } }];
+  rows.push({ key: 'status', id: 'status', name: 'Status Report', f: statusReport(S, null, plan).forecast });
+  for (const c of teamChat(S, plan)) rows.push({ key: `chat-${c.key}`, id: 'chat', label: c.name, name: `Team Chat: ${c.name}`, f: c.forecast });
+  rows.push({ key: 'last5', id: 'last5', name: 'Last 5 Contracts', f: lastFive(S).forecast });
+  const m = records(S, plan).matched;
+  rows.push({ key: 'records', id: 'records', label: 'contracts run like my plan', name: 'Records, like my plan', f: m,
+    note: m.crewsDropped ? `Loose match (${m.rule}): no past contract ran a plan like yours.` : m.rule !== 'crews, inspection and shift' ? `Loose match: ${m.rule}.` : null });
+  return rows;
+}

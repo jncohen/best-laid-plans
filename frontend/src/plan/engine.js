@@ -170,6 +170,8 @@ export class Project {
     this.deskLog = [];         // decision-support tabs opened during play: { week, tab }, and prompt copies
     this.weekSeconds = {};     // roughly how long each week took on the play screen
     this.forecastLog = [];
+    this.checkpoints = [];     // Keep/Change taps during play: { week, event, choice }
+    this.gutForecast = null;
     this.decisions = [];       // each week's decisions as played (crews hired or released, shift, inspection), for the luck replay
     this.history = [];
     this.spent = 0;
@@ -195,8 +197,10 @@ export class Project {
    * The forecast and the plan the student says they will play. Neither is read by
    * play(): they are recorded, never acted on.
    */
-  commit({ week, low, high, onTimeChance, plan = null, desk = null }) {
+  commit({ week, low, high, onTimeChance, plan = null, desk = null, gut = null }) {
     this.forecast = { week: +week, low: +low, high: +high, onTimeChance: +onTimeChance };
+    // The gut forecast, made after seeing only The Contract and the Status Report: recorded, never scored.
+    this.gutForecast = gut ? { week: +gut.week, low: +gut.low, high: +gut.high, onTimeChance: +gut.onTimeChance } : null;
     this.forecastLog = [{ week: 0, forecast: +week, low: +low, high: +high, chance: +onTimeChance }];
     this.plan = plan ? normalizePlan(plan) : null;
     this.desk = desk ? normalizeDesk(desk) : null;
@@ -213,6 +217,11 @@ export class Project {
   }
 
   /** Records roughly how many seconds a week took before it was played. Never read by play(). */
+  /** Records a Keep/Change checkpoint tap: the week it was shown before, the event, 'keep' or 'change'. Never read by play(). */
+  noteCheckpoint(week, event, choice) {
+    this.checkpoints.push({ week: +week, event: String(event), choice: choice === 'change' ? 'change' : 'keep' });
+  }
+
   noteTime(week, seconds) {
     this.weekSeconds[+week] = Math.max(0, Math.round(+seconds || 0));
   }

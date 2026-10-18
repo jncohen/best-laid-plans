@@ -36,7 +36,19 @@ sample) is on `decision-desk`.
    - **The Contract** (second) has the terms, every disclosure and the three scores;
    - **Last 5 Contracts** has the last contract's six-week pace and its story;
    - **Records** has all 40 past contracts.
-3. Before committing they may open any of the tool tabs (below), or none. Every tab is
+3. The commit has two stages. **Step 1, the gut forecast:** with only The Contract and
+   the Status Report open (Team Chat, Last 5 and Records show 🔒), the student states a
+   plan and commits a gut forecast. It is recorded, never scored. **Step 2, the final
+   forecast:** the final commit stays locked until Team Chat, Last 5 Contracts and
+   Records have each been opened ("Open Team Chat, Last 5 and Records before your final
+   forecast"). Then a comparison card lists, in a fixed order, the gut forecast, the
+   Status Report, each colleague in Team Chat, Last 5 and Records for plans like theirs,
+   each with its week, 80% range and chance of week 12 (and, for Records, its failures
+   and a note when the match is loose). Under it: "These disagree by N weeks. Pick one to
+   use, or set your own." No row is marked right. The plan's projected cost is shown
+   too: "This plan costs about $X by week N … Money lasts to week M at this spend." The
+   final forecast is the one scored.
+   Before committing they may open any of the open tool tabs, or none. Every tab is
    always open, with no limit. The game records which tabs were opened before
    committing, for the reveal; it never acts on that. Each
    tool computes a forecast from what the briefing shows and nothing else. Like real
@@ -55,6 +67,14 @@ sample) is on `decision-desk`.
    running forecast (week, range and chance). The forecast committed before week 1
    remains the one that is scored. The contract ends when the customer accepts it,
    when the customer terminates it after week 22, or when the company goes bankrupt.
+   **Keep/Change checkpoints.** After the scope change, the dashboard first passing 90%,
+   an acceptance rejection (one card a week at most) and the first time the money runs
+   out before the forecast, a card states what happened and the current forecast, and
+   the next week stays locked until the student taps **Keep forecast** or **Change
+   forecast** (which opens the range sliders). Each tap is logged with its week and
+   event; the reveal's facts report "You saw it, and you kept / changed your forecast".
+   A typical game adds 3 to 5 taps: one each for the scope change and 90%, one or two
+   rejections, and sometimes the money.
    During play the big moments are cards, not log lines: "The customer added 15 units
    in week 4." and "Customer acceptance test: 17 units rejected. Fixing them now takes
    34 units of work." The progress chart marks the week the dashboard first passed 90%
@@ -67,8 +87,9 @@ sample) is on `decision-desk`.
    or bankrupt, or terminated, never delivered) and holds the results until the class
    reveals together. The reveal opens with **Your game in 8 facts**, numbered so the
    instructor can ask "hands up if fact 3 happened to you":
-   1. your starting point ("You committed week 10: close to the line's pace", or close
-      to the past contracts' median, at the deadline, or your own number);
+   1. your starting point: the gut forecast and the final one ("Gut: week 11. Final:
+      week 14 (after the tour)"), and whether the final is close to the line's pace, the
+      past contracts' median, the deadline, or your own number;
    2. whether you opened Records and Last 5 Contracts;
    3. the week the dashboard passed 90% (its peak reading that week: 100% in a week
       whose acceptance test rejected units), the units the customer then rejected, and

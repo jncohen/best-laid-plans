@@ -6,6 +6,7 @@ import { pastManagers, playManager, contractSeed, firstCloseWeek, playSummary, i
 import { FORECASTERS, screenData, allForecasts, statusReport, schedule, lastFive, records, teamChat, costManagement, liveScreen, LIVE_FIELDS, LIVE_ROW_FIELDS, TABS } from '../frontend/src/plan/desk.js';
 import { readFileSync } from 'node:fs';
 import { gameFacts, luckReplay } from '../frontend/src/plan/facts.js';
+import { comparisonRows } from '../frontend/src/plan/desk.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond) => { if (cond) { pass++; console.log(`  ok   ${name}`); } else { fail++; console.log(`  FAIL ${name}`); } };
@@ -499,14 +500,46 @@ console.log('Your game in 8 facts');
     && byKey(fbr, 'money').text === `Bankrupt: yes, in week ${bw.week}. Its payroll ($${Math.round(bw.payroll / 1000)}k) would have gone $${Math.round(bw.shortfall / 1000)}k past the $500k credit line.`);
   t('fact 6 and the score: a bankrupt contract missed its range and scores 0', byKey(fbr, 'range').text === 'Your 80% range (weeks 11–13): missed. The contract was never delivered.' && br.scores().forecast === 0 && br.scores().held === false && br.scores().parts === null);
   const L = byKey(fa, 'luck').value, R = luckReplay(a);
-  t('fact 8: deterministic; typical week, luckier-than, made, bankrupt and range-held counts', JSON.stringify(luckReplay(a)) === JSON.stringify(R) && byKey(fbr, 'luck').value.bankrupt >= 90 && L.draws === 100
-    && L.luckier === R.weeks.filter((w) => w > a.outcomeWeek()).length && L.held === R.weeks.filter((w) => w >= a.forecast.low && w <= a.forecast.high).length
-    && byKey(fa, 'luck').text === `With exactly your decisions, other luck gave week ${Math.ceil(L.median)} typically (${Math.ceil(L.p10)}–${Math.ceil(L.p90)}); you were luckier than ${L.luckier} of 100. Week 12 was made in ${L.onTime} of 100, bankruptcy in ${L.bankrupt}, and your range held in ${L.held}.`);
+  t('fact 8: deterministic; typical week, luckier-than, range held, made and bankrupt counts', JSON.stringify(luckReplay(a)) === JSON.stringify(R) && byKey(fbr, 'luck').value.bankrupt >= 90 && L.draws === 100
+    && L.luckier === R.weeks.filter((w) => w > a.outcomeWeek()).length && L.held === R.held
+    && byKey(fa, 'luck').text === `With exactly your decisions, other luck gave week ${Math.ceil(L.median)} typically (${Math.ceil(L.p10)}–${Math.ceil(L.p90)}); you were luckier than ${L.luckier} of 100. With your decisions and other luck, your 80% range held in ${L.held} of 100; week 12 was made in ${L.onTime}, and the company went bankrupt in ${L.bankrupt}.`);
+  // The replay's hold count: a replay that was never delivered is a miss, whatever its projected week.
+  const wide = new Project('ledger', CONFIG, 7);
+  wide.commit({ week: 14, low: 6, high: 22, onTimeChance: 50 });
+  while (!wide.done) wide.play({ hire: wide.week === 0 ? 2 : 0, shift: true });
+  const RW = luckReplay(wide);
+  t('the replay hold count treats a failed contract as a miss (a shift every week: bankrupt in most, held in few)', RW.bankrupt >= 90 && RW.held <= RW.draws - RW.bankrupt && RW.weeks.filter((w) => w >= 6 && w <= 22).length > RW.held);
   t('fact 8 replays the student\'s own decisions: replaying with the student\'s own luck reproduces the outcome', (() => {
     const q = new Project('ledger', CONFIG, 7); let w = 0; while (!q.done) { q.play(a.decisions[w] || { hire: 0, inspect: 0.1 }); w++; } return q.outcomeWeek() === a.outcomeWeek() && q.spent === a.spent; })());
   t('the facts never change an outcome', (() => { const before = JSON.stringify(a.history); gameFacts(a); return JSON.stringify(a.history) === before; })());
   const t0 = Date.now(); for (let i = 0; i < 10; i++) luckReplay(a);
   t(`the luck replay is fast (${((Date.now() - t0) / 10).toFixed(1)} ms for 100 games here)`, (Date.now() - t0) / 10 < 50);
+}
+
+console.log('Fix 13: gut then final, the tour, checkpoints');
+{
+  // The comparison card: fixed order, every row from what the tabs show, none marked best.
+  const S = screenData(), plan = { crews: 3, inspect: 0.1, shift: 'none' }, gut = { week: 11, low: 10, high: 12, onTimeChance: 70 };
+  const rows = comparisonRows(S, plan, gut);
+  t('the comparison card: gut first, then Status Report, the five colleagues, Last 5 and Records, in order', rows.map((r) => r.key).join() === 'gut,status,chat-supervisor,chat-planner,chat-sales,chat-veteran,chat-quality,last5,records'
+    && rows[1].f.week === statusReport(S, null, plan).forecast.week && rows[8].f.week === records(S, plan).matched.week && rows.every((r) => !('best' in r)));
+  // Gut vs final: the gut forecast is recorded, never scored; fact 1 shows the path.
+  const p = new Project('ledger', CONFIG, 7);
+  p.commit({ week: 14, low: 12, high: 16, onTimeChance: 20, plan: { crews: 3, inspect: 0.1, shift: 'none' }, gut: { week: 11, low: 10, high: 12, onTimeChance: 70 },
+    desk: { tool: 'j', source: 'Records', tabs: 4, minutes: 6, order: ['status', 'chat', 'last5', 'records'] } });
+  const q = new Project('ledger', CONFIG, 7);
+  q.commit({ week: 14, low: 12, high: 16, onTimeChance: 20, plan: { crews: 3, inspect: 0.1, shift: 'none' } });
+  const playOut = (x, taps) => { while (!x.done) { const w = x.week + 1; if (taps) taps(x, w); x.play({ hire: w === 1 ? 3 : 0, inspect: 0.1 }); } return x; };
+  // Checkpoint taps: logged with week and event, never acted on.
+  playOut(p, (x, w) => { const last = x.history[x.history.length - 1]; if (last && last.shock > 0) x.noteCheckpoint(w, 'scope', 'keep'); if (last && last.rejected > 0) x.noteCheckpoint(w, 'reject', 'change'); });
+  playOut(q);
+  t('the gut forecast is recorded and never scored', p.gutForecast.week === 11 && p.scores().forecast === q.scores().forecast && JSON.stringify(p.history) === JSON.stringify(q.history));
+  const f1 = gameFacts(p).find((x) => x.key === 'start');
+  t('fact 1 shows gut then final', f1.text.startsWith('Gut: week 11. Final: week 14 (after the tour)') && f1.value.gut === 11);
+  t('checkpoint taps are logged with week, event and choice', p.checkpoints.some((k) => k.event === 'scope' && k.choice === 'keep' && k.week === 5) && p.checkpoints.some((k) => k.event === 'reject' && k.choice === 'change'));
+  const fs = gameFacts(p);
+  t('facts 3 and 4 report the taps', fs.find((x) => x.key === 'surprise').text.endsWith('You saw it, and you kept your forecast.') && fs.find((x) => x.key === 'ninety').text.includes('At the rejection: You saw it, and you changed your forecast.'));
+  t('the checkpoint log never changes an outcome', JSON.stringify(p.history) === JSON.stringify(q.history));
 }
 
 console.log('Playtest fixes: arithmetic, fatigue, acceptance');

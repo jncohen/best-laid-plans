@@ -33,6 +33,8 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
   const [seenTabs, setSeenTabs] = useState(initialSeen);
   // For "How you played": did the student move the running forecast this week, and how long did the week take.
   const [touched, setTouched] = useState(false);
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [, setTaps] = useState(0); // re-render after a checkpoint tap
   const [useNote, setUseNote] = useState(null); // the failures behind numbers taken from the record
   const [weekStart, setWeekStart] = useState(() => Date.now());
   const moveForecast = (v) => { setForecast(v); setTouched(true); };
@@ -60,6 +62,7 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
     setTouched(false);
     setWeekStart(Date.now());
     setHire(0);
+    setRangeOpen(false);
     setSeenTabs([]);
     setDeskTab('decide');
   };
@@ -100,6 +103,23 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
   const steady = crewsNext * c.crewWeek + (shift ? crewsNext * c.shiftPremiumPerCrew : 0);
   const lastsTo = cost > avail ? p.week : nextWeek + Math.floor((avail - cost) / Math.max(1, steady));
   const brokeNext = cost <= avail && avail - cost < steady;
+
+  // Keep/Change checkpoints: after the scope change, the dashboard first passing 90%, an acceptance
+  // rejection (one card a week at most), and the first time the money runs out before the forecast.
+  // Each card says what happened and blocks the next week until the student keeps or changes the forecast.
+  const runwayBase = last ? p.week + Math.floor(avail / Math.max(1, p.crews * c.crewWeek + (last.shift ? p.crews * c.shiftPremiumPerCrew : 0))) : lastWeek;
+  const due = !last ? [] : [
+    last.shock > 0 && { event: 'scope', text: `The customer added ${last.shock} units in week ${last.week}.` },
+    firstNinety && firstNinety.week === last.week && { event: 'ninety', text: `Your dashboard passed 90% in week ${last.week} (it read ${Math.round(dashboardPeak(last) * 100)}%).` },
+    last.rejected > 0 && { event: 'reject', text: `The customer's acceptance test rejected ${last.rejected} unit${last.rejected === 1 ? '' : 's'} in week ${last.week}.` },
+    runwayBase < lastForecast && !p.checkpoints.some((k) => k.event === 'runway') && { event: 'runway', text: `At this spend the money lasts to week ${runwayBase}.` },
+  ].filter(Boolean);
+  const pending = due.filter((d) => !p.checkpoints.some((k) => k.week === nextWeek && k.event === d.event));
+  const tap = (choice) => {
+    for (const d of pending) p.noteCheckpoint(nextWeek, d.event, choice);
+    if (choice === 'change') setRangeOpen(true);
+    setTaps((n) => n + 1);
+  };
   const weeksLeft = c.deadline - p.week;
   const lateShift = p.plan && p.plan.shift === 'late' && nextWeek >= 9 && nextWeek <= 11;
 
@@ -123,6 +143,17 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
         </>
       ) : (<>
 
+      {pending.length > 0 && (
+        <div role="dialog" aria-label="Checkpoint" className="rounded-xl border-2 border-white bg-slate-800 px-4 py-3 space-y-2">
+          {pending.map((d) => <p key={d.event} className="font-bold text-white">{d.text}</p>)}
+          <p className="text-sm text-slate-300">Your forecast: week {shownForecast}, {shownRange.low === shownRange.high ? `week ${shownRange.low}` : `weeks ${shownRange.low}–${shownRange.high}`}, {shownRange.chance}% for week {c.deadline}.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => tap('keep')} className="py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-semibold">Keep forecast</button>
+            <button type="button" onClick={() => tap('change')} className="py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">Change forecast</button>
+          </div>
+        </div>
+      )}
+
       {moments.map((m) => (
         <div key={m.key} role="status" className={`rounded-xl border-2 px-4 py-3 font-bold ${TONES[m.tone]}`}>{m.text}</div>
       ))}
@@ -143,7 +174,7 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
           <p className="text-xs text-amber-200 mt-1">The calendar moved {calendarMoved.join(', and ')}: those weeks have passed. Nothing else moves your forecast but you.</p>
         )}
         {useNote && <p className="text-xs text-rose-300 mt-1">{useNote}</p>}
-        <details className="mt-2 text-sm">
+        <details className="mt-2 text-sm" open={rangeOpen} onToggle={(e) => setRangeOpen(e.currentTarget.open)}>
           <summary className="text-slate-300 cursor-pointer">Now: 80% range {shownRange.low === shownRange.high ? `week ${shownRange.low}` : `weeks ${shownRange.low}–${shownRange.high}`}, {shownRange.chance}% for week {c.deadline}</summary>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
             <Slider label="Earliest (80% sure)" value={shownRange.low} min={nextWeek} max={lastWeek} onChange={(v) => moveRange((r) => ({ ...r, low: Math.min(v, shownForecast) }))} format={(v) => `week ${v}`} />
@@ -240,10 +271,11 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
           {p.budget - cost < -c.creditLine && (
             <p className="text-xs text-rose-300">This week would take you past the {money(c.creditLine)} credit line. The company couldn't make payroll: it would go bankrupt and the contract would end, never delivered.</p>
           )}
-          <button type="button" onClick={run}
-            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold">
+          <button type="button" onClick={run} disabled={pending.length > 0}
+            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold">
             Play week {nextWeek} · {money(cost)}
           </button>
+          {pending.length > 0 && <p className="text-xs text-slate-400 text-center -mt-2">Keep or change your forecast at the top first.</p>}
         </div>
       </Card>
       </>)}

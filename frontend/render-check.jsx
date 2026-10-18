@@ -47,6 +47,8 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   for (let w = 0; w < 7; w++) p.play({ hire: w === 0 ? 2 : 0, inspect: 0.1, shift: w > 4, forecast: 11 + w });
   ok('Play, mid-game with history', () => renderToString(<Play project={p} onPlay={() => {}} />));
   // However many tabs are open, This Week's Decisions and its play controls work, and nothing locks.
+  // Checkpoints already answered for this week, so the controls are free.
+  for (const e of ['scope', 'ninety', 'reject', 'runway']) p.noteCheckpoint(p.week + 1, e, 'keep');
   ok('Play, many tabs viewed: the front tab and play controls work, nothing locks', () => {
     const h = renderToString(<Play project={p} onPlay={() => {}} initialSeen={['status', 'records', 'last5', 'chat', 'cost', 'schedule', 'analytics']} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
     if (!h.includes(`Play week ${p.week + 1}`) || /<button[^>]*disabled=""[^>]*>[^<]*(This Week's Decisions|Play week)/.test(h)) throw new Error('decisions locked');
@@ -60,6 +62,14 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     const show = () => renderToString(<Play project={m} onPlay={() => {}} />).replace(/<!-- -->/g, '');
     while (m.week < 4) m.play({});
     ok('Play: the scope change is a card', () => { const h = show(); if (!/border-amber-400[^>]*>The customer added 15 units in week 4\./.test(h)) throw new Error('no scope card'); return h; });
+    ok('Play: a Keep/Change checkpoint blocks the next week until tapped', () => {
+      const h = show();
+      if (!h.includes('Keep forecast') || !h.includes('Change forecast') || !/disabled=""[^>]*>Play week 5/.test(h) || !h.includes('Your forecast: week 14')) throw new Error('checkpoint card wrong');
+      m.noteCheckpoint(5, 'scope', 'keep');
+      const after = show();
+      if (after.includes('Keep forecast') || /disabled=""[^>]*>Play week 5/.test(after)) throw new Error('checkpoint not cleared by a tap');
+      return h;
+    });
     while (!m.done && !m.history.some((r) => r.rejected > 0)) m.play({});
     ok('Play: an acceptance rejection is a card, and the 90% marker shows', () => {
       const h = show(), r = m.history[m.history.length - 1];
@@ -145,9 +155,26 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
       return h;
     });
   }
+  // Fix 13: the gut forecast first, then the tour, then the final forecast with the comparison card.
+  ok('Brief, step 1: the gut forecast, with Team Chat, Last 5 and Records locked', () => {
+    const h = renderToString(<Brief onCommit={() => {}} />).replace(/<!-- -->/g, '');
+    if (!h.includes('Step 1: your gut forecast.') || !h.includes('Commit gut forecast') || (h.match(/disabled=""[^>]*>🔒 /g) || []).length !== 3) throw new Error('gut stage wrong');
+    return h;
+  });
+  ok('Brief, step 2: the final commit waits for the tour', () => {
+    const h = renderToString(<Brief onCommit={() => {}} initialPlan={{ crews: 3, inspect: 0.1, shift: 'none' }} initialGut={{ week: 11, low: 10, high: 12, onTimeChance: 70 }} initialOpened={['status', 'chat']} />).replace(/<!-- -->/g, '');
+    if (!h.includes('Open Last 5, Records before your final forecast.') || !/disabled=""[^>]*>Commit final forecast/.test(h) || h.includes('These disagree by')) throw new Error('tour lock wrong');
+    return h;
+  });
+  ok('Brief, step 2 after the tour: the comparison card, the plan cost, and the final commit open', () => {
+    const h = renderToString(<Brief onCommit={() => {}} initialPlan={{ crews: 3, inspect: 0.1, shift: 'none' }} initialGut={{ week: 11, low: 10, high: 12, onTimeChance: 70 }} initialOpened={['chat', 'last5', 'records']} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
+    for (const x of ['Your gut forecast', 'Status Report', 'Team Chat: Dana', 'Team Chat: Mabel', 'Last 5 Contracts', 'Records, like my plan', 'These disagree by', 'Pick one to use, or set your own.', 'This plan costs about', 'Money lasts']) if (!h.includes(x)) throw new Error(`missing "${x}"`);
+    if (/disabled=""[^>]*>Commit final forecast/.test(h) || /best|right answer/i.test(h.slice(h.indexOf('These disagree'), h.indexOf('These disagree') + 80))) throw new Error('final commit locked, or a row marked best');
+    return h;
+  });
   ok('Brief, front tab: inputs only', () => {
     const h = renderToString(<Brief onCommit={() => {}} />);
-    for (const s of ['1 · Your plan', '2 · Your forecast', 'Commit plan and forecast', "The contract, its rules and the line"]) if (!h.includes(s) && !h.includes(s.replace("'", '&#x27;'))) throw new Error(`missing "${s}"`);
+    for (const s of ['1 · Your plan', 'Your gut forecast', 'Commit gut forecast', 'Read The Contract and the Status Report']) if (!h.includes(s) && !h.includes(s.replace("'", '&#x27;'))) throw new Error(`missing "${s}"`);
     for (const s of ['What you decide each week', 'a week</strong>', 'two scores', 'Two scores']) if (h.includes(s)) throw new Error(`front tab still shows "${s}"`);
     if (!h.replace(/<[^>]+>/g, '').includes('Your score is your forecast. Delivery shows how the company did.') || h.includes('Three scores') || h.includes('Updating')) throw new Error('scoring line wrong before commit');
     return h;
