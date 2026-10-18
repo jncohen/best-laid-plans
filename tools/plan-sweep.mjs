@@ -12,9 +12,9 @@
  *      (<= 1% of runs). Not "never": contracts differ, and a contract drawn both fast and
  *      clean can make week 12 hands-off. Narrowing the draws to rule it out would blunt
  *      the week-by-week evidence of how this contract differs.
- *   4. Set-and-forget loses: the screen-only adaptive reference is on time at least as
- *      often as the best static plan, and every static plan on time >= 30% goes bankrupt
- *      >= 20% of the time while the adaptive reference stays <= 5%.
+ *   4a. The screen-only adaptive reference is on time at least as often as the best static plan.
+ *   4b. Money (simple 1.2: the $5.0M budget plus a $0.5M credit line): the best plan (highest
+ *      mean Delivery) goes bankrupt <= 5% of the time; +2 crews with a shift every week >= 90%.
  *   5. No dominant recipe: at least three strategies within 6 points of the best
  *      mean delivery score.
  *   6. Inspection matters both ways: some inspection beats none for the same
@@ -28,19 +28,20 @@
  *   8. Matching is as reliable as the whole record and sharper where the plan is far
  *      from typical: for hands-off and +3 crews with 10% inspection, the matched
  *      delivered range holds within 3 points as often as all 40's, and is narrower.
- *   9-11. The Decision Desk (frontend/src/plan/desk.js), as it stands before week 1:
- *      the tools that use the record (Records, Analytics, Mabel) hold >= 80%; the plan and
- *      the pace on paper (Status Report, Schedule, Sam, the
- *      Risk Simulator with rework off) hold <= 10%; the Risk Simulator with its
- *      historical rework on holds >= 80%. Every tool and colleague is reported, with
- *      the share of the desk that is calibrated (holds >= 75%). Ask an AI gives no
- *      forecast of its own (it builds a prompt), so it is not swept.
+ *   9-10. The Decision Desk (frontend/src/plan/desk.js), as it stands before week 1:
+ *      the tools that use the record (Records, Mabel) hold >= 80%; the pace and the plan
+ *      on paper (Status Report, Sam) hold <= 10%. Every tool and colleague is reported,
+ *      with the share of the desk that is calibrated (holds >= 75%).
  *   12. Bankruptcy (past the credit line) never hits a plan that wins: no strategy
  *      on time >= 40% of the time goes bankrupt in more than 5% of runs.
+ *   14. The adaptive reference beats record-and-coast on Delivery.
+ *   17-19. Luck, on one code (ledger) across 400 personal-luck draws: good strategies
+ *      are late or bankrupt >= 30%; a reckless plan is on time >= 5%; adaptive beats flat
+ *      out on mean Delivery by >= 20 points.
  */
 import { Project, CONFIG, seedFromString, COMMON_PLANS, pastContracts, historyMean, lastContract, matchContracts, planFromProject } from '../frontend/src/plan/engine.js';
-import { screenData, liveScreen, allForecasts, statusReport, records } from '../frontend/src/plan/desk.js';
-import { adaptive as adaptivePolicy, screenForecast } from './adaptive-policy.mjs';
+import { screenData, allForecasts, statusReport, records } from '../frontend/src/plan/desk.js';
+import { adaptive as adaptivePolicy } from './adaptive-policy.mjs';
 // SWEEP_CFG='{"budget":4600000,...}' tries candidate CONFIG values (exploration only; the game uses CONFIG as committed).
 if (process.env.SWEEP_CFG) Object.assign(CONFIG, JSON.parse(process.env.SWEEP_CFG));
 
@@ -183,6 +184,7 @@ const ADAPT = (() => {
 const statics = Object.entries(rows).filter(([k]) => k !== 'Adaptive');
 const [bestStaticName, bestStaticRow] = statics.sort((a, b) => b[1].onTime - a[1].onTime)[0];
 const bestStaticOnTime = bestStaticRow.onTime;
+const bestDelivery = statics.slice().sort((a, b) => b[1].deliv - a[1].deliv)[0];
 console.log(`
 Adaptive reference (screen-only, tools/adaptive-policy.mjs): on time ${pct(ADAPT.onTime)}, delivery ${ADAPT.deliv.toFixed(1)}, bankrupt ${pct(ADAPT.broke)}, spent $${ADAPT.spent.toFixed(2)}M`);
 const checks = [
@@ -191,8 +193,9 @@ const checks = [
   ['3. Hands-off is almost never on time (<= 1%)', ho.onTime <= 0.01, `on time ${(100 * ho.onTime).toFixed(1)}%`],
   // 4. Set-and-forget loses (Joe, Oct 17, option a): adaptation keeps up on time and stays solvent; every static plan that wins often goes broke often.
   ['4a. The adaptive reference is on time at least as often as the best static plan', ADAPT.onTime >= bestStaticOnTime, `adaptive ${pct(ADAPT.onTime)}, best static ${pct(bestStaticOnTime)} (${bestStaticName})`],
-  ['4b. Every static plan on time >= 30% goes bankrupt >= 20%; adaptive <= 5%', statics.filter(([, r]) => r.onTime >= 0.3).every(([, r]) => r.broke >= 0.2) && ADAPT.broke <= 0.05,
-    statics.filter(([, r]) => r.onTime >= 0.3).map(([k, r]) => `${k.trim()} ${pct(r.onTime)} on time, ${pct(r.broke)} bankrupt`).join('; ') + ` · adaptive ${pct(ADAPT.broke)} bankrupt`],
+  // 4b (simple 1.2): money is the 1.1 budget plus a credit line, so the best plan is solvent and a shift every week is not.
+  ['4b. The best plan (highest mean Delivery) goes bankrupt <= 5%; +2 crews with a shift every week >= 90%', bestDelivery[1].broke <= 0.05 && rows['+2 crews, shift every week'].broke >= 0.9,
+    `best: ${bestDelivery[0].trim()} ${pct(bestDelivery[1].broke)} bankrupt; shift every week ${pct(rows['+2 crews, shift every week'].broke)}`],
   ['5. No dominant recipe (>= 3 within 6 pts of best)', vals.filter((r) => r.deliv >= best - 6).length >= 3, `${vals.filter((r) => r.deliv >= best - 6).length} within 6 of ${best.toFixed(1)}`],
   ['6. Some inspection beats none; most is not best', Math.max(rows['+2 crews, inspect 10%'].deliv, rows['+2 crews, inspect 20%'].deliv) > Math.max(rows['+2 crews'].deliv, rows['+2 crews, inspect 30%'].deliv),
     `0%: ${rows['+2 crews'].deliv.toFixed(1)}  10%: ${rows['+2 crews, inspect 10%'].deliv.toFixed(1)}  20%: ${rows['+2 crews, inspect 20%'].deliv.toFixed(1)}  30%: ${rows['+2 crews, inspect 30%'].deliv.toFixed(1)}`],
@@ -229,80 +232,44 @@ for (const [name, h] of Object.entries(deskHold)) {
   deskMean[name] = mean(Object.values(h));
   console.log(name.padEnd(42) + COMMON_PLANS.map((cp) => pct(h[cp.key]).padStart(10)).join('') + pct(deskMean[name]).padStart(7) + mean(deskBrier[name]).toFixed(2).padStart(7));
 }
-const RECORD_TOOLS = ['Records, all 40', 'Records, like my plan', 'Analytics', 'Team Chat: Mabel, veteran on the line'];
-const INSIDE_TOOLS = ['Status Report', 'Schedule', 'Risk Simulator (rework off)', 'Team Chat: Sam, planner'];
-const deskNames = Object.keys(deskMean).filter((k) => k !== 'Risk Simulator (rework off)');
+const RECORD_TOOLS = ['Records, all 40', 'Records, like my plan', 'Team Chat: Mabel, veteran on the line'];
+const INSIDE_TOOLS = ['Status Report', 'Team Chat: Sam, planner'];
+const deskNames = Object.keys(deskMean);
 const calibrated = deskNames.filter((k) => deskMean[k] >= 0.75);
 console.log(`
-Calibrated (holds >= 75%): ${calibrated.length} of ${deskNames.length} desk forecasts (simulator counted as shipped, rework on): ${calibrated.join(', ')}`);
+Calibrated (holds >= 75%): ${calibrated.length} of ${deskNames.length} desk forecasts: ${calibrated.join(', ')}`);
 const winners = vals.filter((r) => r.onTime >= 0.4);
 checks.push(
   ['9. Desk: tools that use the record hold >= 80%', RECORD_TOOLS.every((k) => deskMean[k] >= 0.8), RECORD_TOOLS.map((k) => `${k} ${pct(deskMean[k])}`).join('  ')],
   ['10. Desk: the pace and the plan on paper hold <= 10%', INSIDE_TOOLS.every((k) => deskMean[k] <= 0.1), INSIDE_TOOLS.map((k) => `${k} ${pct(deskMean[k])}`).join('  ')],
-  ['11. Desk: the Risk Simulator with historical rework holds >= 80%', deskMean['Risk Simulator (with rework)'] >= 0.8,
-    `with rework ${pct(deskMean['Risk Simulator (with rework)'])}, off ${pct(deskMean['Risk Simulator (rework off)'])}`],
   ['12. No plan on time >= 40% goes bankrupt more than 5% of the time', winners.every((r) => r.broke <= 0.05),
     Object.entries(rows).filter(([, r]) => r.onTime >= 0.4).map(([k, r]) => `${k.trim()} ${pct(r.broke)}`).join('  ') + ` · most: ${Object.entries(rows).sort((a, b) => b[1].broke - a[1].broke)[0][0].trim()} ${pct(Math.max(...vals.map((r) => r.broke)))}`],
 );
 
-// ── Balance: scripted student types, played through the engine (targets 13-16) ──
-// Each states +3 crews / 10% inspection. The coasting types play that plan unchanged and never move their forecast.
+// ── Balance: scripted student types, played through the engine (target 14) ──
+// Each states +3 crews / 10% inspection. The coasting types play that plan unchanged.
 const STUDENT_N = Number(process.env.STUDENT_N || Math.min(N, 400));
 const PLAN = { crews: 3, inspect: 0.1, shift: 'none' };
-const ALL_TOOLS = ['status', 'schedule', 'chat', 'last5', 'records', 'analytics', 'simulator'];
 const asForecast = (f) => ({ week: f.week, low: f.low, high: f.high, onTimeChance: f.chance });
-// Every tab is open, but a coaster opens only a few before asking the AI: 2 to 6 of them, varying by code.
-const pickTabs = (i) => { const r = ((i * 2654435761) >>> 0) / 4294967296; const n = 2 + Math.floor(r * 5); const s = [...ALL_TOOLS].sort((a, b) => ((a.charCodeAt(0) * 31 + i) % 7) - ((b.charCodeAt(0) * 31 + i) % 7) || a.localeCompare(b)); return s.slice(0, n); };
-function playStudent(type, seed, i) {
+function playStudent(type, seed) {
   const p = play(seed);
-  const opened = type === 'ai-coast' ? pickTabs(i) : type === 'anchor' ? ['status'] : ['records', 'last5', 'status'];
-  const f0 = type === 'anchor' ? statusReport(SCREEN).forecast
-    : type === 'ai-coast' ? (opened.includes('records') || opened.includes('last5') ? records(SCREEN, PLAN).matched : statusReport(SCREEN).forecast)
-      : records(SCREEN, PLAN).matched;
-  p.commit({ ...asForecast(f0), plan: PLAN, desk: { tool: '', tabs: opened.length, minutes: 5, edited: false, order: opened } });
-  let f = { week: f0.week, low: f0.low, high: f0.high, chance: f0.chance };
-  while (!p.done) {
-    const w = p.week + 1;
-    if (type === 'adaptive') {
-      // Two tabs a week (Records and the Status Report). The forecast is the careful reading of
-      // that screen (tools/adaptive-policy.mjs screenForecast): this contract's rate, its sampled
-      // defect rate and hidden defects, played forward through the acceptance test.
-      p.noteDesk(w, 'records'); p.noteDesk(w, 'status');
-      const d = adaptivePolicy(p, w), L = liveScreen(p);
-      if (L) f = screenForecast(SCREEN, L, d);
-      p.play({ ...d, forecast: Math.max(w, f.week), range: { low: Math.max(w, f.low), high: Math.max(w, f.high), chance: w > CONFIG.deadline ? 0 : f.chance, touched: true } });
-    } else {
-      p.play({ hire: w === 1 ? 3 : 0, inspect: 0.1, forecast: Math.max(w, f.week), range: { low: Math.max(w, f.low), high: Math.max(w, f.high), chance: f.chance, carried: f.week < w } });
-    }
-  }
+  const f0 = type === 'anchor' ? statusReport(SCREEN).forecast : records(SCREEN, PLAN).matched;
+  p.commit({ ...asForecast(f0), plan: PLAN });
+  while (!p.done) { const w = p.week + 1; p.play(type === 'adaptive' ? adaptivePolicy(p, w) : { hire: w === 1 ? 3 : 0, inspect: 0.1 }); }
   return p;
 }
-const STUDENTS = { anchor: 'Anchor (pace, plays the plan)', 'record-coast': 'Record and coast', 'ai-coast': 'AI and coast (2-6 tabs)', adaptive: 'Adaptive (2 tabs a week)' };
+const STUDENTS = { anchor: 'Anchor (pace, plays the plan)', 'record-coast': 'Record and coast', adaptive: 'Adaptive' };
 const studentRows = {};
 for (const type of Object.keys(STUDENTS)) {
-  const ps = Array.from({ length: STUDENT_N }, (_, i) => playStudent(type, 50000 + i, i));
+  const ps = Array.from({ length: STUDENT_N }, (_, i) => playStudent(type, 50000 + i));
   const sc = ps.map((p) => p.scores());
-  const heldFrom = (p, w0) => { const o = p.outcomeWeek(), es = p.forecastLog.filter((e) => e.week >= w0); return es.length ? mean(es.map((e) => +(o >= (e.low ?? e.forecast) && o <= (e.high ?? e.forecast)))) : null; };
-  const weeklyHeld = mean(ps.map((p) => heldFrom(p, 0)));
-  // From week 2 on, after the first update.
-  const heldWeek2 = mean(ps.map((p) => heldFrom(p, 2)).filter((x) => x !== null));
-  studentRows[type] = { forecast: mean(sc.map((x) => x.forecast)), updating: mean(sc.map((x) => x.updating)), delivery: mean(sc.map((x) => x.delivery)),
-    held: mean(sc.map((x) => +x.held)), weeklyHeld, heldWeek2, onTime: mean(sc.map((x) => +x.onTime)), broke: mean(ps.map((p) => +(p.result === 'BANKRUPT'))) };
+  studentRows[type] = { forecast: mean(sc.map((x) => x.forecast)), delivery: mean(sc.map((x) => x.delivery)), held: mean(sc.map((x) => +x.held)), onTime: mean(sc.map((x) => +x.onTime)), broke: mean(ps.map((p) => +(p.result === 'BANKRUPT'))) };
 }
-console.log(`\nStudent types (${STUDENT_N} codes): Forecast = week-1 score, Updating = weekly forecasts, Delivery counts bankruptcy as 0`);
-console.log('Type'.padEnd(30) + 'Forecast'.padStart(9) + 'Updating'.padStart(9) + 'Delivery'.padStart(9) + 'Held'.padStart(6) + 'Wk held'.padStart(8) + 'OnTime'.padStart(7) + 'Broke'.padStart(6));
-for (const [k, r] of Object.entries(studentRows)) console.log(STUDENTS[k].padEnd(30) + r.forecast.toFixed(1).padStart(9) + r.updating.toFixed(1).padStart(9) + r.delivery.toFixed(1).padStart(9) + pct(r.held).padStart(6) + pct(r.weeklyHeld).padStart(8) + pct(r.onTime).padStart(7) + pct(r.broke).padStart(6));
-const A = studentRows.adaptive, RC = studentRows['record-coast'], AC = studentRows['ai-coast'];
-const bestOn = (m) => Object.entries(studentRows).sort((a, b) => b[1][m] - a[1][m])[0][0];
-checks.push(
-  ['13. Updating pays: adaptive beats record-and-coast by >= 8 points (0-100 scale); AI-and-coast is below both', A.updating >= RC.updating + 8 && AC.updating < Math.min(A.updating, RC.updating),
-    `adaptive ${A.updating.toFixed(1)}, record-coast ${RC.updating.toFixed(1)}, AI-coast ${AC.updating.toFixed(1)}`],
-  ['14. Adaptive beats both coasting types on Delivery (bankruptcy counts 0)', A.delivery > RC.delivery && A.delivery > AC.delivery,
-    `adaptive ${A.delivery.toFixed(1)}, record-coast ${RC.delivery.toFixed(1)}, AI-coast ${AC.delivery.toFixed(1)}`],
-  ['15. Neither coasting type is best on both Updating and Delivery', !['record-coast', 'ai-coast'].some((k) => bestOn('updating') === k && bestOn('delivery') === k),
-    `best Updating: ${STUDENTS[bestOn('updating')]}; best Delivery: ${STUDENTS[bestOn('delivery')]}`],
-  ['16. A careful player is calibrated reading two tabs a week (adaptive weekly ranges hold >= 70%)', A.weeklyHeld >= 0.7, `adaptive weekly ranges held ${pct(A.weeklyHeld)} (from week 2: ${pct(A.heldWeek2)}); week-1 range held ${pct(A.held)}`],
-);
+console.log(`\nStudent types (${STUDENT_N} codes): Forecast = the score (week-1 commitment), Delivery is secondary and counts bankruptcy as 0`);
+console.log('Type'.padEnd(30) + 'Forecast'.padStart(9) + 'Delivery'.padStart(9) + 'Held'.padStart(6) + 'OnTime'.padStart(7) + 'Broke'.padStart(6));
+for (const [k, r] of Object.entries(studentRows)) console.log(STUDENTS[k].padEnd(30) + r.forecast.toFixed(1).padStart(9) + r.delivery.toFixed(1).padStart(9) + pct(r.held).padStart(6) + pct(r.onTime).padStart(7) + pct(r.broke).padStart(6));
+const A = studentRows.adaptive, RC = studentRows['record-coast'];
+checks.push(['14. Adaptive beats record-and-coast on Delivery (bankruptcy counts 0)', A.delivery > RC.delivery, `adaptive ${A.delivery.toFixed(1)}, record-coast ${RC.delivery.toFixed(1)}`]);
 
 // ── Luck: one code (ledger), many students, each with their own luck (targets 17-19) ──
 // Judge the decision, not the outcome: on one code, good plans sometimes fail and reckless ones sometimes win.

@@ -35,11 +35,6 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
         const h = renderToString(<DeskTab id={t.id} S={S} plan={p.plan} planReady onUse={() => {}} live={liveScreen(p)} />);
         if (t.id === 'ai' && !h.includes(`STATUS AFTER WEEK ${w}`)) throw new Error('prompt lacks the current status');
         if (t.id === 'chat' && !h.includes(`after week ${w}`)) throw new Error('chat not updated for the week');
-        // The inspectors' sample is a plain observation on the Status Report, in Priya's line and in the prompt.
-        const a = h.replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
-        if (t.id === 'status' && !/Inspectors' sample: <span[^>]*>\d+\.\d%/.test(a)) throw new Error('status lacks the inspectors sample');
-        if (t.id === 'chat' && !p.history.some((r) => r.rejected > 0) && !a.includes("The inspectors' sample had")) throw new Error('Priya lacks the inspectors sample');
-        if (t.id === 'ai' && !h.includes('inspection_sample_defective_pct')) throw new Error('prompt lacks the sample column');
         return h;
       });
     }
@@ -77,8 +72,9 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   while (!b.done) b.play({ hire: 3, shift: true });
   ok('Reveal, bankrupt: a miss for every range', () => {
     const h = renderToString(<Reveal project={b} onReplay={() => {}} />);
-    if (b.result !== 'BANKRUPT' || !h.includes('It missed: the contract was never delivered') || !h.includes('missed: bankrupt') || !h.includes('a miss for every range') || h.includes('>held<')) throw new Error('bankrupt outcome not a miss');
-    if (!h.replace(/<!-- -->/g, '').includes(`the company went bankrupt in week ${b.week}`)) throw new Error('lesson line lacks the bankruptcy');
+    // Bankruptcy is its own line; the range is graded against the week it would have taken.
+    const a = h.replace(/<!-- -->/g, '');
+    if (b.result !== 'BANKRUPT' || !a.includes(`Your company went bankrupt in week ${b.week}.`) || !a.includes('(the week it would have taken)') || a.includes('a miss for every range')) throw new Error('bankruptcy not reported on its own');
     return h;
   });
   // The finish screen states what happened.
@@ -94,26 +90,26 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   const pace = { week: 11, low: 10, high: 12, onTimeChance: 75 };
   const cases = [
     ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, ['The range held.', 'You changed it before playing week 1', 'Your committed numbers came from Status Report'], false],
-    ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, ['The range held.', 'Week 1 ran as stated', 'and you then changed them'], false],
-    ['all 40, hands-off stated and played', { week: 15, low: 11, high: 22, onTimeChance: 20 }, HO, {}, ['The range held.', 'Week 1 ran as stated'], true],
-    ['pace, hands-off stated and played', pace, HO, {}, ['It missed by 6 weeks (late).', 'Week 1 ran as stated', 'Sees ', 'You set your committed numbers yourself.'], true],
+    ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, ['The range held.', 'Week 1 ran as stated', 'Your committed numbers came from Records, and you then changed them'], false],
+    ['all 40, hands-off stated and played', { week: 15, low: 11, high: 22, onTimeChance: 20 }, HO, {}, ['The range held.', 'A range that wide costs points even when it holds.', 'Week 1 ran as stated'], true],
+    ['pace, hands-off stated and played', pace, HO, {}, ['It missed by 5 weeks (late).', 'Week 1 ran as stated', 'Sees ', 'You set your committed numbers yourself.'], true],
   ];
   for (const [i, [label, f, plan, pol, verdict, coaster]] of cases.entries()) {
     const p = new Project('ledger');
-    p.commit({ ...f, plan, desk: { tool: ['a', 'o', 'j', ''][i], tabs: i * 3, minutes: 4 + i, edited: i === 1, order: ['status', 'analytics'] } });
+    p.commit({ ...f, plan, desk: { tool: ['a', 'j', 'e', ''][i], tabs: i * 3, minutes: 4 + i, edited: i === 1, order: ['status', 'analytics'] } });
     playPolicy(p, pol);
     ok(`Reveal, ledger: ${label} → ${verdict.join(', ')}`, () => {
       const h = renderToString(<Reveal project={p} onReplay={() => {}} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
       for (const v of verdict) if (!h.includes(v)) throw new Error(`"${v}" not shown`);
       if (/Reasoned|Lucky|Verdict|Tool used|Played as stated/.test(h)) throw new Error('an old label is still shown');
-      if (!h.includes('How you played') || !/You checked tools in \d+ of \d+ weeks?\./.test(h) || !/changed nothing\.|still checking or changing things/.test(h) || /Time: about/.test(h)) throw new Error('How you played sentences wrong');
+      if (h.includes('How you played') || h.includes('Updating')) throw new Error('How you played or Updating still shown');
       if (h.includes('past managers also ran it hands-off') !== coaster) throw new Error('coaster line wrong');
       // The phone order: lesson, scores, tools, your range, the dashboard, then More detail.
       const at = (x) => h.indexOf(x);
-      const order = ['Your dashboard said', 'Forecast score', 'Updating score', 'Delivery score', 'How each tool on the desk would have done', 'Your range against the record', 'What your dashboard told you', 'More detail'];
+      const order = ['Your dashboard said', 'Forecast score', 'Delivery score (secondary)', 'How each tool on the desk would have done', 'Your range against the record', 'What your dashboard told you', 'More detail'];
       if (order.some((x) => at(x) < 0) || order.some((x, k) => k && at(x) < at(order[k - 1]))) throw new Error('reveal order wrong');
       const fw = p.history.find((r) => r.rejected > 0 || r.reported >= 0.999).week;
-      for (const x of [`Your dashboard said week ${fw}.`, `It was accepted in week ${p.scores().outcome}.`, `The past contracts said week 15`, `You gave ${f.onTimeChance}% to week 12; it`, 'first passed 90% in week']) if (!h.replace(/<[^>]+>/g, '').includes(x)) throw new Error(`"${x}" missing`);
+      for (const x of [`Your dashboard said week ${fw}.`, `It was accepted in week ${p.scores().outcome}.`, `The past contracts said week 14`, `You gave ${f.onTimeChance}% to week 12; it`, 'first passed 90% in week']) if (!h.replace(/<[^>]+>/g, '').includes(x)) throw new Error(`"${x}" missing`);
       if (h.includes('BLP') || h.includes('result code')) throw new Error('a result code is still shown');
       return h;
     });
@@ -134,7 +130,7 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     const h = renderToString(<Brief onCommit={() => {}} />);
     for (const s of ['1 · Your plan', '2 · Your forecast', 'Commit plan and forecast', "The contract, its rules and the line"]) if (!h.includes(s) && !h.includes(s.replace("'", '&#x27;'))) throw new Error(`missing "${s}"`);
     for (const s of ['What you decide each week', 'a week</strong>', 'two scores', 'Two scores']) if (h.includes(s)) throw new Error(`front tab still shows "${s}"`);
-    if (!h.includes('Three scores.') || !h.includes('narrow ranges that hold score best')) throw new Error('scoring not explained before commit');
+    if (!h.replace(/<[^>]+>/g, '').includes('Your score is your forecast. Delivery shows how the company did.') || h.includes('Three scores') || h.includes('Updating')) throw new Error('scoring line wrong before commit');
     return h;
   });
   // Fairness: everything a calibrated forecast needs is reachable before week 1, in the tabs.
@@ -142,27 +138,21 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   const strip = (h) => h.replace(/<!-- -->/g, '').replace(/&#x27;/g, "'").replace(/<\/?(strong|span)[^>]*>/g, '');
   ok('Before week 1, The Contract states every rule and both scores', () => {
     const h = strip(before('contract'));
-    if (/tool tabs each week|views a week|Round 1/.test(h)) throw new Error('The Contract still states a view limit');
-    for (const s of ['200', '12', '4', '$4.60M', '$500k', 'New crews work at 50%', 'lose a crew', 'parts delay', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Three scores.', 'Updating:', 'narrow ranges that hold score best', 'units of work to fix', 'own week-to-week luck']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    if (/tool tabs each week|views a week|Round 1|lose a crew|parts delay|inspectors|Updating/.test(h)) throw new Error('The Contract states a removed rule');
+    for (const s of ['200', '12', '4', '$5.00M', '$500k', 'A new crew slows the whole line to 70%', 'From the second straight week, tired crews make more defects', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Your score is your forecast. Delivery shows how the company did.', 'a narrow range that holds scores best', 'units of work to fix', 'own week-to-week luck']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     return h;
   });
   ok('Before week 1, Last 5 Contracts gives the pace and the last contract’s story', () => {
     const h = strip(before('last5'));
-    for (const s of ['20.6 a week', '9.7 weeks', '100% in week 12', 'Accepted in week 16', '21 units', 'Range of the delivered ones']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    for (const s of ['19.1 a week', '10.5 weeks', '100% in week 13', 'Accepted in week 17', '20 units', 'Range of the delivered ones']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     if (h.includes('80% range')) throw new Error('Last 5 still calls its min-max an 80% range');
     return h;
   });
   ok('Before week 1, Records gives the 40 contracts, their dot strip and summary', () => {
     const h = strip(before('records'));
-    for (const s of ['All 40 contracts', 'median week 15', 'percentile weeks 11–19', 'of the 32 delivered', '18% made week 12', '8 of 40 never delivered (8 bankrupt)', 'counts as not on time']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
-    if ((before('records').match(/rounded-full/g) || []).length < 32) throw new Error('dot strip missing (one dot per delivered contract)');
-    if (!h.includes('✕✕✕✕✕✕✕✕') || !h.includes('never delivered: 8 bankrupt')) throw new Error('failures not beside the dot strip');
-    return h;
-  });
-  ok('Ranges from the record carry their failures (Records like my plan, Analytics, Simulator, Mabel)', () => {
-    const C3I = { crews: 3, inspect: 0.1, shift: 'none' };
-    const h = [before('analytics', C3I), before('simulator', C3I), before('chat', C3I)].map(strip).join(' ').replace(/&#x27;/g, "'");
-    for (const s of ['1 of 7 run like yours never delivered (1 bankrupt)', "aren't in the fit", 'counts the rest as not on time', '1 of 11 inspected (like your plan) never delivered', 'one of the seven run like yours never got delivered']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    for (const s of ['All 40 contracts', 'median week 14', 'percentile weeks 12–17', 'of the 38 delivered', '18% made week 12', '2 of 40 never delivered (2 bankrupt)', 'counts as not on time']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    if ((before('records').match(/rounded-full/g) || []).length < 38) throw new Error('dot strip missing (one dot per delivered contract)');
+    if (!h.includes('✕✕') || h.includes('✕✕✕') || !h.includes('never delivered: 2 bankrupt')) throw new Error('failures not beside the dot strip');
     return h;
   });
   const C3 = { crews: 3, inspect: 0.1, shift: 'none' };

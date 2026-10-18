@@ -78,8 +78,6 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
   const live = liveScreen(p);
   // The tools work from where the contract stands and this week's decisions.
   const current = { crews: Math.max(0, crewsNext - c.crews), inspect, shift: shift ? 'every' : 'none' };
-  // Ask an AI holds everything opened so far: before committing, in earlier weeks and this week.
-  const openedSoFar = [...new Set([...(p.desk?.order || []), ...p.deskLog.map((d) => d.tab).filter((t) => !t.startsWith('use:') && t !== 'ai-copy'), ...seenTabs])];
 
   const late = nextWeek > c.deadline;
   const weeksLeft = c.deadline - p.week;
@@ -98,8 +96,7 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
 
       {deskTab !== 'decide' ? (
         <>
-          <DeskTab id={deskTab} S={S} plan={current} planReady onUse={useTool} live={live}
-            onCopyPrompt={() => p.noteDesk(nextWeek, 'ai-copy')} opened={openedSoFar} />
+          <DeskTab id={deskTab} S={S} plan={current} planReady onUse={useTool} live={live} />
           <button type="button" onClick={() => openTab('decide')} className="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold">
             Back to This Week's Decisions
           </button>
@@ -128,7 +125,7 @@ export default function Play({ project, onPlay, initialSeen = [], initialTab = '
             <Slider label="Earliest (80% sure)" value={shownRange.low} min={nextWeek} max={lastWeek} onChange={(v) => moveRange((r) => ({ ...r, low: Math.min(v, shownForecast) }))} format={(v) => `week ${v}`} />
             <Slider label="Latest" value={shownRange.high} min={nextWeek} max={lastWeek} onChange={(v) => moveRange((r) => ({ ...r, high: Math.max(v, shownForecast) }))} format={(v) => `week ${v}`} />
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Week {lastWeek} is the last: after it the customer terminates the contract, and a contract never delivered misses any range.</p>
+          <p className="text-[11px] text-slate-500 mt-1">Week {lastWeek} is the last: after it the customer terminates the contract.</p>
           <Slider label={`Chance of week ${c.deadline}`} value={shownRange.chance} min={0} max={100} step={5} onChange={(v) => moveRange((r) => ({ ...r, chance: v }))} format={(v) => `${v}%`} />
         </details>
       </Card>

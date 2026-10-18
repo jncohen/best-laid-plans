@@ -19,7 +19,7 @@ export const CONFIG = {
   deadline: 12,
   horizon: 22,               // the customer terminates the contract after this week
   crews: 4,
-  budget: 4_600_000,
+  budget: 5_000_000,
   creditLine: 500_000,       // overspend allowed on credit; past it, payroll fails and the company goes bankrupt
 
   // Production
@@ -27,8 +27,8 @@ export const CONFIG = {
   noise: 0.05,
   // Each contract differs: how hard its build is, and how defect-prone its parts are.
   // Drawn per seed and never shown, so it is part of what the past contracts' spread reflects.
-  productivityRange: [0.80, 1.20],
-  defectProneRange: [0.5, 1.8],
+  productivityRange: [0.92, 1.08],
+  defectProneRange: [0.75, 1.3],
   maxCrews: 9,
   coordinationLoss: 0.04,    // each crew above the opening four costs every crew 4% (Brooks)
   maxHirePerWeek: 3,
@@ -39,10 +39,10 @@ export const CONFIG = {
   releaseFee: 50_000,
   shiftPremiumPerCrew: 20_000,
 
-  // Hiring drag: new crews are brought up to speed
+  // Hiring drag (as in 1.1): while a new crew is onboarded, the whole line runs slower
   onboardingWeeks: 2,
-  onboardingFactor: 0.5,
-  onboardingDrag: 'new',     // 'new': only the new crews work at onboardingFactor; 'line': the whole line does
+  onboardingFactor: 0.7,
+  onboardingDrag: 'line',    // 'line': the whole line runs at onboardingFactor; 'new': only the new crews do
 
   // Second shift
   shiftBoost: 1.3,
@@ -67,29 +67,18 @@ export const CONFIG = {
   shockTailChance: 0.1,
   shockTailUnits: [40, 55],
 
-  // Mid-game events, disclosed as possibilities and drawn per contract before play.
-  crewOutChance: 0.5,        // a crew is out for crewOutWeeks, starting in a week in crewOutWeekRange
-  crewOutWeeks: 2,
-  crewOutWeekRange: [3, 9],
-  delayChance: 0.4,          // a parts delay idles part of the line for one week
-  delayShare: 0.5,
-  delayWeekRange: [4, 10],
-
-  // Inspection's sample: each inspected week, the inspectors report the share of that week's
-  // units they found defective. It reads the true defect rate with this relative error.
-  sampleError: 0.08,
-
   // Personal luck: each student's line has its own week-to-week luck, from a stream seeded by
-  // the code plus a draw made when the student commits. The contract (scope change, events,
-  // how fast and defect-prone this contract's line is), the record and the last contract stay
+  // the code plus a draw made when the student commits. The contract (the scope change, how
+  // fast and defect-prone this contract's line is), the record and the last contract stay
   // shared. Weekly output and the share of built units that turn out defective each wobble by
   // these relative amounts, with week-to-week persistence.
-  luckOutput: 0.07,
-  luckDefects: 0.1,
+  luckOutput: 0.09,
+  luckDefects: 0.15,
   luckPersistence: 0.7,
 
-  // Updating score: weight on the interval score of each weekly 80% range
-  updatingIntervalWeight: 3,
+  // Forecast score: weight on the interval score of the committed 80% range (width, plus 10 x
+  // how far the outcome falls outside it), so wide ranges cost points as surely as misses do.
+  forecastIntervalWeight: 3,
 
   // Delivery score
   latePenaltyPerWeek: 12,
@@ -152,14 +141,6 @@ export class Project {
     // Production noise is drawn per week from a separate stream, so one player's
     // choices cannot shift another player's luck on the same seed.
     this._noise = Array.from({ length: cfg.horizon + 1 }, () => 1 + cfg.noise * (r() + r() + r() - 1.5) * 1.15);
-    // Mid-game events, drawn after everything above so earlier draws keep their values.
-    const crewOut = r() < cfg.crewOutChance, crewOutAt = cfg.crewOutWeekRange[0] + Math.floor(r() * (cfg.crewOutWeekRange[1] - cfg.crewOutWeekRange[0] + 1));
-    const delay = r() < cfg.delayChance, delayAt = cfg.delayWeekRange[0] + Math.floor(r() * (cfg.delayWeekRange[1] - cfg.delayWeekRange[0] + 1));
-    this.crewOutWeek = crewOut ? crewOutAt : null;
-    this.delayWeek = delay ? delayAt : null;
-    // The inspectors' sampling error, one per week, drawn last so every earlier draw keeps its value.
-    // It changes what the screen reports, never what happens.
-    this._sample = Array.from({ length: cfg.horizon + 1 }, () => (r() + r() + r() - 1.5) * 2);
     // Personal luck, from its own stream, so nothing above moves: this line's weekly output
     // wobble (replacing the shared one) and the share of its built units that turn out defective.
     this._defectLuck = Array(cfg.horizon + 1).fill(1);
@@ -263,7 +244,7 @@ export class Project {
       this.done = true;
       this.result = 'BANKRUPT';
       const row = {
-        week: this.week, crews: this.crews, shift: false, inspect: 0, built: 0, found: 0, sampled: null, rejected: 0, shock: 0, cost: 0,
+        week: this.week, crews: this.crews, shift: false, inspect: 0, built: 0, found: 0, rejected: 0, shock: 0, cost: 0,
         budget: this.budget, backlog: +this.backlog.toFixed(1), reported: +this.reportedPct().toFixed(4), true: +this.truePct().toFixed(4), defectRate: 0,
         bankrupt: true,
         events: [`Week ${this.week}'s payroll (${Math.round(cost / 1000)}k) would take the company past its ${Math.round(c.creditLine / 1000)}k credit line. It can't pay its crews: the company is bankrupt and the contract ends.`],
@@ -286,15 +267,10 @@ export class Project {
 
     // Capacity, split between building and inspecting
     inspect = c.inspectionOptions.includes(+inspect) ? +inspect : 0;
-    const out = this.crewOutWeek !== null && this.week >= this.crewOutWeek && this.week < this.crewOutWeek + c.crewOutWeeks && this.crews > 1 ? 1 : 0;
-    if (out && this.week === this.crewOutWeek) events.push(`A crew is out for ${c.crewOutWeeks} weeks. You still pay it; the line has one crew fewer.`);
-    const delayed = this.week === this.delayWeek;
-    if (delayed) events.push(`A parts delay idles ${Math.round(c.delayShare * 100)}% of the line this week.`);
     const lineCrews = c.onboardingDrag === 'new' && this.onboarding > 0
-      ? this.crews - out - this.newCrews * (1 - c.onboardingFactor)
-      : this.crews - out;
+      ? this.crews - this.newCrews * (1 - c.onboardingFactor)
+      : this.crews;
     const capacity = lineCrews * c.unitsPerCrew * this.productivity
-      * (delayed ? 1 - c.delayShare : 1)
       * (1 - c.coordinationLoss * Math.max(0, this.crews - c.crews))
       * (c.onboardingDrag !== 'new' && this.onboarding > 0 ? c.onboardingFactor : 1)
       * (shift ? c.shiftBoost : 1)
@@ -302,8 +278,6 @@ export class Project {
     const built = Math.min(this.backlog, capacity * (1 - inspect));
     const rate = this.defectRate(shift);
     const bad = built * rate;
-    // What the inspectors' sample says about this week's units (only when some of the line inspects).
-    const sampled = inspect > 0 && built > 0 ? +Math.max(0, rate * (1 + c.sampleError * this._sample[this.week])).toFixed(3) : null;
     this.backlog -= built;
     this.hidden += bad;
     // Fatigue counts straight weeks: a week without the shift resets it.
@@ -346,7 +320,6 @@ export class Project {
         events.push(inspect > 0 ? `Inspection found ${units}; back in the queue.` : `${units[0].toUpperCase()}${units.slice(1)} turned up in the work; back in the queue.`);
       }
     }
-    if (sampled !== null) events.push(`Inspectors' sample: ${(sampled * 100).toFixed(1)}% of this week's units were defective.`);
 
     if (forecast !== null && forecast !== undefined && Number.isFinite(+forecast)) {
       this.forecastLog.push({ week: this.week, forecast: +forecast, ...(range || {}) });
@@ -370,7 +343,6 @@ export class Project {
       inspect,
       built: +built.toFixed(1),
       found: +found.toFixed(1),
-      sampled,
       rejected: +rejected.toFixed(1),
       shock,
       cost,
@@ -410,16 +382,16 @@ export class Project {
       : Math.max(0, Math.round(100 - late * c.latePenaltyPerWeek - (over / 50_000) * c.overspendPenaltyPer50k));
 
     const f = this.forecast || { week: c.deadline, low: c.deadline, high: c.deadline, onTimeChance: 50 };
-    // A contract never delivered misses every range: its outcome week is only a projection.
+    // Bankruptcy and termination are reported on their own; the forecast is graded against the
+    // acceptance week (projected, for a contract never delivered).
     const failed = this.result === 'BANKRUPT' ? 'bankrupt' : this.result === 'TERMINATED' ? 'terminated' : null;
-    const held = !failed && outcome >= f.low && outcome <= f.high;
-    const missBy = held ? 0 : failed ? null : +(outcome > f.high ? outcome - f.high : outcome - f.low).toFixed(1);
+    const held = outcome >= f.low && outcome <= f.high;
+    const missBy = held ? 0 : +(outcome > f.high ? outcome - f.high : outcome - f.low).toFixed(1);
     const onTime = this.result === 'DELIVERED' && this.finishWeek <= c.deadline;
     const p = Math.max(0, Math.min(1, f.onTimeChance / 100));
     const brier = (p - (onTime ? 1 : 0)) ** 2;
-    const forecastScore = Math.max(0, Math.round(100 - 8 * Math.abs(outcome - f.week) - (held ? 0 : 20) - 40 * brier));
 
-    return { delivery, forecast: forecastScore, updating: updatingScore(this.forecastLog, outcome, onTime, c), outcome, held, missBy, failed, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
+    return { delivery, forecast: forecastScore(f, outcome, onTime, c), outcome, held, missBy, failed, onTime, brier: +brier.toFixed(3), late: +late.toFixed(1), overspend: Math.round(over) };
   }
 
 }
@@ -489,22 +461,15 @@ export function playSummary(p) {
 export const intervalScore = (low, high, outcome) => (high - low) + 10 * Math.max(0, low - outcome) + 10 * Math.max(0, outcome - high);
 
 /**
- * The Updating score: each forecast in force during play (the commitment, then each
- * week's running forecast) scored as 100 − 8 × |error| − updatingIntervalWeight ×
- * interval score − 40 × Brier of the week-12 chance (the Brier only while week 12 was
- * still possible), floored at 0 and averaged with week w weighted w + 1.
+ * The Forecast score, for the commitment made before week 1: 100 − 8 × |point error|
+ * − forecastIntervalWeight × the interval score of the 80% range − 40 × Brier of the
+ * week-12 chance, floored at 0. The interval score charges for width as well as misses,
+ * so a range that holds only because it is wide still costs points.
  */
-export function updatingScore(log, outcome, onTime, cfg = CONFIG) {
-  if (!log || !log.length) return null;
-  let total = 0, weight = 0;
-  for (const e of log) {
-    const low = e.low ?? e.forecast, high = e.high ?? e.forecast;
-    const brier = e.week < cfg.deadline && e.chance !== undefined ? (Math.max(0, Math.min(1, e.chance / 100)) - (onTime ? 1 : 0)) ** 2 : 0;
-    const s = Math.max(0, 100 - 8 * Math.abs(outcome - e.forecast) - cfg.updatingIntervalWeight * intervalScore(low, high, outcome) - 40 * brier);
-    total += (e.week + 1) * s;
-    weight += e.week + 1;
-  }
-  return Math.round(total / weight);
+export function forecastScore(f, outcome, onTime, cfg = CONFIG) {
+  const p = Math.max(0, Math.min(1, f.onTimeChance / 100));
+  const brier = (p - (onTime ? 1 : 0)) ** 2;
+  return Math.max(0, Math.round(100 - 8 * Math.abs(outcome - f.week) - cfg.forecastIntervalWeight * intervalScore(f.low, f.high, outcome) - 40 * brier));
 }
 
 /** The student's own tab: Your Plan & Prediction before week 1, This Week's Decisions during play. Never counted as a tool check. */
@@ -520,11 +485,6 @@ export const onboardingRule = (c = CONFIG) => (c.onboardingDrag === 'new'
   ? `New crews work at ${Math.round(c.onboardingFactor * 100)}% for their first ${c.onboardingWeeks} weeks.`
   : `A new crew slows the whole line to ${Math.round(c.onboardingFactor * 100)}% for ${c.onboardingWeeks} weeks.`);
 
-/** The mid-game events a contract may face, in the briefing's words. */
-export const eventRules = (c = CONFIG) => [
-  c.crewOutChance > 0 && `About ${Math.round(c.crewOutChance * 100)}% of contracts lose a crew for ${c.crewOutWeeks} weeks, starting somewhere in weeks ${c.crewOutWeekRange[0]}–${c.crewOutWeekRange[1]}. You still pay it.`,
-  c.delayChance > 0 && `About ${Math.round(c.delayChance * 100)}% of contracts hit a parts delay that idles ${Math.round(c.delayShare * 100)}% of the line for one week, somewhere in weeks ${c.delayWeekRange[0]}–${c.delayWeekRange[1]}.`,
-].filter(Boolean);
 
 /**
  * "3 of 40 never delivered (2 bankrupt, 1 terminated)", or null when all were delivered.

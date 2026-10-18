@@ -36,7 +36,6 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const [opened, setOpened] = useState([]);
   const [startedAt] = useState(() => Date.now());
   const [loaded, setLoaded] = useState(null);
-  const [copied, setCopied] = useState(false);
   const [seed, setSeed] = useState(initialSeed);
   const [seedLocked, setSeedLocked] = useState(!!initialSeed);
   // The plan comes first: crews added at the start, inspection share, second shift.
@@ -68,7 +67,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const commit = () => {
     const given = loaded ? loaded.numbers : null;
     const edited = !given || given.week !== week || given.low !== low || given.high !== high || given.chance !== chance;
-    const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', tabs: opened.filter(isCheck).length, minutes: (Date.now() - startedAt) / 60000, edited, copied, order: opened };
+    const desk = { tool: loaded ? tabById(loaded.id)?.letter || '' : '', tabs: opened.filter(isCheck).length, minutes: (Date.now() - startedAt) / 60000, edited, order: opened };
     onCommit({ week, low, high, onTimeChance: chance, plan, desk }, seed.trim());
   };
   const deskPlan = planReady ? plan : { crews: 0, inspect: 0, shift: 'none' };
@@ -86,7 +85,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
 
       {tab !== 'commit' ? (
         <>
-          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} onCopyPrompt={() => setCopied(true)} opened={opened} />
+          <DeskTab id={tab} S={S} plan={deskPlan} planReady={planReady} onUse={applyNumbers} />
           <button type="button" onClick={() => open('commit')} className="w-full py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-sm">
             Back to Your Plan and Prediction
           </button>
@@ -119,7 +118,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
               <Slider label="80% sure: earliest" value={low} min={6} max={c.horizon} onChange={(v) => setLow(week === null ? v : Math.min(v, week))} format={(v) => `week ${v}`} />
               <Slider label="Latest" value={high} min={8} max={c.horizon} onChange={(v) => setHigh(week === null ? v : Math.max(v, week))} format={(v) => `week ${v}`} />
             </div>
-            <p className="text-[11px] text-slate-500 mt-1">Week {c.horizon} is the last: after it the customer terminates the contract. A contract never delivered (bankrupt or terminated) misses any range.</p>
+            <p className="text-[11px] text-slate-500 mt-1">Week {c.horizon} is the last: after it the customer terminates the contract. If the contract is never delivered, your range is judged against the week it would have taken.</p>
           </div>
           <Slider
             label={`Chance you deliver by week ${c.deadline}`} value={chance} min={0} max={100} step={5}

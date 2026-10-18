@@ -1,8 +1,8 @@
 // The Decision Desk's tool tabs. Each is a generic replica of a dashboard genre, fed
 // only by desk.js, which sees only what the briefing shows.
 import { useState } from 'react';
-import { statusReport, schedule, lastFive, teamChat, aiPrompt, analytics, riskSimulator, tabById } from './desk.js';
-import { CONFIG, pastContracts, describePlan, onboardingRule, eventRules, failuresLine } from './engine';
+import { statusReport, lastFive, teamChat, tabById } from './desk.js';
+import { CONFIG, pastContracts, describePlan, onboardingRule, failuresLine } from './engine';
 import { Card, ScoringNote } from './ui';
 import { CHART_W as W, CHART_CLASS, svgText } from './chartStyle';
 import { money } from './format';
@@ -73,8 +73,7 @@ function ContractTab() {
         <p>Your company can overspend the budget by up to {money(c.creditLine)} on credit. Past that, it can't make payroll: the company goes bankrupt and the contract ends. Either way, bankrupt or terminated, the contract is never delivered.</p>
         <p>Customers on this line add to the requirement partway through: every past contract on record had a scope change. Nobody knows in advance which week it comes or how many units it adds.</p>
         <p>Some built units turn out defective. The dashboard counts them complete until inspection or the customer's acceptance test finds them.</p>
-        <p>Contracts differ: some lines build faster or slower than others, and some turn out more defects. Each week's output and inspection finds show how this one runs. Your line also has its own week-to-week luck. In any week you inspect, the inspectors also report the share of that week's units their sample found defective.</p>
-        {eventRules(c).map((e) => <p key={e}>{e}</p>)}
+        <p>Contracts differ: some lines build faster or slower than others, and some turn out more defects. Each week's output and inspection finds show how this one runs. Your line also has its own week-to-week luck.</p>
       </div>
       <div className="mt-4 pt-3 border-t border-slate-800">
         <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">What you decide each week</div>
@@ -87,6 +86,7 @@ function ContractTab() {
         </ul>
         <ScoringNote className="mt-3" />
         <p className="text-xs text-slate-400 mt-1">
+          The forecast is the one you commit before week 1: the week, the 80% range and the chance of week {c.deadline}. It loses points for being far off, for a wide range and for a range that misses: a narrow range that holds scores best.
           Delivery: −{c.latePenaltyPerWeek} a week late, −{c.overspendPenaltyPer50k} per $50k over budget, 0 if the contract is never delivered.
         </p>
       </div>
@@ -127,7 +127,7 @@ function StatusTab({ S, plan, onUse, live }) {
           <Tile label="Budget left" value={money(m.budgetLeft)} tone={m.budgetLeft < 0 ? 'text-rose-300' : 'text-white'} />
           <Tile label="Credit left" value={money(Math.min(m.creditLine, m.creditLeft))} sub={`of ${money(m.creditLine)} credit line`} tone={m.budgetLeft < 0 ? 'text-rose-300' : 'text-white'} />
         </>) : (<>
-          <Tile label="Your plan's cost" value={money(m.plannedCost)} sub="if it runs as the Schedule says" />
+          <Tile label="Your plan's cost" value={money(m.plannedCost)} sub="if it runs as planned on paper" />
           <Tile label="Budget" value={money(m.budget)} />
           <Tile label="Credit line" value={money(m.creditLine)} sub="past it: bankrupt" />
         </>)}
@@ -150,58 +150,12 @@ function StatusTab({ S, plan, onUse, live }) {
       {live && (() => { const r = live.rows[live.rows.length - 1]; return (
         <p className="text-sm text-slate-300 mt-1">Built in week {r.week}: <span className="font-mono">{Math.round(r.built)}</span> units with {r.crews} crew{r.crews === 1 ? '' : 's'}
           {' '}({(r.built / Math.max(1, r.crews * (1 - r.inspect))).toFixed(1)} a crew building; the last contract: {(S.history.reduce((a, b) => a + b, 0) / S.history.length / S.rules.crews).toFixed(1)}).
-          {' '}Defects found in week {r.week}: {Math.round(r.found + r.rejected)}.</p>
+          {' '}Defects found in week {r.week}: {Math.round(r.found + r.rejected)}; so far: {Math.round(st.found)}. The last contract had {st.rejectedLast} of {R.scope} units rejected at acceptance.</p>
       ); })()}
-      {live && (
-        <p className="text-sm text-slate-300 mt-1">
-          {st.sample
-            ? <>Inspectors' sample: <span className="font-mono">{(100 * st.sample.last).toFixed(1)}%</span> of week {st.sample.lastWeek}'s units defective{st.sample.weeks > 1 ? <> (<span className="font-mono">{(100 * st.sample.mean).toFixed(1)}%</span> on average over {st.sample.weeks} inspected weeks)</> : ''}.</>
-            : "No inspectors' sample yet: no week has been inspected."}
-          {' '}Defects found so far: <span className="font-mono">{Math.round(st.found)}</span>. The last contract had {st.rejectedLast} of {R.scope} units rejected at acceptance.
-        </p>
-      )}
-      {live && (
-        <p className="text-[11px] text-slate-500 mt-1">
-          The sample is the share of the units the inspectors checked this week that were defective: how defect-prone the line is running now. Defects found counts the bad units caught, from this week's work and older work.
-        </p>
-      )}
       <p className="text-[11px] text-slate-500 mt-1">
         Projected finish is the standard earned-value estimate: 12 weeks ÷ schedule efficiency. Its range is that estimate as of each week shown
         (weeks {st.forecast.low}–{st.forecast.high}). Reported complete counts units built, whether or not they will pass.
       </p>
-    </Frame>
-  );
-}
-
-function ScheduleTab({ S, plan, onUse, planNote, live }) {
-  const s = schedule(S, plan, live);
-  const f0 = s.from + 1;
-  const R = S.rules;
-  const end = Math.max(R.deadline, s.forecast.week) + 1;
-  const rows = [
-    ...(live ? [['Done so far', 1, s.from, '#334155']] : []),
-    ['Build', f0, s.forecast.week, '#38bdf8'],
-    ...(s.weeks.some((w) => w.onboarding) ? [['Onboarding', f0, f0 + R.onboardingWeeks - 1, '#7dd3fc']] : []),
-    ...(plan.inspect > 0 ? [[`Inspect ${Math.round(plan.inspect * 100)}%`, f0, s.forecast.week, '#0ea5e9']] : []),
-    ...(plan.shift !== 'none' && (plan.shift === 'every' || s.forecast.week >= 9) ? [['2nd shift', plan.shift === 'every' ? f0 : Math.max(9, f0), plan.shift === 'every' ? s.forecast.week : Math.min(11, s.forecast.week), '#bae6fd']] : []),
-  ];
-  const rowH = 26, h = rows.length * rowH + 52;
-  const x = (w) => 96 + (w / end) * (W - 104);
-  return (
-    <Frame id="schedule" kind="Gantt chart" f={s.forecast} onUse={onUse} planNote={planNote}>
-      <svg viewBox={`0 0 ${W} ${h}`} className={CHART_CLASS} role="img" aria-label="Gantt chart of your plan">
-        {Array.from({ length: end }, (_, i) => i + 1).map((w) => <g key={w}><line x1={x(w - 1)} x2={x(w - 1)} y1={8} y2={h - 22} stroke="#1e293b" />{(w % 2 === 0 || end <= 14) && <text x={x(w - 0.5)} y={h - 6} textAnchor="middle" {...svgText}>{w}</text>}</g>)}
-        {rows.map(([label, a, b, color], i) => (
-          <g key={label}>
-            <text x={2} y={20 + i * rowH + 4} fontSize="12" fill="#e2e8f0">{label}</text>
-            <rect x={x(a - 1)} y={10 + i * rowH} width={Math.max(4, x(b) - x(a - 1))} height={16} rx="3" fill={color} fillOpacity="0.8" />
-          </g>
-        ))}
-        <g transform={`translate(${x(s.forecast.week)},${20 + rows.length * rowH})`}><rect x={-6} y={-6} width={12} height={12} transform="rotate(45)" fill="#38bdf8" /></g>
-        <text x={2} y={24 + rows.length * rowH} fontSize="12" fill="#e2e8f0">Acceptance</text>
-        <line x1={x(R.deadline)} x2={x(R.deadline)} y1={4} y2={h - 22} stroke="#fb7185" strokeDasharray="4 3" />
-      </svg>
-      <p className="text-[11px] text-slate-500">Finish milestone: week {s.forecast.week}. {live ? `Re-planned from week ${s.from}: the units left and the rate built so far, under the stated rules.` : "Built from the briefing's pace and stated rules, one week at a time."}</p>
     </Frame>
   );
 }
@@ -272,42 +226,6 @@ function ChatTab({ S, plan, onUse, planNote, live }) {
   );
 }
 
-function AiTab({ S, plan, planNote, live, onCopyPrompt, opened = [] }) {
-  // Everything the student has opened so far (The Contract's rules are always in).
-  const looked = opened.filter((id) => id !== 'ai' && id !== 'contract' && tabById(id));
-  const text = aiPrompt(S, plan, live, looked);
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      // No clipboard (an old browser, or not allowed): select the text so it can be copied by hand.
-      const el = document.getElementById('ai-prompt');
-      if (el) { el.focus(); el.select(); }
-    }
-    if (onCopyPrompt) onCopyPrompt();
-  };
-  return (
-    <Frame id="ai" kind="prompt for your AI assistant" planNote={planNote}>
-      <p className="text-sm text-slate-300 mb-1">
-        Copy this into whatever AI assistant you use and read what it says.
-      </p>
-      <p className="text-xs text-slate-400 mb-1">
-        It always includes the contract's rules{live ? ` and your dashboard after week ${live.week}` : ''}.
-        {looked.length ? ` It also includes what you've opened: ${looked.map((id) => tabById(id).name).join(', ')}.` : ' Open other tabs to add what they show.'}
-      </p>
-      <p className="text-xs text-violet-200 mb-2">Your AI knows what you've opened so far.</p>
-      <button type="button" onClick={copy} className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">
-        {copied ? 'Copied' : 'Copy the prompt'}
-      </button>
-      <textarea id="ai-prompt" readOnly value={text} rows={10} onFocus={(e) => e.target.select()}
-        className="mt-2 w-full bg-slate-950 border border-slate-700 rounded-xl p-3 font-mono text-[11px] text-slate-300" />
-      <p className="text-[11px] text-slate-500 mt-1">{text.length.toLocaleString()} characters. This tab gives no forecast of its own; type the AI's numbers into your prediction if you want to use them.</p>
-    </Frame>
-  );
-}
-
 // ── The record ───────────────────────────────────────────────────────────────
 function RecordsTab({ plan, planReady, onUse }) {
   const past = pastContracts();
@@ -318,93 +236,20 @@ function RecordsTab({ plan, planReady, onUse }) {
   );
 }
 
-// ── Models ───────────────────────────────────────────────────────────────────
-function AnalyticsTab({ S, plan, onUse, planNote }) {
-  const a = analytics(S, plan);
-  const h = 200, minW = 10, maxW = 22;
-  const x = (c) => 36 + (c / 3.4) * (W - 52), y = (w) => 10 + (1 - (w - minW) / (maxW - minW)) * (h - 36);
-  const jitter = (i) => ((i * 37) % 11 - 5) * 1.4;
-  return (
-    <Frame id="analytics" kind="BI dashboard" f={a.forecast} onUse={onUse} planNote={planNote}>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <Tile label="Contracts" value={a.n} sub="delivered" tone="text-amber-300" />
-        <Tile label="Fit (R²)" value={a.r2} tone="text-amber-300" />
-        <Tile label="Per crew" value={`${a.coef.crews > 0 ? '+' : ''}${a.coef.crews.toFixed(1)}`} sub="weeks" tone="text-amber-300" />
-        <Tile label="Predicted" value={a.predicted} sub="for your plan" tone="text-amber-300" />
-      </div>
-      <svg viewBox={`0 0 ${W} ${h}`} className={`${CHART_CLASS} mt-3`} role="img" aria-label="Scatter of past contracts with fitted line">
-        {[10, 12, 14, 16, 18, 20, 22].map((w) => <g key={w}><line x1={36} x2={W - 8} y1={y(w)} y2={y(w)} stroke="#1e293b" /><text x={30} y={y(w) + 4} textAnchor="end" {...svgText}>{w}</text></g>)}
-        <line x1={36} x2={W - 8} y1={y(S.rules.deadline)} y2={y(S.rules.deadline)} stroke="#fb7185" strokeDasharray="4 3" />
-        {a.points.map((p, i) => <circle key={i} cx={x(p.crews) + jitter(i)} cy={y(Math.min(maxW, p.accepted))} r="3.5" fill="#fbbf24" fillOpacity={p.inspect === plan.inspect && p.shift === (plan.shift !== 'none') ? 0.9 : 0.3} />)}
-        <polyline points={a.line.map((p) => `${x(p.crews)},${y(p.week)}`).join(' ')} fill="none" stroke="#fde68a" strokeWidth="2" />
-        <circle cx={x(plan.crews)} cy={y(a.predicted)} r="6" fill="none" stroke="#fff" strokeWidth="2" />
-        {[0, 1, 2, 3].map((c) => <text key={c} x={x(c)} y={h - 6} textAnchor="middle" {...svgText}>+{c} crews</text>)}
-      </svg>
-      <p className="text-[11px] text-slate-500">A regression of the week accepted on crews added, inspection (any, and share) and second shift, across the {a.n} delivered past contracts; the {a.left} never delivered have no week, so they aren't in the fit. Line: fitted for your inspection and shift. 80% prediction interval ±{(1.306 * a.se).toFixed(1)} weeks.</p>
-    </Frame>
-  );
-}
-
-function SimulatorTab({ S, plan, onUse, planNote, live }) {
-  const [rework, setRework] = useState(true);
-  const m = riskSimulator(S, plan, { rework, live });
-  const weeks = Object.keys(m.hist).map(Number).sort((a, b) => a - b);
-  const lo = Math.min(weeks[0], S.rules.deadline) - 1, hi = Math.max(weeks[weeks.length - 1], S.rules.deadline) + 1;
-  const h = 190, x = (w) => 28 + ((w - lo) / (hi - lo)) * (W - 36), bw = (W - 36) / (hi - lo) - 3;
-  const maxN = Math.max(...Object.values(m.hist));
-  const y = (n) => h - 24 - (n / maxN) * (h - 50);
-  let cum = 0;
-  const curve = weeks.map((w) => { cum += m.hist[w]; return [w, cum / m.runs]; });
-  const yc = (v) => h - 24 - v * (h - 50);
-  return (
-    <Frame id="simulator" kind="Monte Carlo schedule risk" f={m.forecast} onUse={onUse} planNote={planNote}>
-      <label className="flex items-center gap-3 mb-3 text-sm text-slate-200 cursor-pointer">
-        <input type="checkbox" checked={rework} onChange={(e) => setRework(e.target.checked)} className="accent-violet-400 w-5 h-5" />
-        Include rework like the last contracts (historical slip)
-      </label>
-      <div className="grid grid-cols-4 gap-2">
-        {[10, 50, 80, 90].map((k) => <Tile key={k} label={`P${k}`} value={`wk ${m.p[k]}`} tone="text-violet-300" />)}
-      </div>
-      <svg viewBox={`0 0 ${W} ${h}`} className={`${CHART_CLASS} mt-3`} role="img" aria-label="Histogram and S-curve of simulated finish weeks">
-        {weeks.map((w) => <rect key={w} x={x(w) - bw / 2} y={y(m.hist[w])} width={bw} height={h - 24 - y(m.hist[w])} fill="#a78bfa" fillOpacity="0.5" />)}
-        <polyline points={curve.map(([w, v]) => `${x(w)},${yc(v)}`).join(' ')} fill="none" stroke="#ede9fe" strokeWidth="2" />
-        <line x1={x(S.rules.deadline)} x2={x(S.rules.deadline)} y1={20} y2={h - 24} stroke="#fb7185" strokeDasharray="4 3" />
-        {[...new Set([10, 50, 90].map((k) => m.p[k]))].map((w) => (
-          <text key={w} x={x(w)} y={16} textAnchor="middle" fontSize="12" fill="#c4b5fd">{[10, 50, 90].filter((k) => m.p[k] === w).map((k) => `P${k}`).join('/')}</text>
-        ))}
-        {Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).filter((w) => hi - lo <= 12 || w % 2 === 0).map((w) => <text key={w} x={x(w)} y={h - 6} textAnchor="middle" {...svgText}>{w}</text>)}
-      </svg>
-      <p className="text-[11px] text-slate-500">
-        {m.runs.toLocaleString()} runs of the Schedule, with the pace's week-to-week wobble.
-        {live
-          ? ` Starts from week ${live.week}'s state, with this week's decisions from here.${m.scopeDone ? ` The scope change has happened (+${m.scopeDone.shock} units in week ${m.scopeDone.week}), so none is drawn.` : ` Each run draws a scope change from the record, in a week after ${live.week}.`}`
-          : ' Each run draws a scope change from the record.'}
-        {m.rework && m.tested ? ' The acceptance test has already run, so its rework is in the units left.' : m.rework
-          ? ` Each run also adds a historical slip: how much later one of ${m.slips.n} delivered past contracts inspected like your plan was accepted than this model predicted for it (median +${m.slips.median} weeks, mostly rework).${m.pool.failed ? ` ${m.pool.failed} more of them never delivered and have no slip.` : ''}`
-          : ' Rework is switched off: the model sees only the plan, so it finishes when the dashboard would read 100%.'}
-      </p>
-    </Frame>
-  );
-}
-
 /** One tool tab. `plan` is the stated plan before week 1 (hands-off until one is stated), and this week's decisions during play. */
-export default function DeskTab({ id, S, plan, planReady, onUse, live = null, onCopyPrompt = null, opened = [] }) {
+export default function DeskTab({ id, S, plan, planReady, onUse, live = null }) {
   const planNote = live
     ? <p className="text-xs text-slate-500 mb-3">From week {live.week + 1} on, assuming this week's decisions: {describePlan(plan)}.</p>
     : !planReady
       ? <p className="text-xs text-violet-200 mb-3">Assuming a hands-off plan until you state yours on the front tab.</p>
       : <p className="text-xs text-slate-500 mb-3">For your plan: {describePlan(plan)}.</p>;
-  const props = { S, plan, onUse, planNote, live, onCopyPrompt, opened };
+  const props = { S, plan, onUse, planNote, live };
   switch (id) {
     case 'contract': return <ContractTab />;
     case 'status': return <StatusTab {...props} />;
-    case 'schedule': return <ScheduleTab {...props} />;
     case 'last5': return <Last5Tab {...props} />;
     case 'chat': return <ChatTab {...props} />;
-    case 'ai': return <AiTab {...props} />;
     case 'records': return <RecordsTab plan={plan} planReady={planReady || !!live} onUse={onUse} />;
-    case 'analytics': return <AnalyticsTab {...props} />;
-    case 'simulator': return <SimulatorTab {...props} />;
     default: return null;
   }
 }

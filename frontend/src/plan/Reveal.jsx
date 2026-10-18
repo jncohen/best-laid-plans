@@ -5,15 +5,13 @@ import { money } from './format';
 import { RevealChart, ForecastChart, RangeChart } from './charts';
 
 // What each tool sees and can't see: shown here, after the outcome, not on the tabs.
-const TOOL_TAB = { status: 'status', schedule: 'schedule', last5: 'last5', 'records-all': 'records', 'records-plan': 'records', analytics: 'analytics', simulator: 'simulator', 'simulator-blind': 'simulator' };
+const TOOL_TAB = { status: 'status', last5: 'last5', 'records-all': 'records', 'records-plan': 'records' };
 function aboutTool(key) {
-  if (key === 'simulator-blind') return 'Sees variability and scope changes · can\'t see rework';
   if (key.startsWith('chat-')) return null;
   const tab = tabById(TOOL_TAB[key]);
   return tab ? `Sees ${tab.sees.charAt(0).toLowerCase()}${tab.sees.slice(1)} · can't see ${tab.cant.charAt(0).toLowerCase()}${tab.cant.slice(1)}` : null;
 }
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const times = (n) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
 
 /** The finish screen: what happened, stated plainly, before the results are revealed. */
 export function Finished({ project, onReveal }) {
@@ -35,23 +33,6 @@ export function Finished({ project, onReveal }) {
   );
 }
 
-/** How you played, in three plain sentences. */
-function HowYouPlayed({ p }) {
-  const h = playSummary(p);
-  return (
-    <div>
-      <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">How you played</div>
-      <ul className="space-y-1 text-sm text-slate-200">
-        <li>You checked tools in {h.checkedWeeks} of {plural(h.played, 'week')}.</li>
-        <li>{h.forecastChanges === 0 ? 'You never changed your forecast.' : `You changed your forecast ${times(h.forecastChanges)} (first in week ${h.firstForecastChange}).`}</li>
-        <li>{h.engagedToEnd ? 'You were still checking or changing things in your last week.'
-          : h.autopilotAfter === 0 ? 'After you committed, you changed nothing.'
-            : `After week ${h.autopilotAfter} you changed nothing.`}</li>
-      </ul>
-    </div>
-  );
-}
-
 export default function Reveal({ project, onReplay }) {
   const c = CONFIG;
   const p = project;
@@ -61,12 +42,12 @@ export default function Reveal({ project, onReplay }) {
   const outcome = s.outcome;
   const delivered = p.result === 'DELIVERED';
   const played = playedPlan(p);
-  const j = judgeForecast({ forecast: f, outcome, stated: p.plan, played, failed: s.failed });
+  const j = judgeForecast({ forecast: f, outcome, stated: p.plan, played });
   // How every tool on the desk would have done, for the plan the student stated.
   const tools = allForecasts(screenData(), p.plan || played).map((t) => ({
     about: aboutTool(t.key),
-    // Never delivered is a miss for every range.
-    ...t, result: s.failed ? s.failed : outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
+    // Graded against the acceptance week (projected, for a contract never delivered); bankruptcy is its own line.
+    ...t, result: outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
   }));
   const usedTool = p.desk?.tool ? tabByLetter(p.desk.tool) : null;
   const closeWeek = firstCloseWeek(p.forecastLog, outcome);
@@ -78,8 +59,8 @@ export default function Reveal({ project, onReplay }) {
   const w1 = rows[0];
   const startedAsStated = p.plan && w1 ? w1.crews === Math.min(c.maxCrews, c.crews + Math.min(c.maxHirePerWeek, p.plan.crews)) && w1.inspect === p.plan.inspect && w1.shift === (p.plan.shift === 'every') : null;
   const laterChanges = playSummary(p).weeks.filter((w) => w.week > 1 && w.decided).length;
-  const ended = p.result === 'BANKRUPT' ? `It was never delivered: the company went bankrupt in week ${p.week}.`
-    : p.result === 'TERMINATED' ? `It was never delivered: the customer terminated the contract after week ${c.horizon}.` : `It was accepted in week ${outcome}.`;
+  const ended = delivered ? `It was accepted in week ${outcome}.` : `It was never delivered; it would have taken until week ${outcome}.`;
+  const failLine = p.result === 'BANKRUPT' ? `Your company went bankrupt in week ${p.week}.` : p.result === 'TERMINATED' ? `The customer terminated the contract after week ${c.horizon}.` : null;
   const end = Math.ceil(Math.max(outcome, c.deadline, past.p90)) + 1;
 
   return (
@@ -91,23 +72,20 @@ export default function Reveal({ project, onReplay }) {
           The past contracts said <span className="text-amber-300">week {past.median}</span>.{' '}
           <span className={delivered ? 'text-yellow-300' : 'text-rose-300'}>{ended}</span>
         </h1>
+        {failLine && <p className="text-lg font-bold text-rose-300 mt-2">{failLine}</p>}
         <p className="text-xs text-slate-400 mt-2">"Said" means the week the dashboard first read 100%, and the median of the past contracts that were delivered ({past.p10}–{past.p90} for most; {past.failed.total} of {past.n} never delivered). Keep this screen open: your instructor will ask the room for a show of hands.</p>
       </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Card title="Forecast score" tone="emerald">
           <div className="text-4xl font-bold font-mono text-white">{s.forecast}</div>
           <p className="text-sm text-slate-300 mt-1">
             Your week-1 prediction: week {f.week}, 80% sure of {f.low}–{f.high}.{' '}
-            {s.held ? 'The range held.' : s.failed ? 'It missed: the contract was never delivered.' : `It missed by ${plural(Math.abs(s.missBy), 'week')} (${s.missBy > 0 ? 'late' : 'early'}).`}{' '}
+            {s.held ? `The range held${delivered ? '' : ' (against the week it would have taken)'}.` : `It missed by ${plural(Math.abs(s.missBy), 'week')} (${s.missBy > 0 ? 'late' : 'early'}).`}{' '}{f.high - f.low >= 6 ? 'A range that wide costs points even when it holds. ' : ''}
             You gave {f.onTimeChance}% to week {c.deadline}; {s.onTime ? 'it was made' : "it wasn't made"}.
           </p>
         </Card>
-        <Card title="Updating score" tone="emerald">
-          <div className="text-4xl font-bold font-mono text-white">{s.updating}</div>
-          <p className="text-sm text-slate-300 mt-1">How well your weekly forecast tracked the evidence, later weeks counting more. Narrow ranges that hold score best.</p>
-        </Card>
-        <Card title="Delivery score">
+        <Card title="Delivery score (secondary)">
           <div className="text-4xl font-bold font-mono text-slate-300">{s.delivery}</div>
           <p className="text-sm text-slate-300 mt-1">
             {s.failed ? `Never delivered (${s.failed}).` : s.late > 0 ? `${plural(s.late, 'week')} late.` : 'On time.'} You spent {money(p.spent)} of {money(c.budget)}.
@@ -123,7 +101,7 @@ export default function Reveal({ project, onReplay }) {
                 <span className="text-slate-200 min-w-0">{t.name}</span>
                 <span className="font-mono text-xs text-slate-400 whitespace-nowrap">wk {t.week} ({t.low}–{t.high})</span>
                 <span className={`text-xs font-semibold w-24 text-right ${t.result === 'held' ? 'text-slate-100' : 'text-rose-300'}`}>
-                  {t.result === 'held' ? 'held' : `missed${s.failed ? ':' : ''} ${t.result}`}
+                  {t.result === 'held' ? 'held' : `missed ${t.result}`}
                 </span>
               </div>
               {t.fail && <div className="text-[11px] text-rose-300">{t.fail}</div>}
@@ -132,7 +110,7 @@ export default function Reveal({ project, onReplay }) {
           ))}
         </ul>
         <p className="text-[11px] text-slate-500 mt-2">
-          Each tool's 80% range before week 1, for the plan you stated, against {s.failed ? `a contract that was never delivered (${s.failed}): a miss for every range` : `week ${outcome}`}. Ranges from the record are from delivered contracts; the line under one counts those that weren't. The tools never knew this scenario, or your own luck.
+          Each tool's 80% range before week 1, for the plan you stated, against week {outcome}{delivered ? '' : ' (the week it would have taken)'}. Ranges from the record are from delivered contracts; the line under one counts those that weren't. The tools never knew this scenario, or your own luck.
         </p>
       </Card>
 
@@ -167,8 +145,6 @@ export default function Reveal({ project, onReplay }) {
             </p>
             <p className="text-xs text-slate-500 mt-1">Green: the week you predicted, each week (the bar at week 0 is your 80% range). Gold: when it was accepted. Amber band: where most past contracts landed.</p>
           </div>
-
-          <HowYouPlayed p={p} />
 
           <div>
             <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Your plan and your numbers</div>

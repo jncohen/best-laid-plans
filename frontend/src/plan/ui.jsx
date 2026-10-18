@@ -1,13 +1,11 @@
 // Small shared UI pieces.
 
 
-/** The one explanation of scoring, shown before commit and in The Contract. */
+/** The one plain line on scoring, shown before commit and in The Contract. */
 export function ScoringNote({ className = '' }) {
   return (
-    <p className={`text-sm text-slate-300 ${className}`}>
-      Three scores. <strong className="text-emerald-300">Forecast:</strong> your week-1 prediction.{' '}
-      <strong className="text-emerald-300">Updating:</strong> how well your weekly forecast tracks the evidence (narrow ranges that hold score best).{' '}
-      <strong className="text-slate-100">Delivery:</strong> on time and on budget.
+    <p className={`text-sm text-slate-200 ${className}`}>
+      <strong className="text-emerald-300">Your score is your forecast.</strong> Delivery shows how the company did.
     </p>
   );
 }
