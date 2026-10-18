@@ -130,15 +130,25 @@ export function statusReport(S, L = null, plan = null) {
   const plannedPct = Math.min(1, wk / R.deadline);
   // Earned value against the cost baseline: the last contract's crews over the planned 12 weeks, or the student's own plan.
   const bac = L ? costBaseline(S, plan) : R.crews * R.crewWeek * R.deadline;
-  const ev = earnedPct * bac, pv = plannedPct * bac, ac = L ? L.spent : wk * R.crews * R.crewWeek;
+  const ev = earnedPct * bac, ac = L ? L.spent : wk * R.crews * R.crewWeek;
   const eacs = weekly.map((x) => Math.max(x.eac, L ? wk + 0.5 : 0));
   const eac = Math.max(last.eac, L ? wk + 0.5 : 0);
+  // Money, from Cost Management: spend, what is left of the budget and the credit line, and when it would run out.
+  const cm = costManagement(S, plan, L);
+  const spi = +last.spi.toFixed(2), cpi = +(ev / ac).toFixed(2);
+  // The light flags the worse of schedule and cost: green on both, amber if either is a little off, red if either is well off.
+  const level = (x) => (x >= 1 ? 0 : x >= 0.9 ? 1 : 2);
+  const worst = Math.max(level(spi), level(cpi));
+  const scope = L ? L.totalScope : R.scope;
   return {
+    money: { spent: cm.spent, budgetLeft: R.budget - cm.spent, creditLeft: R.budget + R.creditLine - cm.spent, plannedCost: cm.cost.bac, brokeWeek: cm.brokeWeek, budget: R.budget, creditLine: R.creditLine },
+    scope, scopeAdded: scope - R.scope, scopeWeek: L ? (L.rows.find((r) => r.shock > 0) || {}).week ?? null : null,
+    behind: { schedule: level(spi) > 0, cost: level(cpi) > 0 },
     forecast: clampF({ week: Math.round(eac), low: Math.floor(Math.min(...eacs)), high: Math.ceil(Math.max(...eacs)), chance: eac <= R.deadline - 0.5 ? 90 : eac <= R.deadline ? 60 : 20 }),
     live: !!L, pace: +pace(S).toFixed(1), weeksAtPace: +(R.scope / pace(S)).toFixed(1), eacWeeks: +eac.toFixed(1), weekly,
-    earnedPct, plannedPct, weeksShown: wk, built: earnedPct * R.scope, planned: plannedPct * R.scope,
+    earnedPct, plannedPct, weeksShown: wk, built: earnedPct * scope, planned: plannedPct * scope,
     sample: samples(L), found: foundSoFar(L), rejectedLast: S.last.rejected,
-    spi: +last.spi.toFixed(2), cpi: +(ev / ac).toFixed(2), bac, light: ev >= pv ? 'green' : ev >= 0.9 * pv ? 'amber' : 'red',
+    spi, cpi, bac, light: ['green', 'amber', 'red'][worst],
   };
 }
 
@@ -205,7 +215,7 @@ export function lastFive(S) {
   const R = S.rules, rows = S.contracts.slice(-5);
   const sum = summarizeContracts(rows);
   return {
-    forecast: { week: sum.median, low: sum.min, high: sum.max, chance: Math.round(100 * sum.onTimeShare), fail: failuresLine(sum) },
+    forecast: { week: sum.median, low: sum.min, high: sum.max, chance: Math.round(100 * sum.onTimeShare), fail: failuresLine(sum), rangeLabel: 'Range of the delivered ones' },
     rows, summary: sum, newest: { ...rows[rows.length - 1], ...S.last, pace: +pace(S).toFixed(1) }, n: rows.length, deadline: R.deadline,
   };
 }
@@ -220,69 +230,6 @@ export function records(S, plan = null) {
   const m = plan ? matchContracts(plan) : null;
   const matched = m ? { ...fromSummary(m, 'run like yours'), rule: m.rule } : null;
   return { forecast: matched || fromSummary(all), all: fromSummary(all), matched };
-}
-
-/** Scenarios: the plan model under four named futures, with rework like the last contract. */
-export function scenarios(S, plan) {
-  const R = S.rules, p = asPlan(plan), perCrew = pace(S) / R.crews;
-  const units = S.contracts.map((c) => c.scopeUnits), weeks = S.contracts.map((c) => c.scopeWeek);
-  const scopeWeek = q(weeks, 0.5), reworkShare = S.last.rejected / R.scope;
-  const finish = (scopeUnits, rework) => {
-    let left = R.scope, crews = R.crews, onboard = 0, w = 0, built = 0, reworkAdded = false;
-    while (w < 40) {
-      w++;
-      if (w === 1 && p.crews > 0) { crews += p.crews; onboard = R.onboardingWeeks; }
-      const cap = crews * perCrew * (1 - R.coordinationLoss * Math.max(0, crews - R.crews)) * (onboard > 0 ? R.onboardingFactor : 1) * (shiftIn(p, w) ? R.shiftBoost : 1);
-      const b = Math.min(left, cap * (1 - p.inspect)); left -= b; built += b;
-      if (w === scopeWeek) left += scopeUnits;
-      if (onboard > 0) onboard--;
-      // Inspected work is fixed as you go; the rest surfaces at the acceptance test, at double the work.
-      if (left < 0.5) {
-        if (rework && !reworkAdded) { reworkAdded = true; left = built * reworkShare * (p.inspect > 0 ? 0.5 : R.lateFixMultiplier); if (left > 0.5) continue; }
-        return w;
-      }
-    }
-    return w;
-  };
-  const typical = q(units, 0.5), largest = Math.max(...units);
-  const rows = [
-    { key: 'best', label: 'Best case', assumptions: 'No scope change. No rework.', week: finish(0, false) },
-    { key: 'base', label: 'Base case', assumptions: `Typical scope change (+${typical} units in week ${scopeWeek}). No rework.`, week: finish(typical, false) },
-    { key: 'rework', label: 'Base + rework', assumptions: `Typical scope change, and rework like the last contract (${S.last.rejected} of ${R.scope} units rejected).`, week: finish(typical, true) },
-    { key: 'worst', label: 'Worst seen', assumptions: `The largest scope change in the record (+${largest} units), and rework like last time.`, week: finish(largest, true) },
-  ];
-  const [best, , rw, worst] = rows.map((r) => r.week);
-  return { forecast: clampF({ week: rw, low: best, high: worst, chance: rw <= R.deadline ? 60 : best <= R.deadline ? 25 : 5 }), rows, reworkShare };
-}
-
-/** Risk Register: each disclosed risk, with its frequency and size from the record. No forecast. */
-export function riskRegister(S, plan) {
-  const R = S.rules, p = asPlan(plan), c = S.contracts, v = pace(S);
-  const units = c.map((r) => r.scopeUnits);
-  const rej = c.filter((r) => r.rejected > 0);
-  const late = c.filter((r) => !r.onTime).length;
-  const term = c.filter((r) => r.delivered === false).length;
-  const level = (x, cuts) => (x < cuts[0] ? 0 : x < cuts[1] ? 1 : 2);
-  const risk = (key, title, freq, weeks, note, applies = true) => ({ key, title, freq, weeks: +weeks.toFixed(1), note, applies, prob: level(freq, [0.2, 0.6]), impact: level(weeks, [1, 2]) });
-  return {
-    forecast: null,
-    risks: [
-      risk('scope', 'Customer adds scope', c.length ? c.filter((r) => r.scopeUnits > 0).length / c.length : 0, q(units, 0.5) / v,
-        `${c.filter((r) => r.scopeUnits > 0).length} of ${c.length} past contracts. Median +${q(units, 0.5)} units, largest +${Math.max(...units)}, in weeks ${Math.min(...c.map((r) => r.scopeWeek))}–${Math.max(...c.map((r) => r.scopeWeek))}.`),
-      risk('defects', 'Acceptance test rejects units', rej.length / c.length, (q(rej.map((r) => r.rejected), 0.5) * R.lateFixMultiplier) / v,
-        `${rej.length} of ${c.length} past contracts had units rejected (median ${q(rej.map((r) => r.rejected), 0.5)}). Each costs ${R.lateFixMultiplier}× to fix that late. The last contract: ${S.last.rejected} rejected.`),
-      risk('onboarding', 'New crews slow the line', p.crews > 0 ? 1 : 0, p.crews > 0 ? (R.onboardingWeeks * (1 - R.onboardingFactor) * (R.crews + p.crews)) / R.crews : 0,
-        R.onboardingDrag === 'new' ? `Every hire: new crews work at ${Math.round(R.onboardingFactor * 100)}% for their first ${R.onboardingWeeks} weeks.` : `Every hire: the whole line runs at ${Math.round(R.onboardingFactor * 100)}% for ${R.onboardingWeeks} weeks.`, p.crews > 0),
-      risk('coordination', 'Coordination loss', R.crews + p.crews > R.crews ? 1 : 0, 0.3 * Math.max(0, p.crews),
-        `Each crew beyond ${R.crews} costs every crew ${Math.round(R.coordinationLoss * 100)}%.`, p.crews > 0),
-      risk('fatigue', 'Tired crews make more defects', p.shift === 'none' ? 0 : 1, p.shift === 'every' ? 3 : p.shift === 'late' ? 1 : 0,
-        'From the second straight week of a second shift, more defects.', p.shift !== 'none'),
-      risk('late', 'Finishing after week 12', late / c.length, Math.max(0, q(c.filter((r) => r.delivered).map((r) => r.accepted), 0.5) - R.deadline),
-        `${late} of ${c.length} past contracts missed week ${R.deadline}.`),
-      risk('termination', 'Contract terminated', term / c.length, R.horizon - R.deadline,
-        `After week ${R.horizon}. ${term} of ${c.length} past contracts were terminated.`),
-    ],
-  };
 }
 
 // ── Models ───────────────────────────────────────────────────────────────────
@@ -376,6 +323,7 @@ export function riskSimulator(S, plan, { rework = true, runs = 1000, live = null
   return {
     forecast: { week: q(sims, 0.5), low: q(sims, 0.1), high: q(sims, 0.9), chance: Math.round((1 - failShare) * (100 * sims.filter((x) => x <= R.deadline).length) / sims.length), fail: failShare > 0 ? failuresLine(pool, what) : null },
     pool: { n: pool.n, delivered: pool.delivered, failed: pool.failed.total },
+    scopeDone: live ? live.rows.find((r) => r.shock > 0) || null : null,
     runs, hist, rework, live: !!live, tested, slips: { n: slips.length, median: q(slips, 0.5), low: q(slips, 0.1), high: q(slips, 0.9) }, p: { 10: q(sims, 0.1), 50: q(sims, 0.5), 80: q(sims, 0.8), 90: q(sims, 0.9) },
   };
 }
@@ -482,17 +430,12 @@ export function aiPrompt(S, plan, L = null, opened = null) {
   if (has('records')) lines.push('', `PAST CONTRACTS ON THIS LINE (oldest first; #${c[c.length - 1].id} is the latest)`, header, ...c.map(row));
   if (has('status')) {
     const st = statusReport(S, L, p);
-    lines.push('', `STATUS REPORT (earned value${L ? `, week ${st.weeksShown} of this contract` : ", the last contract's first six weeks"})`,
-      `- Earned ${pct(st.earnedPct)} vs planned ${pct(st.plannedPct)}; SPI ${st.spi}; CPI ${st.cpi}; status ${st.light}; estimate at completion week ${st.eacWeeks}.`);
-  }
-  if (has('cost')) {
-    const cm = costManagement(S, p, L);
-    lines.push('', 'COST MANAGEMENT', `- Plan cost baseline ${k$(cm.cost.bac)}; estimate at completion ${k$(cm.cost.eac)}; CPI ${cm.cost.cpi}; spent ${k$(cm.spent)}; headroom to budget ${k$(cm.headroom)}, with the credit line ${k$(cm.headroomCredit)}; cash runway ${cm.runwayWeeks} weeks.`);
+    lines.push('', `STATUS REPORT${L ? ` (week ${st.weeksShown} of this contract)` : " (the last contract's first six weeks)"}`,
+      `- Reported complete ${pct(st.earnedPct)} vs planned ${pct(st.plannedPct)}; schedule efficiency ${st.spi} (below 1 = behind plan); cost efficiency ${st.cpi} (below 1 = over budget for the work done); status ${st.light}; projected finish week ${st.eacWeeks}.`,
+      `- Scope ${st.scope} units. Spent ${k$(st.money.spent)}; budget left ${k$(st.money.budgetLeft)}; with the credit line ${k$(st.money.creditLeft)}.`);
   }
   if (has('schedule')) { const sc = schedule(S, p, L); lines.push('', 'SCHEDULE', `- Planned finish week ${sc.forecast.week}${L ? `, re-planned from week ${sc.from}` : ''}.`); }
   if (has('chat')) lines.push('', 'TEAM CHAT ("When will we be done?")', ...teamChat(S, p, L).map((x) => `- ${x.name} (${x.role.toLowerCase()}): ${x.says}`));
-  if (has('scenarios')) lines.push('', 'SCENARIOS', ...scenarios(S, p).rows.map((r) => `- ${r.label}: week ${r.week}. ${r.assumptions}`));
-  if (has('risks')) lines.push('', 'RISK REGISTER', ...riskRegister(S, p).risks.filter((x) => x.applies).map((x) => `- ${x.title}: ${x.note}`));
   if (has('analytics')) { const a = analytics(S, p); lines.push('', 'ANALYTICS', `- Regression of week accepted on the plan across the ${a.n} past contracts: predicted week ${a.predicted} for this plan, 80% interval weeks ${a.forecast.low}–${a.forecast.high}.`); }
   if (has('simulator')) { const m = riskSimulator(S, p, { live: L }); lines.push('', 'RISK SIMULATOR (1,000 runs, with historical rework)', `- P10 week ${m.p[10]}, P50 week ${m.p[50]}, P90 week ${m.p[90]}.`); }
   lines.push('', `MY PLAN: ${planText}.`);
@@ -516,50 +459,34 @@ export function aiPrompt(S, plan, L = null, opened = null) {
 export const TABS = [
   { id: 'commit', letter: '', group: null, name: 'Your Plan and Prediction · Commit Before Week 1', short: 'Your Plan & Prediction', tone: 'front' },
   { id: 'contract', letter: 'b', group: 'The Brief', name: 'The Contract', tone: 'brief', forecasts: false, sees: 'The contract, every rule and both scores', cant: 'How long it will take' },
-  { id: 'status', letter: 'a', group: 'Dashboards', name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Earned value: units reported complete against plan', cant: 'Whether those units will pass acceptance' },
-  { id: 'cost', letter: 'c', group: 'Dashboards', name: 'Cost Management', tone: 'inside', forecasts: true, sees: 'Money: spend, burn rate, the credit line', cant: 'Defects, so you can watch every dollar and still be late' },
+  { id: 'status', letter: 'a', group: 'Dashboards', name: 'Status Report', tone: 'inside', forecasts: true, sees: 'Progress and money: units reported complete against plan, spend, the credit line', cant: 'Whether those units will pass acceptance' },
   { id: 'schedule', letter: 'd', group: 'Dashboards', name: 'Schedule', tone: 'inside', forecasts: true, sees: 'Your plan, week by week, under the stated rules', cant: 'Defects or scope changes' },
   { id: 'chat', letter: 'f', group: 'People', name: 'Team Chat', tone: 'people', forecasts: true, sees: 'Five colleagues, each from where they sit', cant: 'Which view to weigh most' },
   { id: 'ai', letter: 'i', group: 'People', name: 'Ask an AI', tone: 'people', forecasts: false, sees: 'Whatever you paste in: this prompt holds everything on screen', cant: 'Anything not on screen' },
   { id: 'last5', letter: 'e', group: 'History', name: 'Last 5 Contracts', tone: 'record', forecasts: true, sees: 'The five newest contracts, and the story of the last one', cant: 'Whether five is enough' },
   { id: 'records', letter: 'j', group: 'History', name: 'Records', tone: 'record', forecasts: true, sees: 'What actually happened, defects and scope changes included', cant: 'Plans no past manager tried' },
-  { id: 'scenarios', letter: 'l', group: 'History', name: 'Scenarios', tone: 'people', forecasts: true, sees: 'A wider range, on purpose', cant: 'Anything but your plan as the starting point' },
-  { id: 'risks', letter: 'm', group: 'History', name: 'Risk Register', tone: 'people', forecasts: false, sees: 'Each risk, one at a time, and your own premortem', cant: 'Their sum' },
   { id: 'analytics', letter: 'o', group: 'Models', name: 'Analytics', tone: 'record', forecasts: true, sees: "The record's patterns", cant: 'Plans the record does not contain' },
   { id: 'simulator', letter: 'p', group: 'Models', name: 'Risk Simulator', tone: 'people', forecasts: true, sees: 'Variability, scope changes and, if switched on, rework from the record', cant: 'Anything its switches leave out' },
-  { id: 'consensus', letter: 'q', group: 'Models', name: 'Consensus', tone: 'people', forecasts: true, sees: 'The tabs you tick', cant: 'Anything you leave out' },
-  { id: 'track', letter: 'r', group: 'Your Record', name: 'Your Track Record', tone: 'record', forecasts: false, sees: 'Your past forecasts on this device', cant: "Anything, if you haven't kept score" },
 ];
 export const tabById = (id) => TABS.find((t) => t.id === id);
 export const tabByLetter = (l) => TABS.find((t) => t.letter && t.letter === l);
 
-/** The forecasts the Consensus tab can combine, and the sweep checks. Each is a function of (screen, plan). */
+/** The desk's forecasts, for the reveal and the sweep. Each is a function of (screen, plan, live). */
 export const FORECASTERS = {
   status: (S, p, L) => statusReport(S, L, p).forecast,
-  cost: (S, p, L) => costManagement(S, p, L).forecast,
   schedule: (S, p, L) => schedule(S, p, L).forecast,
   last5: (S) => lastFive(S).forecast,
   'records-all': (S) => records(S).all,
   'records-plan': (S, p) => records(S, p).matched,
-  scenarios: (S, p) => scenarios(S, p).forecast,
   analytics: (S, p) => analytics(S, p).forecast,
   simulator: (S, p, L) => riskSimulator(S, p, { live: L }).forecast,
   'simulator-blind': (S, p, L) => riskSimulator(S, p, { rework: false, live: L }).forecast,
 };
 export const FORECASTER_NAMES = {
-  status: 'Status Report', cost: 'Cost Management', schedule: 'Schedule', last5: 'Last 5 Contracts',
-  'records-all': 'Records, all 40', 'records-plan': 'Records, like my plan', scenarios: 'Scenarios', analytics: 'Analytics',
+  status: 'Status Report', schedule: 'Schedule', last5: 'Last 5 Contracts',
+  'records-all': 'Records, all 40', 'records-plan': 'Records, like my plan', analytics: 'Analytics',
   simulator: 'Risk Simulator (with rework)', 'simulator-blind': 'Risk Simulator (rework off)',
 };
-
-/** Consensus: the average of the ticked forecasters. */
-export function consensus(S, plan, keys, L = null) {
-  const fs = keys.map((k) => FORECASTERS[k]?.(S, plan, L)).filter(Boolean);
-  if (!fs.length) return { forecast: null, used: [] };
-  const avg = (k) => Math.round(mean(fs.map((f) => f[k])));
-  const fails = [...new Set(fs.map((f) => f.fail).filter(Boolean))];
-  return { forecast: { ...clampF({ week: avg('week'), low: avg('low'), high: avg('high'), chance: avg('chance') }), fail: fails.length ? fails.join('; ') : null }, used: keys };
-}
 
 /** Every forecaster's numbers for a plan, for the reveal's "how each tool would have done". */
 export function allForecasts(S, plan, L = null) {

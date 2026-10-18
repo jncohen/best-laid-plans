@@ -1,5 +1,17 @@
 // Small shared UI pieces.
 
+
+/** The one explanation of scoring, shown before commit and in The Contract. */
+export function ScoringNote({ className = '' }) {
+  return (
+    <p className={`text-sm text-slate-300 ${className}`}>
+      Three scores. <strong className="text-emerald-300">Forecast:</strong> your week-1 prediction.{' '}
+      <strong className="text-emerald-300">Updating:</strong> how well your weekly forecast tracks the evidence (narrow ranges that hold score best).{' '}
+      <strong className="text-slate-100">Delivery:</strong> on time and on budget.
+    </p>
+  );
+}
+
 export function Card({ title, children, tone = 'slate', className = '' }) {
   const border = {
     slate: 'border-slate-800',
@@ -40,8 +52,11 @@ export function Slider({ label, value, min, max, step = 1, onChange, format = (v
       <input
         type="range" min={min} max={max} step={step} value={unset ? mid : value} aria-valuetext={unset ? 'not set' : String(format(value))}
         onChange={(e) => onChange(+e.target.value)}
-        onPointerUp={(e) => { if (unset) onChange(+e.target.value); }}
-        onKeyUp={(e) => { if (unset) onChange(+e.target.value); }}
+        // Any explicit touch sets it, even one that leaves the thumb where it is.
+        onPointerDown={(e) => { if (unset) onChange(+e.target.value); }}
+        onTouchStart={(e) => { if (unset) onChange(+e.target.value); }}
+        onClick={(e) => { if (unset) onChange(+e.target.value); }}
+        onKeyDown={(e) => { if (unset) onChange(+e.target.value); }}
         className={`w-full accent-amber-400 h-2 ${unset ? 'opacity-40' : ''}`}
       />
       {hint && <div className="text-[11px] text-slate-500 mt-1">{hint}</div>}
@@ -86,7 +101,7 @@ export function DotStrip({ weeks, deadline, min = 8, max = 22, highlight = [], a
           </span>
         ))}
       </div>
-      <div className="relative h-4 text-[10px] text-slate-500 font-mono">
+      <div className="relative h-4 text-[11px] text-slate-500 font-mono">
         {Array.from({ length: Math.floor(span / 2) + 1 }, (_, i) => min + i * 2).map((w) => (
           <span key={w} className="absolute -translate-x-1/2" style={{ left: x(w) }}>{w}</span>
         ))}

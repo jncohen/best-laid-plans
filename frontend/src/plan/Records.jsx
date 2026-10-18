@@ -84,7 +84,7 @@ export default function Records({ past, plan = null, onUse = null }) {
           options={[[ANY, 'Any'], ['none', 'None'], ['some', 'Some']]} />
       </div>
       <div className="flex gap-2">
-        <button type="button" onClick={likeMine} disabled={!plan}
+        <button type="button" onClick={likeMine} disabled={!plan} aria-pressed={!!match}
           className={`flex-1 py-2 rounded-lg text-sm border ${match ? 'bg-amber-500/20 border-amber-400 text-amber-100' : 'bg-slate-950 border-amber-500/50 text-amber-200'} disabled:opacity-40`}>
           Contracts run like my plan
         </button>

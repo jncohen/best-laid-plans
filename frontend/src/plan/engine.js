@@ -306,7 +306,8 @@ export class Project {
     const sampled = inspect > 0 && built > 0 ? +Math.max(0, rate * (1 + c.sampleError * this._sample[this.week])).toFixed(3) : null;
     this.backlog -= built;
     this.hidden += bad;
-    this.shiftStreak = shift ? this.shiftStreak + 1 : Math.max(0, this.shiftStreak - 1);
+    // Fatigue counts straight weeks: a week without the shift resets it.
+    this.shiftStreak = shift ? this.shiftStreak + 1 : 0;
 
     // The shock
     let shock = 0;
@@ -324,10 +325,12 @@ export class Project {
       // The dashboard reads 100%, so the customer runs the acceptance test on everything.
       this.backlog = 0;
       if (this.hidden >= 0.5) {
-        rejected = this.hidden;
-        this.backlog = this.hidden * c.lateFixMultiplier;
+        // The test rejects whole units, and each takes lateFixMultiplier units of work to put right.
+        rejected = Math.round(this.hidden);
+        this.backlog = rejected * c.lateFixMultiplier;
         this.hidden = 0;
-        events.push(`Customer acceptance test: ${Math.round(rejected)} unit${Math.round(rejected) === 1 ? '' : 's'} rejected. Fixing ${Math.round(rejected) === 1 ? 'it' : 'them'} this late takes ${Math.round(rejected * c.lateFixMultiplier)} units of work.`);
+        const work = rejected * c.lateFixMultiplier;
+        events.push(`Customer acceptance test: ${rejected} unit${rejected === 1 ? '' : 's'} rejected. Fixing ${rejected === 1 ? 'it' : 'them'} this late takes ${work} unit${work === 1 ? '' : 's'} of work.`);
       } else {
         this.hidden = 0;
         accepted = true;
@@ -353,7 +356,7 @@ export class Project {
       this.done = true;
       this.result = 'DELIVERED';
       this.finishWeek = this.week;
-      events.push(`Accepted in full. Contract delivered in week ${this.week}.`);
+      events.push(`Accepted in full in week ${this.week}.`);
     } else if (this.week >= c.horizon) {
       this.done = true;
       this.result = 'TERMINATED';
@@ -435,8 +438,8 @@ export function firstCloseWeek(log, outcome) {
  * How the student played, week by week, as plain facts for the reveal. For each week:
  * the tool tabs opened before it was played (in order), the change the student made
  * to the running forecast (null if they didn't touch it), the decisions that changed
- * from the week before (week 1 against the starting line: the opening crews, no shift, no
- * inspection), and the seconds it took. Plus counts, the most-checked tools, and the
+ * from the week before (week 1 against the stated plan, which the game applies, or the
+ * opening line without one), and the seconds it took. Plus counts, the most-checked tools, and the
  * autopilot week: the last week with any tab check, forecast change or decision change.
  */
 export function playSummary(p) {
@@ -444,7 +447,9 @@ export function playSummary(p) {
   const rows = p.history.filter((h) => !h.bankrupt);
   const logAt = (w) => p.forecastLog.find((e) => e.week === w);
   const weeks = rows.map((h, i) => {
-    const prev = i ? rows[i - 1] : { crews: c.crews, shift: false, inspect: 0 };
+    // Week 1 starts from the stated plan (the game applies it), so only the student's own changes count.
+    const start = p.plan ? { crews: Math.min(c.maxCrews, c.crews + Math.min(c.maxHirePerWeek, p.plan.crews)), shift: p.plan.shift === 'every', inspect: p.plan.inspect } : { crews: c.crews, shift: false, inspect: 0 };
+    const prev = i ? rows[i - 1] : start;
     const opened = p.deskLog.filter((d) => d.week === h.week);
     const tabs = opened.filter((d) => !d.tab.startsWith('use:') && d.tab !== 'ai-copy').map((d) => d.tab);
     const e = logAt(h.week);

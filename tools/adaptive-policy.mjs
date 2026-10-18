@@ -6,7 +6,7 @@
 export function adaptive(p, w, k = {}) {
   k = { ...JSON.parse((typeof process !== 'undefined' && process.env.ADAPT) || '{}'), ...k };
   const c = p.cfg, h = p.history;
-  const A = { open: 3, inspect: 0.1, target: 11.2, scope: 17, rework: 3.5, reworkInspected: 1.8, findsTypical: 0.07, findsHigh: 0.11, findsLow: 0.04, lastHire: 8, releaseFrom: 4, release: 1.2, cash: 0.45, ...k };
+  const A = { open: 3, inspect: 0.1, target: 11.2, scope: 17, rework: 3.2, reworkInspected: 1.6, findsTypical: 0.07, findsHigh: 0.11, findsLow: 0.04, lastHire: 8, releaseFrom: 4, release: 1.2, cash: 0.45, ...k };
   if (w === 1) return { hire: A.open, inspect: A.inspect, projected: null };
   // The line's rate per crew-week, from clean weeks: no onboarding, no crew out, no parts delay.
   let built = 0, effort = 0;

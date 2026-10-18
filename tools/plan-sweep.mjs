@@ -30,7 +30,7 @@
  *      delivered range holds within 3 points as often as all 40's, and is narrower.
  *   9-11. The Decision Desk (frontend/src/plan/desk.js), as it stands before week 1:
  *      the tools that use the record (Records, Analytics, Mabel) hold >= 80%; the plan and
- *      the pace on paper (Status Report, Schedule, Cost Management, Sam, the
+ *      the pace on paper (Status Report, Schedule, Sam, the
  *      Risk Simulator with rework off) hold <= 10%; the Risk Simulator with its
  *      historical rework on holds >= 80%. Every tool and colleague is reported, with
  *      the share of the desk that is calibrated (holds >= 75%). Ask an AI gives no
@@ -38,7 +38,7 @@
  *   12. Bankruptcy (past the credit line) never hits a plan that wins: no strategy
  *      on time >= 40% of the time goes bankrupt in more than 5% of runs.
  */
-import { Project, CONFIG, seedFromString, COMMON_PLANS, pastContracts, historyMean, lastContract, matchContracts, planFromProject, playedPlan } from '../frontend/src/plan/engine.js';
+import { Project, CONFIG, seedFromString, COMMON_PLANS, pastContracts, historyMean, lastContract, matchContracts, planFromProject } from '../frontend/src/plan/engine.js';
 import { screenData, liveScreen, allForecasts, statusReport, records } from '../frontend/src/plan/desk.js';
 import { adaptive as adaptivePolicy, screenForecast } from './adaptive-policy.mjs';
 // SWEEP_CFG='{"budget":4600000,...}' tries candidate CONFIG values (exploration only; the game uses CONFIG as committed).
@@ -230,7 +230,7 @@ for (const [name, h] of Object.entries(deskHold)) {
   console.log(name.padEnd(42) + COMMON_PLANS.map((cp) => pct(h[cp.key]).padStart(10)).join('') + pct(deskMean[name]).padStart(7) + mean(deskBrier[name]).toFixed(2).padStart(7));
 }
 const RECORD_TOOLS = ['Records, all 40', 'Records, like my plan', 'Analytics', 'Team Chat: Mabel, veteran on the line'];
-const INSIDE_TOOLS = ['Status Report', 'Schedule', 'Cost Management', 'Risk Simulator (rework off)', 'Team Chat: Sam, planner'];
+const INSIDE_TOOLS = ['Status Report', 'Schedule', 'Risk Simulator (rework off)', 'Team Chat: Sam, planner'];
 const deskNames = Object.keys(deskMean).filter((k) => k !== 'Risk Simulator (rework off)');
 const calibrated = deskNames.filter((k) => deskMean[k] >= 0.75);
 console.log(`
@@ -249,7 +249,7 @@ checks.push(
 // Each states +3 crews / 10% inspection. The coasting types play that plan unchanged and never move their forecast.
 const STUDENT_N = Number(process.env.STUDENT_N || Math.min(N, 400));
 const PLAN = { crews: 3, inspect: 0.1, shift: 'none' };
-const ALL_TOOLS = ['status', 'cost', 'schedule', 'chat', 'last5', 'records', 'scenarios', 'analytics', 'simulator'];
+const ALL_TOOLS = ['status', 'schedule', 'chat', 'last5', 'records', 'analytics', 'simulator'];
 const asForecast = (f) => ({ week: f.week, low: f.low, high: f.high, onTimeChance: f.chance });
 // Every tab is open, but a coaster opens only a few before asking the AI: 2 to 6 of them, varying by code.
 const pickTabs = (i) => { const r = ((i * 2654435761) >>> 0) / 4294967296; const n = 2 + Math.floor(r * 5); const s = [...ALL_TOOLS].sort((a, b) => ((a.charCodeAt(0) * 31 + i) % 7) - ((b.charCodeAt(0) * 31 + i) % 7) || a.localeCompare(b)); return s.slice(0, n); };

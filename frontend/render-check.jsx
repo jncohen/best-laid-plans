@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server';
 import { Project, playPolicy } from './src/plan/engine.js';
 import Brief from './src/plan/Brief.jsx';
 import Play from './src/plan/Play.jsx';
-import Reveal from './src/plan/Reveal.jsx';
+import Reveal, { Finished } from './src/plan/Reveal.jsx';
 import { TABS, screenData, liveScreen } from './src/plan/desk.js';
 import DeskTab from './src/plan/DeskTabs.jsx';
 import TabStrip from './src/plan/DeskStrip.jsx';
@@ -77,7 +77,14 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   while (!b.done) b.play({ hire: 3, shift: true });
   ok('Reveal, bankrupt: a miss for every range', () => {
     const h = renderToString(<Reveal project={b} onReplay={() => {}} />);
-    if (b.result !== 'BANKRUPT' || !h.includes('Missed: bankrupt') || !h.includes('a miss for every range') || h.includes('>held<')) throw new Error('bankrupt outcome not a miss');
+    if (b.result !== 'BANKRUPT' || !h.includes('It missed: the contract was never delivered') || !h.includes('missed: bankrupt') || !h.includes('a miss for every range') || h.includes('>held<')) throw new Error('bankrupt outcome not a miss');
+    if (!h.replace(/<!-- -->/g, '').includes(`the company went bankrupt in week ${b.week}`)) throw new Error('lesson line lacks the bankruptcy');
+    return h;
+  });
+  // The finish screen states what happened.
+  ok('Finished: bankrupt, never delivered', () => {
+    const h = renderToString(<Finished project={b} onReveal={() => {}} />).replace(/<!-- -->/g, '');
+    if (!h.includes(`The company went bankrupt in week ${b.week}. The contract was never delivered.`)) throw new Error('finish screen wrong');
     return h;
   });
 }
@@ -86,22 +93,27 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   const C3I = { crews: 3, inspect: 0.1, shift: 'none' }, HO = { crews: 0, inspect: 0, shift: 'none' };
   const pace = { week: 11, low: 10, high: 12, onTimeChance: 75 };
   const cases = [
-    ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, ['Missed, 1 wk late', 'You changed plan'], false],
-    ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, ['>Held<', 'You played the plan you stated'], false],
-    ['all 40, hands-off stated and played', { week: 15, low: 11, high: 23, onTimeChance: 20 }, HO, {}, ['>Held<', 'You played the plan you stated'], true],
-    ['pace, hands-off stated and played', pace, HO, {}, ['Missed, 6 wk late', 'You played the plan you stated', 'Sees '], true],
+    ['pace, stated hands-off, plays +3/10%', pace, HO, { hire: 3, inspect: 0.1 }, ['The range held.', 'You changed it before playing week 1', 'Your committed numbers came from Status Report'], false],
+    ['matched record, +3/10% stated and played', { week: 13, low: 11, high: 14, onTimeChance: 45 }, C3I, { hire: 3, inspect: 0.1 }, ['The range held.', 'Week 1 ran as stated', 'and you then changed them'], false],
+    ['all 40, hands-off stated and played', { week: 15, low: 11, high: 22, onTimeChance: 20 }, HO, {}, ['The range held.', 'Week 1 ran as stated'], true],
+    ['pace, hands-off stated and played', pace, HO, {}, ['It missed by 6 weeks (late).', 'Week 1 ran as stated', 'Sees ', 'You set your committed numbers yourself.'], true],
   ];
   for (const [i, [label, f, plan, pol, verdict, coaster]] of cases.entries()) {
     const p = new Project('ledger');
     p.commit({ ...f, plan, desk: { tool: ['a', 'o', 'j', ''][i], tabs: i * 3, minutes: 4 + i, edited: i === 1, order: ['status', 'analytics'] } });
     playPolicy(p, pol);
     ok(`Reveal, ledger: ${label} → ${verdict.join(', ')}`, () => {
-      const h = renderToString(<Reveal project={p} onReplay={() => {}} />);
+      const h = renderToString(<Reveal project={p} onReplay={() => {}} />).replace(/<!-- -->/g, '').replace(/&#x27;/g, "'");
       for (const v of verdict) if (!h.includes(v)) throw new Error(`"${v}" not shown`);
-      if (/Reasoned|Lucky|Verdict/.test(h)) throw new Error('a verdict label is still shown');
-      if (!h.includes('How you played') || !/changed nothing and checked no tools|still checking or changing things/.test(h)) throw new Error('How you played panel missing');
+      if (/Reasoned|Lucky|Verdict|Tool used|Played as stated/.test(h)) throw new Error('an old label is still shown');
+      if (!h.includes('How you played') || !/You checked tools in \d+ of \d+ weeks?\./.test(h) || !/changed nothing\.|still checking or changing things/.test(h) || /Time: about/.test(h)) throw new Error('How you played sentences wrong');
       if (h.includes('past managers also ran it hands-off') !== coaster) throw new Error('coaster line wrong');
-      for (const s of ['Your numbers', `week ${p.scores().outcome}`, `${f.onTimeChance}%`, 'Tool used']) if (!h.includes(s)) throw new Error(`"${s}" missing from Your numbers`);
+      // The phone order: lesson, scores, tools, your range, the dashboard, then More detail.
+      const at = (x) => h.indexOf(x);
+      const order = ['Your dashboard said', 'Forecast score', 'Updating score', 'Delivery score', 'How each tool on the desk would have done', 'Your range against the record', 'What your dashboard told you', 'More detail'];
+      if (order.some((x) => at(x) < 0) || order.some((x, k) => k && at(x) < at(order[k - 1]))) throw new Error('reveal order wrong');
+      const fw = p.history.find((r) => r.rejected > 0 || r.reported >= 0.999).week;
+      for (const x of [`Your dashboard said week ${fw}.`, `It was accepted in week ${p.scores().outcome}.`, `The past contracts said week 15`, `You gave ${f.onTimeChance}% to week 12; it`, 'first passed 90% in week']) if (!h.replace(/<[^>]+>/g, '').includes(x)) throw new Error(`"${x}" missing`);
       if (h.includes('BLP') || h.includes('result code')) throw new Error('a result code is still shown');
       return h;
     });
@@ -109,7 +121,11 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
       const q = new Project('ledger');
       q.commit({ ...f, plan });
       const h = renderToString(<Play project={q} onPlay={() => {}} />);
-      if (!h.includes('Your stated plan')) throw new Error('stated plan not shown');
+      if (!h.includes('Your plan:') || !h.includes('Week 1 is set from it')) throw new Error('stated plan not shown as a reminder');
+      // The stated plan is applied as week 1's decisions.
+      const a = h.replace(/<!-- -->/g, '');
+      if (plan.crews > 0 && !a.includes(`4 + ${plan.crews} this week`)) throw new Error('week 1 crews not set from the plan');
+      if (!new RegExp(`aria-pressed="true"[^>]*>${Math.round(plan.inspect * 100)}%`).test(a)) throw new Error('week 1 inspection not set from the plan');
       if (!/This Week(&#x27;|')s Decisions/.test(h) || !h.includes('Status Report') || !/Play week (<!-- -->)?1/.test(h)) throw new Error('decisions tab or tool strip missing');
       return h;
     });
@@ -117,7 +133,8 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   ok('Brief, front tab: inputs only', () => {
     const h = renderToString(<Brief onCommit={() => {}} />);
     for (const s of ['1 · Your plan', '2 · Your forecast', 'Commit plan and forecast', "The contract, its rules and the line"]) if (!h.includes(s) && !h.includes(s.replace("'", '&#x27;'))) throw new Error(`missing "${s}"`);
-    for (const s of ['terminates the contract', 'What you decide each week', 'a week</strong>']) if (h.includes(s)) throw new Error(`front tab still shows "${s}"`);
+    for (const s of ['What you decide each week', 'a week</strong>', 'two scores', 'Two scores']) if (h.includes(s)) throw new Error(`front tab still shows "${s}"`);
+    if (!h.includes('Three scores.') || !h.includes('narrow ranges that hold score best')) throw new Error('scoring not explained before commit');
     return h;
   });
   // Fairness: everything a calibrated forecast needs is reachable before week 1, in the tabs.
@@ -126,17 +143,18 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
   ok('Before week 1, The Contract states every rule and both scores', () => {
     const h = strip(before('contract'));
     if (/tool tabs each week|views a week|Round 1/.test(h)) throw new Error('The Contract still states a view limit');
-    for (const s of ['200', '12', '4', '$4.60M', '$500k', 'New crews work at 50%', 'lose a crew', 'parts delay', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Forecast', 'Delivery', 'costs double']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    for (const s of ['200', '12', '4', '$4.60M', '$500k', 'New crews work at 50%', 'lose a crew', 'parts delay', 'acceptance test', 'terminates the contract', 'goes bankrupt', 'scope change', 'turn out defective', 'What you decide each week', 'Three scores.', 'Updating:', 'narrow ranges that hold score best', 'units of work to fix', 'own week-to-week luck']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     return h;
   });
   ok('Before week 1, Last 5 Contracts gives the pace and the last contract’s story', () => {
     const h = strip(before('last5'));
-    for (const s of ['20.6 a week', '9.7 weeks', '100% in week 12', 'Accepted in week 16', '20 units']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    for (const s of ['20.6 a week', '9.7 weeks', '100% in week 12', 'Accepted in week 16', '21 units', 'Range of the delivered ones']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    if (h.includes('80% range')) throw new Error('Last 5 still calls its min-max an 80% range');
     return h;
   });
   ok('Before week 1, Records gives the 40 contracts, their dot strip and summary', () => {
     const h = strip(before('records'));
-    for (const s of ['All 40 contracts', 'median week 14', 'percentile weeks 11–19', 'of the 32 delivered', '20% made week 12', '8 of 40 never delivered (8 bankrupt)', 'counts as not on time']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
+    for (const s of ['All 40 contracts', 'median week 15', 'percentile weeks 11–19', 'of the 32 delivered', '18% made week 12', '8 of 40 never delivered (8 bankrupt)', 'counts as not on time']) if (!h.includes(s)) throw new Error(`missing "${s}"`);
     if ((before('records').match(/rounded-full/g) || []).length < 32) throw new Error('dot strip missing (one dot per delivered contract)');
     if (!h.includes('✕✕✕✕✕✕✕✕') || !h.includes('never delivered: 8 bankrupt')) throw new Error('failures not beside the dot strip');
     return h;
@@ -153,13 +171,12 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
       ok(`Desk tab ${t.name}${plan ? `, plan ${plan.crews}/${plan.inspect}/${plan.shift}` : ', no plan yet'}`, () => {
         const h = renderToString(<Brief onCommit={() => {}} initialTab={t.id} initialPlan={plan} />);
         if (/>Can(&#x27;|')t see</.test(h)) throw new Error('the tab still carries a sees or cant-see label');
-        if (t.forecasts && t.id !== 'chat' && t.id !== 'consensus' && t.id !== 'records' && !h.includes('Use this on my prediction')) throw new Error('no Use this button');
+        if (t.forecasts && t.id !== 'chat' && t.id !== 'records' && !h.includes('Use this on my prediction')) throw new Error('no Use this button');
         if (t.id === 'records' && (h.match(/<tr/g) || []).length < 41) throw new Error('table does not have 40 rows');
-                        if (t.id === 'cost' && !h.includes('bankruptcy')) throw new Error('bankruptcy line missing');
+        if (t.id === 'status' && (!h.includes('Schedule efficiency') || !h.includes('Cost efficiency') || !h.includes('Projected finish') || !h.includes('Credit line') || /EV ÷|BAC|planned value/.test(h))) throw new Error('status report jargon or money tiles wrong');
         if (t.id === 'simulator' && !h.includes('Include rework')) throw new Error('rework switch missing');
         if (t.id === 'last5' && !/#(<!-- -->)?40/.test(h)) throw new Error('last contract not record #40');
-        if (t.id === 'risks' && !h.includes('Premortem')) throw new Error('premortem missing');
-        if (t.id === 'ai' && (!h.includes('Copy the prompt') || !h.includes('knows only what you') || h.includes('PAST CONTRACTS'))) throw new Error('AI prompt should hold only the rules until tabs are opened');
+        if (t.id === 'ai' && (!h.includes('Copy the prompt') || !h.includes('knows what you') || !h.includes('always includes the contract') || h.includes('includes: The Contract') || h.includes('PAST CONTRACTS'))) throw new Error('AI prompt should hold only the rules until tabs are opened');
         return h;
       });
     }
@@ -184,7 +201,7 @@ ok('Tab strip: every tab is always open, with no counter or notice', () => {
     playPolicy(p, { hire: i % 4, inspect: (i % 3) / 10 });
     ok(`Reveal with personal luck ${i}`, () => {
       const h = renderToString(<Reveal project={p} onReplay={() => {}} />);
-      if (!h.includes('How each tool on the desk would have done') || !h.includes(`week ${p.scores().outcome}`)) throw new Error('comparison missing');
+      if (!h.includes('How each tool on the desk would have done') || (p.result === 'DELIVERED' && !h.replace(/<!-- -->/g, '').includes(`week ${p.scores().outcome}`))) throw new Error('comparison missing');
       return h;
     });
   }

@@ -30,9 +30,11 @@ favour of a show of hands. It is not live until it is merged into
    inspection, second shift), then the forecast (the acceptance week, an 80% range
    and the chance of week 12), then the commit button. The forecast starts unset, so
    there is no default to anchor on: each number has to be set, or taken from a tool
-   with "Use this", before the commit button works. The contract, its rules and
-   the line's history are in the tabs:
-   - **The Contract** (second) has the terms, every disclosure and both scores;
+   with "Use this", before the commit button works. Tapping a slider counts as setting
+   it. The sliders stop at week 22, the last week before the customer terminates. One
+   line above the commit button explains the three scores. The contract, its rules
+   and the line's history are in the tabs:
+   - **The Contract** (second) has the terms, every disclosure and the three scores;
    - **Last 5 Contracts** has the last contract's six-week pace and its story;
    - **Records** has all 40 past contracts.
 3. Before committing they may open any of the tool tabs (below), or none. Every tab is
@@ -42,47 +44,40 @@ favour of a show of hands. It is not live until it is merged into
    tools, the tabs carry no labels about what they can and can't see; the reveal
    lists that for each one. "Use this on my prediction" copies a tool's numbers
    into the front tab, where they can still be edited.
-4. They play week by week. The same tab strip stays open. Its first tab, the
-   highlighted **This Week's Decisions** (crews, shift, inspection, the running
-   forecast and "Play week N"), opens each week, and switching to a tool and back
-   keeps unsaved choices. The tools are recomputed each week from what the screen shows:
-   the dashboard, the crews, the spend and the week's events. "Use this" updates the
+4. They play week by week. The same tab strip stays open, every tab visible (it wraps
+   into rows on a phone). Its first tab, the highlighted **This Week's Decisions**
+   (crews, shift, inspection, the running forecast and "Play week N"), opens each
+   week, and switching to a tool and back keeps unsaved choices. Week 1 starts from
+   the committed plan: its crews, inspection and shift are already set, and the plan
+   stays on screen as a reminder. The tools are recomputed each week from what the
+   screen shows (the dashboard, the crews, the spend and the week's events) and from
+   this week's decisions. Only the student moves the running forecast; when the
+   calendar overtakes it (a week that has passed), the screen says what it moved. "Use this" updates the
    running forecast (week, range and chance). The forecast committed before week 1
    remains the one that is scored. The contract ends when the customer accepts it,
    when the customer terminates it after week 22, or when the company goes bankrupt.
-5. At the end the game holds the result until the class reveals together. Each
-   student's reveal opens with **Your numbers**, so they can answer a show of hands:
-   - whether their 80% range held, and if not, whether it missed late or early;
-   - the outcome week;
-   - their stated chance of week 12;
-   - whether they played the plan they stated (if not, what they said and what they
-     played);
-   - the tool whose numbers they used, if any, and how many tool tabs they opened.
-
-   Below that, the reveal shows:
-   - whether they played the plan they stated (the range result is in Your numbers).
-     For hands-off play it adds the record of past managers who coasted. Neither
-     fact changes a score;
-   - the forecast's trajectory week by week, and the week it first came within a
-     week of the outcome (a forecast the calendar overtook, and the game carried
-     forward, doesn't count);
-   - how often they opened decision support during play;
-   - **How you played**, in plain facts with no labels or scores:
-     - a week-by-week strip of the tool tabs checked, forecast moves and decision
-       changes;
-     - how many weeks they checked decision support, and how many times they
-       changed the forecast (first in which week);
-     - the weeks in which their decisions changed;
-     - the autopilot week ("After week K you changed nothing and checked no
-       tools");
-     - the most-checked tools;
-     - the time taken.
-
-     The tracking stays on the device and never changes an outcome;
-   - how every tool on the desk would have done, each with a line on what it sees
-     and can't see.
+5. At the end the finish screen states what happened ("Accepted in full in week 14.",
+   or bankrupt, or terminated, never delivered) and holds the results until the class
+   reveals together. The reveal is ordered for a phone:
+   1. one lesson line: "Your dashboard said week X. The past contracts said week Y. It
+      was accepted in week Z." (X is the week the dashboard first read 100%, Y the
+      delivered past contracts' median);
+   2. the three scores, each with one plain sentence: whether the week-1 range held,
+      "You gave 35% to week 12; it wasn't made", lateness and spend;
+   3. how every tool on the desk would have done, each with a line on what it sees and
+      can't see, and the failures under any range from the record;
+   4. their range against the record, in one compact chart;
+   5. what the dashboard told them ("first passed 90% in week N (it read 96%)");
+   6. under **More detail**: the forecast's trajectory and the week it first came
+      within a week of the outcome; **How you played** in three sentences ("You
+      checked tools in N of M weeks." "You changed your forecast N times (first in
+      week X)." "After week K you changed nothing."); whether week 1 ran as the plan
+      stated and how many later weeks changed it; the tabs opened before committing
+      and whose numbers they committed. For hands-off play it adds the record of past
+      managers who coasted. None of it changes a score, and the tracking never changes
+      an outcome.
 6. Ask the room: whose range held? Who was late? Who said 50% or more for week 12,
-   and who made it? Who used a tool, and which? Who went on autopilot by week 6? Who
+   and who made it? Who used a tool, and which? Who changed nothing after week 6? Who
    never moved their forecast?
 
 `?tab=analytics` opens the briefing on one tab and `?plan=31n` pre-states a plan,
@@ -94,7 +89,7 @@ for projecting a tab in class.
 - **Crews.** Add up to 3 a week ($100k each, 9 at most) or release one ($50k). New
   crews work at 50% for their first 2 weeks. Each crew beyond 4 costs every crew 4%.
 - **Second shift.** +30% output for $20k per crew. From the second straight week,
-  tired crews make more defects.
+  tired crews make more defects; a week without it resets the count.
 - **Inspection.** Move 0–30% of the line from building to checking. Defects found
   early cost one unit to fix; any the customer's acceptance test finds cost double.
 - Some built units turn out defective. The dashboard counts them complete until
@@ -166,10 +161,9 @@ Colours:
 | Tab | Clones | Sees · can't see |
 |---|---|---|
 | **The Brief** | | |
-| The Contract | contract summary card: the terms (200 units, week 12, 4 crews, $5.00M), every disclosure (acceptance test, termination after week 22, credit line and bankruptcy, scope changes, defects), what you decide each week with its costs, and both scores. No forecast | The contract, every rule and both scores · how long it will take |
+| The Contract | contract summary card: the terms (200 units, week 12, 4 crews, $4.60M), every disclosure (acceptance test, termination after week 22, credit line and bankruptcy, scope changes, defects), what you decide each week with its costs, and both scores. No forecast | The contract, every rule and both scores · how long it will take |
 | **Dashboards** | | |
-| Status Report | earned-value status report: red/amber/green light, SPI, CPI (against the cost baseline: the last contract's crews over 12 weeks, or during play the student's plan), schedule estimate at completion (planned duration ÷ SPI), burn-up chart; during play, units built per crew, the inspectors' sample and defects found so far | Earned value: units reported complete against plan · whether those units will pass acceptance |
-| Cost Management | project cost-control dashboard: the plan's cost baseline (BAC), CPI = EV ÷ AC, EAC = BAC ÷ CPI, cash runway, the headroom to the budget and to the credit line, and cumulative spend against the budget and the bankruptcy line | Money: spend, burn rate, the credit line · defects, so you can watch every dollar and still be late |
+| Status Report | status report: a red/amber/green light that flags schedule or cost, in plain words (schedule efficiency, below 1 = behind plan; cost efficiency, below 1 = over budget for the work done; projected finish, 12 weeks ÷ schedule efficiency), the current scope, money tiles (spent, budget left, credit left, cost efficiency; before week 1 the plan's cost), when the money would run out, a burn-up chart; during play, units built per crew, the inspectors' sample and defects found so far. The standard abbreviations (SPI, CPI, EAC) appear only in small grey text | Progress and money: units reported complete against plan, spend, the credit line · whether those units will pass acceptance |
 | Schedule | Gantt chart: task bars, milestones, finish diamond | Your plan, week by week, under the stated rules · defects or scope changes |
 | **People** | | |
 | Team Chat | workplace chat in which five colleagues answer "When will we be done?" (reasoning on tap), updated each week. In order: Dana (line supervisor) from the pace, with a hedge; Sam (planner) from the plan re-planned from now; Kim (sales) from the promise; Mabel, a veteran on the line, from the record; Priya (quality) from rework, the last contract's or this one's, quoting the inspectors' sample | Five colleagues, each from where they sit · which view to weigh most |
@@ -177,14 +171,9 @@ Colours:
 | **History** | | |
 | Last 5 Contracts | the last contract's first six weeks and its pace (19.1 a week, 10.5 weeks to 200 units), an after-action review of it, and a list of the five newest contracts. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |
 | Records | historical-project database: a dot strip of the 40 past contracts with its summary (median, 10th–90th, on-time share), above a sortable, filterable table with "Contracts run like my plan" | What actually happened, defects and scope changes included · plans no past manager tried |
-| Scenarios | best / base / base + rework / worst-seen matrix with assumptions | A wider range, on purpose · anything but your plan as the starting point |
-| Risk Register | probability × impact heat map with risk cards, and a premortem box ("It's week 17 and the customer has rejected the delivery. Why?"). No forecast | Each risk, one at a time, and your own premortem · their sum |
 | **Models** | | |
 | Analytics | BI dashboard: KPI tiles, scatter of past contracts, fitted OLS line, 80% prediction interval | The record's patterns · plans the record does not contain |
 | Risk Simulator | Monte Carlo schedule-risk tool: histogram, S-curve, P10/P50/P80/P90, with a switch for historical rework (on by default). With it on, each run adds a slip drawn from past contracts; with it off, the tool sees only the plan | Variability, scope changes and, if switched on, rework from the record · anything its switches leave out |
-| Consensus | forecast-combination panel: tick the tools to average | The tabs you tick · anything you leave out |
-| **Your Record** | | |
-| Your Track Record | personal stats from earlier plays on this device | Your past forecasts on this device · anything, if you haven't kept score |
 
 `npm run plan` also checks that set-and-forget loses:
 - a screen-only adaptive manager (`tools/adaptive-policy.mjs`) is on time at least as
@@ -197,7 +186,7 @@ Colours:
 It pins the desk's hold rates across 1,000 codes:
 - the tools that use the record (Records, Analytics, Mabel) hold at least 80% of the
   time;
-- the pace and the plan on paper (Status Report, Schedule, Cost Management, Sam, the
+- the pace and the plan on paper (Status Report, Schedule, Sam, the
   Risk Simulator with rework off) hold at most 10%;
 - the Risk Simulator with historical rework holds at least 80%.
 
@@ -220,9 +209,14 @@ backlog, crews and week.
 With the desk build's rules (a $4.60M budget, new-crew onboarding, wider contract
 differences and the events) the record has:
 - 8 of 40 never delivered (8 bankrupt, none terminated), listed and counted as such;
-- among the 32 delivered, a median of week 14 and a 10th–90th percentile range of
+- among the 32 delivered, a median of week 15 and a 10th–90th percentile range of
   weeks 11–19;
-- 8 of 40 on time.
+- 7 of 40 on time.
+
+The acceptance test rejects whole units, each taking 2 units of work to fix, so its
+message always adds up ("6 units rejected. Fixing them this late takes 12 units of
+work."). Moving to whole units moved the record from a median of 14 and 8 of 40 on
+time to 15 and 7 of 40.
 
 Every median, range and percentile on the desk is computed from delivered
 contracts only. This covers the Records summary, the dot strip, Last 5, Mabel,
@@ -233,12 +227,12 @@ Delivered-only ranges flatter risky plans, so every range from the record shows 
 failures beside it, for example "Contracts run like yours: delivered weeks 11–13; 1 of
 7 run like yours never delivered (1 bankrupt)". This holds on the Records summary and
 filters, the dot strip (an ✕ per failure), Last 5, Mabel's line, Analytics, the Risk
-Simulator's slip pool, Consensus and the reveal. "Use this" carries the failures into
+Simulator's slip pool and the reveal. "Use this" carries the failures into
 the week-12 chance (a failure is not on time) and into a note on the front tab.
 Analytics and the Risk Simulator scale their chance by the failure share of the
 contracts they draw on.
 
-The last contract (#40) read 100% in week 12 and was accepted in week 16, with 20
+The last contract (#40) read 100% in week 12 and was accepted in week 16, with 21
 units rejected. Its first six weeks averaged 20.6 a week. Live 1.1.0 and Monday's
 lecture keep the earlier figures: 19.1 a week; 13 → 17 with 19 rejected; median 14;
 12–17; 6 of 40.

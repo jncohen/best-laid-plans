@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { CONFIG, isCheck } from './engine';
 import { tabById, screenData } from './desk.js';
 import TabStrip from './DeskStrip';
-import { Card, Slider } from './ui';
+import { Card, Slider, ScoringNote } from './ui';
 import DeskTab from './DeskTabs';
 
 function Choice({ label, options, value, onChange }) {
@@ -58,9 +58,9 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
     window.scrollTo(0, 0);
   };
   const applyNumbers = (id, f, label = null) => {
-    const n = { week: Math.max(8, Math.min(22, f.week)), chance: Math.max(0, Math.min(100, Math.round(f.chance / 5) * 5)) };
+    const n = { week: Math.max(8, Math.min(c.horizon, f.week)), chance: Math.max(0, Math.min(100, Math.round(f.chance / 5) * 5)) };
     n.low = Math.max(6, Math.min(n.week, f.low));
-    n.high = Math.min(24, Math.max(n.week, f.high));
+    n.high = Math.min(c.horizon, Math.max(n.week, f.high));
     setWeek(n.week); setLow(n.low); setHigh(n.high); setChance(n.chance);
     setLoaded({ id, label, numbers: n, fail: f.fail || null });
     open('commit');
@@ -92,7 +92,7 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
           </button>
         </>
       ) : (<>
-      <p className="text-sm text-slate-300 -mb-2">The contract, its rules and the line's history are in the tabs.</p>
+      <p className="text-sm text-slate-300">The contract, its rules and the line's history are in the tabs.</p>
 
       <Card tone="emerald">
         <div className="space-y-4">
@@ -113,17 +113,19 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
               {loaded.fail && <span className="text-rose-300"> {loaded.fail}: the range is from the delivered ones, and the chance counts the rest as not on time.</span>} You can still change them.
             </p>
           )}
-          <Slider label="Week the customer accepts it" value={week} min={8} max={22} onChange={setPoint} format={(v) => `week ${v}`} />
+          <Slider label="Week the customer accepts it" value={week} min={8} max={c.horizon} onChange={setPoint} format={(v) => `week ${v}`} />
           <div>
-            <div className="grid grid-cols-2 gap-3">
-              <Slider label="80% sure: earliest" value={low} min={6} max={22} onChange={(v) => setLow(week === null ? v : Math.min(v, week))} format={(v) => `wk ${v}`} />
-              <Slider label="latest" value={high} min={8} max={24} onChange={(v) => setHigh(week === null ? v : Math.max(v, week))} format={(v) => `wk ${v}`} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Slider label="80% sure: earliest" value={low} min={6} max={c.horizon} onChange={(v) => setLow(week === null ? v : Math.min(v, week))} format={(v) => `week ${v}`} />
+              <Slider label="Latest" value={high} min={8} max={c.horizon} onChange={(v) => setHigh(week === null ? v : Math.max(v, week))} format={(v) => `week ${v}`} />
             </div>
+            <p className="text-[11px] text-slate-500 mt-1">Week {c.horizon} is the last: after it the customer terminates the contract. A contract never delivered (bankrupt or terminated) misses any range.</p>
           </div>
           <Slider
             label={`Chance you deliver by week ${c.deadline}`} value={chance} min={0} max={100} step={5}
             onChange={setChance} format={(v) => `${v}%`}
           />
+          <ScoringNote className="bg-slate-950 rounded-lg px-3 py-2" />
           {seedLocked ? (
             <p className="text-sm text-slate-400">Scenario code <span className="font-mono text-white">{seed}</span>{' '}
               <button type="button" onClick={() => setSeedLocked(false)} className="text-xs text-slate-400 underline">change</button></p>
