@@ -2,7 +2,7 @@
 // only by desk.js, which sees only what the briefing shows.
 import { useState } from 'react';
 import { statusReport, lastFive, teamChat, aiPrompt, recordsCsv, tabById, projectControls, whatIf, RISK_KINDS, RISK_LEVELS } from './desk.js';
-import { CONFIG, pastContracts, describePlan, onboardingRule, failuresLine } from './engine';
+import { CONFIG, describePlan, onboardingRule, failuresLine } from './engine';
 import { Card, ScoringNote } from './ui';
 import { CHART_W as W, CHART_CLASS, svgText } from './chartStyle';
 import { money, downloadText } from './format';
@@ -409,7 +409,7 @@ function AiTab({ S, plan, planNote, live, onNote }) {
 
 // ── The record ───────────────────────────────────────────────────────────────
 function RecordsTab({ S, plan, planReady, onUse, onNote }) {
-  const past = pastContracts();
+  const past = { contracts: S.contracts };
   const csv = () => { if (onNote) onNote('records-csv'); downloadText('best-laid-plans-past-contracts.csv', recordsCsv(S), 'text/csv'); };
   return (
     <Card title="Records · project database" tone="amber">

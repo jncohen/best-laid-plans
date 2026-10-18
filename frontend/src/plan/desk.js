@@ -18,9 +18,9 @@ const DISCLOSED = ['scope', 'deadline', 'horizon', 'crews', 'budget', 'creditLin
   'releaseFee', 'shiftPremiumPerCrew', 'onboardingWeeks', 'onboardingFactor', 'onboardingDrag', 'shiftBoost', 'inspectionOptions', 'lateFixMultiplier'];
 
 /** Everything the desk may use. The rules are only those the briefing states. */
-export function screenData(cfg = CONFIG) {
-  const last = lastContract(cfg);
-  const past = pastContracts(cfg);
+export function screenData(cfg = CONFIG, code = '') {
+  const last = lastContract(cfg, code);
+  const past = pastContracts(cfg, code);
   const rules = Object.fromEntries(DISCLOSED.map((k) => [k, cfg[k]]));
   return Object.freeze({
     history: [...last.history],
@@ -216,7 +216,7 @@ const fromSummary = (s, what = '') => ({ week: s.median, low: s.p10, high: s.p90
 /** Records: all 40, or the contracts run like the plan. */
 export function records(S, plan = null) {
   const all = summarizeContracts(S.contracts);
-  const m = plan ? matchContracts(plan) : null;
+  const m = plan ? matchContracts(plan, { contracts: S.contracts }) : null;
   const matched = m ? { ...fromSummary(m, 'run like yours'), rule: m.rule, crewsDropped: !!m.crewsDropped } : null;
   return { forecast: matched || fromSummary(all), all: fromSummary(all), matched };
 }
@@ -280,7 +280,7 @@ export function teamChat(S, plan, L = null) {
         : L ? `Week ${now} is done and the dashboard says ${shown}%. We promised week ${R.deadline}; the customer asked again how it's going.` : `We promised week ${R.deadline}.`,
       reasoning: 'What the customer was told.' },
     { key: 'veteran', name: 'Mabel', role: 'Veteran on the line', frame: 'The record', approach: 'goes by the record of past contracts', confidence: 80, forecast: { week: Math.max(m.week, now + 1), low: Math.max(m.low, now + 1), high: Math.max(m.high, now + 1), chance: m.chance, fail: m.fail },
-      says: `Twenty-odd years on this line. These take about ${word(all.week)} weeks, give or take ${spread <= 2 ? 'a couple' : word(spread)}. I've seen maybe ${inWords(all.chance / 100)} make ${word(R.deadline)}.${yours}`
+      says: `Twenty-odd years on this line. These take about ${word(all.week)} weeks, give or take ${spread <= 2 ? 'a couple' : word(spread)}. I've seen ${all.chance / 100 < 0.08 ? '' : 'maybe '}${inWords(all.chance / 100)} make ${word(R.deadline)}.${yours}`
         + (L ? ` You're at ${shown}% on the dashboard after ${word(now)} week${now === 1 ? '' : 's'}. On this line the customer accepts about ${word(tail)} week${tail === 1 ? '' : 's'} after the dashboard first reads 100%.` : ''),
       reasoning: `The record of ${S.contracts.length} contracts: median week ${all.week}, most between ${all.low} and ${all.high} among those delivered, ${all.chance}% on time${all.fail ? `; ${all.fail}` : ''}. For your plan, the ${m.n} run like it: delivered week ${m.week} (${m.low}–${m.high})${m.fail ? `; ${m.fail}` : ''}.` },
     { key: 'quality', name: 'Priya', role: 'Quality lead', frame: rejected > 0 ? 'The acceptance test' : 'Rework, from the last contract', approach: 'goes by defects and rework', confidence: 70, ...priya },
@@ -333,7 +333,7 @@ export function whatIf(S, plans, L = null) {
   return plans.map((pl) => {
     const p = asPlan(pl);
     const sc = schedule(S, p, L).forecast, cm = costManagement(S, p, L);
-    const m = L ? null : matchContracts(p);
+    const m = L ? null : matchContracts(p, { contracts: S.contracts });
     return {
       plan: p, finish: sc.week, cost: cm.cost.toFinish, overBudget: Math.max(0, cm.cost.toFinish - R.budget), brokeWeek: cm.brokeWeek,
       record: m ? { median: m.median, low: m.p10, high: m.p90, n: m.n, failed: m.failed.total, onTime: Math.round(100 * m.onTimeShare), loose: m.rule !== 'crews, inspection and shift', crewsDropped: !!m.crewsDropped } : null,

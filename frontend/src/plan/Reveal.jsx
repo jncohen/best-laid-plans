@@ -46,17 +46,17 @@ export function Finished({ project, onReveal }) {
 export default function Reveal({ project, onReplay }) {
   const c = CONFIG;
   const p = project;
-  const past = pastContracts();
+  const past = pastContracts(c, p.seedInput);
   const s = p.scores();
   const f = p.forecast;
   const outcome = s.outcome;
   const delivered = p.result === 'DELIVERED';
   const played = playedPlan(p);
-  const j = judgeForecast({ forecast: f, outcome, stated: p.plan, played });
+  const j = judgeForecast({ forecast: f, outcome, stated: p.plan, played, code: p.seedInput });
   // How every tool on the desk would have done, for the plan the student stated.
   // A contract never delivered misses every range. The Status Report's money line had warned of a bankruptcy.
-  const brokeWarned = p.result === 'BANKRUPT' ? costManagement(screenData(), p.plan || played).brokeWeek : null;
-  const tools = allForecasts(screenData(), p.plan || played).map((t) => ({
+  const brokeWarned = p.result === 'BANKRUPT' ? costManagement(screenData(c, p.seedInput), p.plan || played).brokeWeek : null;
+  const tools = allForecasts(screenData(c, p.seedInput), p.plan || played).map((t) => ({
     about: aboutTool(t.key),
     ...t, result: s.failed ? s.failed : outcome >= t.low && outcome <= t.high ? 'held' : outcome > t.high ? 'late' : 'early',
     warned: t.key === 'status' && brokeWarned ? `warned: money runs out wk ${brokeWarned}` : null,
@@ -73,7 +73,7 @@ export default function Reveal({ project, onReplay }) {
   const laterChanges = playSummary(p).weeks.filter((w) => w.week > 1 && w.decided).length;
   const ended = delivered ? `It was accepted in week ${outcome}.` : `It was never delivered; it would have taken until week ${Math.ceil(outcome)}.`;
   // The record's answer for the plan the student stated, beside the record's overall median.
-  const mine = p.plan ? matchContracts(p.plan) : null;
+  const mine = p.plan ? matchContracts(p.plan, { code: p.seedInput }) : null;
   const failLine = p.result === 'BANKRUPT' ? `Your company went bankrupt in week ${p.week}.` : p.result === 'TERMINATED' ? `The customer terminated the contract after week ${c.horizon}.` : null;
   const end = Math.ceil(Math.max(outcome, c.deadline, past.p90)) + 1;
   const facts = useMemo(() => gameFacts(p), [p]);

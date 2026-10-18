@@ -25,11 +25,11 @@ function Kpi({ label, value, sub, tone = 'text-white', children }) {
 export default function Play({ project, onPlay, initialSeen = [], initialTab = 'decide' }) {
   const c = CONFIG;
   const p = project;
-  const past = pastContracts();
+  const past = pastContracts(CONFIG, p.seedInput);
   const last = p.history[p.history.length - 1];
   const lastLog = p.forecastLog[p.forecastLog.length - 1];
   const lastForecast = lastLog?.forecast ?? p.forecast.week;
-  const S = useMemo(() => screenData(), []);
+  const S = useMemo(() => screenData(CONFIG, p.seedInput), [p]);
   // Week 1 starts from the plan the student committed: its crews, inspection and shift. They can change it any week.
   const week1 = p.week === 0 && p.plan;
   const maxHire = Math.min(c.maxHirePerWeek, c.maxCrews - p.crews);

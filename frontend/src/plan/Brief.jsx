@@ -29,7 +29,6 @@ const range = (f) => (f.low === f.high ? `week ${f.low}` : `${f.low}–${f.high}
 export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit', initialPlan = null, initialOpened = [] }) {
   const c = CONFIG;
 
-  const S = useMemo(() => screenData(), []);
   // No starting forecast: each number is unset until the student sets it (or a tool's numbers are used).
   const [week, setWeek] = useState(null);
   const [low, setLow] = useState(null);
@@ -46,6 +45,8 @@ export default function Brief({ onCommit, initialSeed = '', initialTab = 'commit
   const [loaded, setLoaded] = useState(null);
   const [seed, setSeed] = useState(initialSeed);
   const [seedLocked, setSeedLocked] = useState(!!initialSeed);
+  // Each scenario code has its own record of past contracts, so the desk follows the code.
+  const S = useMemo(() => screenData(CONFIG, seed), [seed]);
   // The plan comes first: crews added at the start, inspection share, second shift.
   const [risks, setRisks] = useState([]);
   const [plan, setPlan] = useState(initialPlan || { crews: null, inspect: null, shift: null });

@@ -48,7 +48,7 @@ export default function Records({ past, plan = null, onUse = null }) {
 
   const setFilter = (k, v) => { setMatch(null); setFilters((f) => ({ ...f, [k]: v === ANY ? ANY : v })); };
   const reset = () => { setMatch(null); setFilters({ crews: ANY, inspect: ANY, shift: ANY }); };
-  const likeMine = () => { if (plan) setMatch(matchContracts(plan)); };
+  const likeMine = () => { if (plan) setMatch(matchContracts(plan, { contracts: past.contracts })); };
   const sortBy = (key) => setSort((s) => ({ key, dir: s.key === key ? -s.dir : 1 }));
 
   return (

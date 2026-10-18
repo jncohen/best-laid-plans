@@ -72,7 +72,7 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
   const saw = (k) => `You saw it, and you ${k.choice === 'change' ? 'changed' : 'kept'} your forecast.`;
 
   // 1. The starting point: the gut forecast, then the final one after the tour.
-  const paceWeeks = c.scope / historyMean(c), past = pastContracts(c);
+  const paceWeeks = c.scope / historyMean(c, p.seedInput), past = pastContracts(c, p.seedInput);
   const near = [
     Math.abs(f.week - paceWeeks) <= 1 && 'close to the line\'s pace',
     Math.abs(f.week - past.median) <= 1 && 'close to the past contracts\' median',
@@ -100,7 +100,7 @@ export function gameFacts(p, { replay = luckReplay(p) } = {}) {
   });
   let closest = null;
   if (!committed) {
-    const fs = allForecasts(screenData(c), p.plan || { crews: 0, inspect: 0, shift: 'none' });
+    const fs = allForecasts(screenData(c, p.seedInput), p.plan || { crews: 0, inspect: 0, shift: 'none' });
     closest = fs.map((x) => ({ x, d: Math.abs(x.week - f.week) + Math.abs(x.low - f.low) + Math.abs(x.high - f.high) })).sort((a, b) => a.d - b.d)[0].x;
   }
   const committedText = committed ? `You committed ${/'s$/.test(committed) ? committed : `the ${committed}`} numbers${p.desk?.edited ? ', then changed them' : ''}.`
@@ -191,7 +191,7 @@ export function riskReview(p) {
   const shock = h.find((r) => r.shock > 0);
   const rejected = h.reduce((a, r) => a + (r.rejected || 0), 0);
   const full = h.find((r) => r.rejected > 0 || r.reported >= 0.999);
-  const onPaper = p.plan ? schedule(screenData(c), p.plan).forecast.week : null;
+  const onPaper = p.plan ? schedule(screenData(c, p.seedInput), p.plan).forecast.week : null;
   const delivered = p.result === 'DELIVERED';
   const happened = {
     scope: shock ? `+${shock.shock} units in week ${shock.week}` : null,

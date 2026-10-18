@@ -598,16 +598,16 @@ export const isHandsOff = (plan) => { const p = normalizePlan(plan); return p.cr
  *   kept           was the plan played the plan stated (null with no stated plan)
  * Hands-off play also returns the record of the past managers who coasted.
  */
-export function judgeForecast({ forecast: f, outcome, stated, played, failed = null }, cfg = CONFIG) {
+export function judgeForecast({ forecast: f, outcome, stated, played, failed = null, code = '' }, cfg = CONFIG) {
   const held = !failed && outcome >= f.low && outcome <= f.high;
   const missBy = held ? 0 : failed ? null : +(outcome > f.high ? outcome - f.high : outcome - f.low).toFixed(1);
-  const matched = matchContracts(played, { cfg });
+  const matched = matchContracts(played, { cfg, code });
   const kept = stated ? planKept(stated, played) : null;
   let coaster = null;
   if (isHandsOff(played)) {
     const rows = matched.contracts;
     // Only contracts the record shows as run hands-off, whatever rule the match widened to.
-    const coasters = pastContracts(cfg).contracts.filter((r) => r.crewsAdded === 0 && r.inspect === 0 && r.shiftWeeks === 0);
+    const coasters = pastContracts(cfg, code).contracts.filter((r) => r.crewsAdded === 0 && r.inspect === 0 && r.shiftWeeks === 0);
     const s = summarizeContracts(coasters, cfg);
     coaster = { n: s.n, late: coasters.filter((r) => !r.onTime).length, median: s.median, min: s.min, max: s.max, matched: rows.length !== s.n ? { n: rows.length, late: rows.filter((r) => !r.onTime).length, median: matched.median, rule: matched.rule } : null };
   }
@@ -669,7 +669,19 @@ export function pastManagers(n = CONFIG.pastContracts) {
 }
 
 /** The scenario seed each past contract was played on. */
-export const contractSeed = (i, n = CONFIG.pastContracts) => (i === n - 1 ? 'last-contract' : `past-${i}`);
+/** The scenario code as the record keys it: trimmed, lower case; '' for no code. */
+export const recordCode = (code) => (code === null || code === undefined ? '' : String(code).trim().toLowerCase());
+/**
+ * The seed of past contract i. Each scenario code has its own record: the same rules and the
+ * same mix of past managers, but its own draws (lines, luck, scope changes), so the record and
+ * everything read from it (Mabel, Records, Last 5) differ from code to code. No code: the
+ * original record.
+ */
+export const contractSeed = (i, n = CONFIG.pastContracts, code = '') => {
+  const base = i === n - 1 ? 'last-contract' : `past-${i}`;
+  const k = recordCode(code);
+  return k ? `${k}|${base}` : base;
+};
 
 // Six common plans, in the terms the commit screen asks for.
 export const COMMON_PLANS = [
@@ -749,13 +761,15 @@ export function summarizeContracts(rows, cfg = CONFIG) {
   };
 }
 
-let _past = null;
-export function pastContracts(cfg = CONFIG) {
-  if (_past && cfg === CONFIG) return _past;
+const _past = new Map();
+/** The 40 past contracts for a scenario code (see contractSeed). Cached per code. */
+export function pastContracts(cfg = CONFIG, code = '') {
+  const k = recordCode(code);
+  if (cfg === CONFIG && _past.has(k)) return _past.get(k);
   const contracts = pastManagers(cfg.pastContracts)
-    .map((m, i) => ({ ...contractRow(playManager(new Project(contractSeed(i, cfg.pastContracts), cfg), m), i + 1), habit: m.arch }));
+    .map((m, i) => ({ ...contractRow(playManager(new Project(contractSeed(i, cfg.pastContracts, k), cfg), m), i + 1), habit: m.arch }));
   const res = { contracts, weeks: contracts.filter((r) => r.delivered).map((r) => r.accepted), ...summarizeContracts(contracts, cfg) };
-  if (cfg === CONFIG) _past = res;
+  if (cfg === CONFIG) _past.set(k, res);
   return res;
 }
 
@@ -777,8 +791,8 @@ export function planFromProject(p) {
  *   3. inspection or not, second shift or not
  *   4. all contracts
  */
-export function matchContracts(plan, { min = 5, cfg = CONFIG } = {}) {
-  const all = pastContracts(cfg).contracts;
+export function matchContracts(plan, { min = 5, cfg = CONFIG, code = '', contracts: from = null } = {}) {
+  const all = from || pastContracts(cfg, code).contracts;
   const crews = Math.max(0, Math.round(+plan.crews || 0));
   const insp = +plan.inspect > 0;
   const shift = shiftOn(plan);
@@ -803,10 +817,11 @@ export function matchContracts(plan, { min = 5, cfg = CONFIG } = {}) {
 // Same line, same four crews, built flat out with no inspection. The briefing shows
 // its first weeks of reported completions (the inside view) AND how it ended: the
 // week its dashboard first read 100%, and the week it was actually accepted.
-let _last = null;
-export function lastContract(cfg = CONFIG) {
-  if (_last && cfg === CONFIG) return _last;
-  const p = playPolicy(new Project('last-contract', cfg), { hire: 0, inspect: 0 });
+const _last = new Map();
+export function lastContract(cfg = CONFIG, code = '') {
+  const k = recordCode(code);
+  if (cfg === CONFIG && _last.has(k)) return _last.get(k);
+  const p = playPolicy(new Project(contractSeed(cfg.pastContracts - 1, cfg.pastContracts, k), cfg), { hire: 0, inspect: 0 });
   const full = p.history.find((h) => h.rejected > 0 || h.reported >= 0.999);
   const res = {
     history: p.history.slice(0, cfg.historyWeeks).map((h) => h.built),
@@ -814,11 +829,11 @@ export function lastContract(cfg = CONFIG) {
     deliveredWeek: p.outcomeWeek(),
     rejected: Math.round(p.history.reduce((a, h) => a + h.rejected, 0)),
   };
-  if (cfg === CONFIG) _last = res;
+  if (cfg === CONFIG) _last.set(k, res);
   return res;
 }
 
-export const historyMean = (cfg = CONFIG) => {
-  const h = lastContract(cfg).history;
+export const historyMean = (cfg = CONFIG, code = '') => {
+  const h = lastContract(cfg, code).history;
   return +(h.reduce((a, b) => a + b, 0) / h.length).toFixed(1);
 };

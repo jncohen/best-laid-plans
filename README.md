@@ -3,7 +3,7 @@
 A classroom game about forecasting. Students run a 200-unit production contract with
 a 12-week deadline and forecast the week the customer accepts it.
 
-The dashboard counts units built, so its pace looks precise: 19.1 a week (about 10.5
+The dashboard counts units built, so its pace looks precise: 18.6 a week on ledger (about 10.8
 weeks). The customer counts units that pass inspection, and the record of 40 past
 contracts on the same line says the work takes longer: weeks 12 to 17 for most of
 the 38 delivered, and 2 of the 40 ran out of money. The lesson:
@@ -269,7 +269,7 @@ Colours:
 | Risk Register | the student's own list of risks and likelihoods, judged at the reveal | The risks the student logs · the ones they do not think of |
 | Ask an AI | a plain prompt (the contract, the last contract's first six weeks, the plan and, during play, the dashboard) to paste into any AI assistant, ending "When will the customer accept the contract?"; no method hints and no forecast of its own | Whatever the student asks it · how to question an AI about a forecast |
 | **History** | | |
-| Last 5 Contracts | the last contract's first six weeks and its pace (19.1 a week, 10.5 weeks to 200 units), an after-action review of it, and a list of the five newest contracts. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |
+| Last 5 Contracts | the last contract's first six weeks and its pace (18.6 a week on ledger, 10.8 weeks to 200 units), an after-action review of it, and a list of the five newest contracts. These are records #36–40; #40 is the line's last contract | The five newest contracts, and the story of the last one · whether five is enough |
 | Records | historical-project database: a dot strip of the 40 past contracts with its summary (median, 10th–90th, on-time share), above a sortable, filterable table with "Contracts run like my plan" | What actually happened, defects and scope changes included · plans no past manager tried |
 
 `npm run plan` also checks the money and the luck:
@@ -295,16 +295,24 @@ hands-off.
 Contracts #1–39 are run by managers with habits of their own: eight archetypes
 (coaster, early hirer, reactive hirer, staged hirer, inspector, shift runner, hire +
 shift, quality-first). Each manager's parameters are drawn from a fixed seed (659), so
-the record is the same for everyone and on every scenario code. Each manager plays the
+every code has the same mix of managers. **Each scenario code draws its own record**:
+the 40 contracts and the last contract (#40) are played under the code's own draws
+(lines, luck, scope changes), with the same rules. So the record, Last 5, Mabel and
+every number read from them differ a little from code to code, while everyone on one
+code sees the same record. `node tools/record-by-code.mjs` prints each code's record
+and how often its best-practice forecast wins. Each manager plays the
 same engine week by week and reacts only to what their screen shows: the reported
 backlog, crews and week.
 
-With simple 1.2's rules (a $5.00M budget, 1.1 onboarding and contract differences)
-the record has:
+With simple 1.2's rules (a $5.00M budget, 1.1 onboarding and contract differences),
+on the **ledger** code the record has:
 - 2 of 40 never delivered (2 bankrupt, none terminated), listed and counted as such;
 - among the 38 delivered, a median of week 14 and a 10th–90th percentile range of
-  weeks 12–17;
-- 7 of 40 on time.
+  weeks 13–18;
+- 3 of 40 on time.
+Contracts run like +3 crews / 10% inspection (7 of them): median week 13, range 11–14,
+29% on time. On compass: median 15, 13–18, 1 of 40 on time, 3 bankrupt. With no code,
+the original record: median 14, 12–17, 7 of 40 on time.
 
 Every median, range and percentile on the desk is computed from delivered contracts
 only. On-time shares are out of all contracts, with a failure counting as not on time.
@@ -312,9 +320,11 @@ The screen says so, and every range from the record shows its failures beside it
 (an ✕ per failure on the dot strip). "Use this" carries the failures into the week-12
 chance and into a note on the front tab.
 
-The last contract (#40) read 100% in week 13 and was accepted in week 17, with 20
-units rejected. Its first six weeks averaged 19.1 a week. Live 1.1.0 had 19.1 a week;
-13 → 17 with 19 rejected; median 14; 12–17; 6 of 40.
+On ledger the last contract (#40) read 100% in week 13 and was accepted in week 18,
+with 28 units rejected. Its first six weeks averaged 18.6 a week (10.8 weeks to 200).
+On compass: 18.5 a week, 12 → 16 with 21 rejected. With no code: 19.1 a week, 13 → 17
+with 20 rejected. Live 1.1.0 had 19.1 a week; 13 → 17 with 19 rejected; median 14;
+12–17; 6 of 40.
 
 The Records table shows, for each contract:
 - what the manager did: crews added and when, inspection, second-shift weeks;

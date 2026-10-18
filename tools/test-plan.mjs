@@ -570,6 +570,20 @@ console.log('Management information: controls, what-if, risk register');
   t('the Risk Register tab is not a tool check', !isCheck('risks') && isCheck('controls') && isCheck('whatif'));
 }
 
+console.log('Each scenario code draws its own record');
+{
+  const a = pastContracts(CONFIG, 'ledger'), b = pastContracts(CONFIG, 'compass'), none = pastContracts();
+  t('records differ by code, are the same for one code (any case), and no code keeps the original record',
+    JSON.stringify(a.contracts.map((r) => r.accepted)) !== JSON.stringify(b.contracts.map((r) => r.accepted))
+    && pastContracts(CONFIG, ' Ledger ') === a && none.median === 14 && none.p10 === 12 && none.p90 === 17);
+  t('the same mix of past managers on every code', JSON.stringify(a.contracts.map((r) => r.habit)) === JSON.stringify(b.contracts.map((r) => r.habit)));
+  const S = screenData(CONFIG, 'ledger');
+  t('the last contract is record #40 on that code', S.last.deliveredWeek === a.contracts[39].accepted && S.last.rejected === a.contracts[39].rejected);
+  t('the desk reads the code record: Records and Mabel match within it', records(S, { crews: 3, inspect: 0.1, shift: 'none' }).matched.week === matchContracts({ crews: 3, inspect: 0.1, shift: 'none' }, { code: 'ledger' }).median
+    && teamChat(S, { crews: 3, inspect: 0.1, shift: 'none' }).find((c) => c.key === 'veteran').says.includes('about fourteen weeks'));
+  t('the rules are the same on every code', JSON.stringify(screenData(CONFIG, 'compass').rules) === JSON.stringify(S.rules));
+}
+
 console.log('Records CSV, checks, AI use, checking out');
 {
   const S = screenData(), csv = recordsCsv(S).split('\n');
