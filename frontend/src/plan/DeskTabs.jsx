@@ -123,7 +123,7 @@ function StatusTab({ S, plan, onUse, live }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <Tile label="Reported complete" value={`${Math.round(100 * st.earnedPct)}%`} sub={`of ${st.scope} units`} tone="text-sky-300" />
         <Tile label="Schedule efficiency" value={st.spi} sub="below 1 = behind plan · SPI" tone={st.spi < 0.95 ? 'text-amber-300' : 'text-sky-300'} />
-        <Tile label="Projected finish" value={`wk ${Math.ceil(st.eacWeeks)}`} sub={`12 weeks ÷ schedule efficiency · EAC`} tone="text-sky-300" />
+        <Tile label="Projected finish" value={`wk ${Math.ceil(st.eacWeeks)}`} sub={`${R.deadline} weeks ÷ schedule efficiency · EAC`} tone="text-sky-300" />
         <Tile label="Scope" value={st.scope} sub={st.scopeAdded ? `${R.scope} + ${st.scopeAdded} added in week ${st.scopeWeek}` : 'units, no change yet'} tone="text-sky-300" />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
@@ -158,7 +158,7 @@ function StatusTab({ S, plan, onUse, live }) {
           {' '}Defects found in week {r.week}: {Math.round(r.found + r.rejected)}; so far: {Math.round(st.found)}. The last contract had {st.rejectedLast} of {R.scope} units rejected at acceptance.</p>
       ); })()}
       <p className="text-[11px] text-slate-500 mt-1">
-        Projected finish is the standard earned-value estimate: 12 weeks ÷ schedule efficiency. Its range is that estimate as of each week shown
+        Projected finish is the standard earned-value estimate: {R.deadline} weeks ÷ schedule efficiency. Its range is that estimate as of each week shown
         (weeks {st.forecast.low}–{st.forecast.high}). Reported complete counts units built, whether or not they will pass.
       </p>
     </Frame>
@@ -202,8 +202,9 @@ function ControlsTab({ S, plan, planNote, live }) {
         <p className="text-xs text-slate-400 mt-1">Starts in week 1: defects found by inspection and by the acceptance test, week by week, against limits from your own weeks. The last contract had no inspection and {pc.rejectedLast} units rejected at acceptance.</p>
       ) : (<>
         <p className="text-xs text-slate-400 mt-1">
-          {pc.centre === null ? 'The limits need three weeks without an acceptance test.' : <>Centre line {pc.centre} a week; upper control limit {pc.ucl} (centre + 3√centre, from the weeks before any acceptance test).</>}
+          {pc.centre === null ? 'The limits need three weeks before the first acceptance test.' : <>Centre line {pc.centre} a week; upper control limit {pc.ucl} (centre + 3√centre, at least 1.5, from the weeks before the first acceptance test).</>}
           {pc.out.length > 0 && <span className="text-rose-300"> Above the limit in week{pc.out.length > 1 ? 's' : ''} {pc.out.join(', ')}: something other than the usual has changed.</span>}
+          {' '}An acceptance test finds the defects inspection missed, all at once: those weeks are amber, not a change in the line.
           {' '}Few defects found can mean few made, or little inspection.
         </p>
         <svg viewBox={`0 0 ${W} ${dh}`} className={`${CHART_CLASS} mt-2`} role="img" aria-label="Defect control chart">
@@ -264,7 +265,7 @@ function WhatIfTab({ S, plan, planNote, live }) {
       ))}
       <table className="w-full text-xs text-slate-200 mt-2">
         <thead className="text-slate-400">
-          <tr><th className="text-left font-semibold py-1">Option</th><th className="text-right font-semibold">Done on paper</th><th className="text-right font-semibold">Cost to finish</th><th className="text-right font-semibold">Money</th>{!live && <th className="text-right font-semibold">Record</th>}</tr>
+          <tr><th className="text-left font-semibold py-1">Option</th><th className="text-right font-semibold">Done on paper</th><th className="text-right font-semibold">Total spend at finish</th><th className="text-right font-semibold">Money</th>{!live && <th className="text-right font-semibold">Record</th>}</tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
@@ -275,7 +276,7 @@ function WhatIfTab({ S, plan, planNote, live }) {
               <td className={`text-right ${r.brokeWeek ? 'text-rose-300' : 'text-slate-400'}`}>{r.brokeWeek ? `runs out wk ${r.brokeWeek}` : 'lasts'}</td>
               {!live && (
                 <td className="text-right font-mono whitespace-nowrap">wk {r.record.median}
-                  <div className={`text-[11px] ${r.record.crewsDropped ? 'text-rose-300' : 'text-slate-500'}`}>{r.record.low}–{r.record.high} · {r.record.n} contracts{r.record.loose ? ' · loose' : ''}</div>
+                  <div className={`text-[11px] ${r.record.crewsDropped ? 'text-rose-300' : 'text-slate-500'}`}>{r.record.low}–{r.record.high} · {r.record.n} contracts{r.record.crewsDropped ? ' · ignores crews: no past plan like it' : r.record.loose ? ' · loose match' : ''}</div>
                 </td>
               )}
             </tr>

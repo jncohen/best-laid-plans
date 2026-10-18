@@ -52,7 +52,7 @@ export const CONFIG = {
   // Defects
   baseDefectRate: 0.10,
   // Inspection: share of capacity moved from building to checking. Each week it finds
-  // this share of the hidden defects outstanding (plus a trickle found anyway).
+  // discoveryBase + discoveryPerShare x share of the hidden defects outstanding, capped at discoveryCap.
   inspectionOptions: [0, 0.1, 0.2, 0.3],
   discoveryBase: 0.05,
   discoveryPerShare: 3.0,
@@ -198,7 +198,8 @@ export class Project {
    * play(): they are recorded, never acted on.
    */
   commit({ week, low, high, onTimeChance, plan = null, desk = null, gut = null }) {
-    this.forecast = { week: +week, low: +low, high: +high, onTimeChance: +onTimeChance };
+    const lo = Math.min(+low, +high), hi = Math.max(+low, +high);
+    this.forecast = { week: +week, low: lo, high: hi, onTimeChance: Math.max(0, Math.min(100, +onTimeChance || 0)) };
     // The gut forecast, made after seeing only The Contract and the Status Report: recorded, never scored.
     this.gutForecast = gut ? { week: +gut.week, low: +gut.low, high: +gut.high, onTimeChance: +gut.onTimeChance } : null;
     this.forecastLog = [{ week: 0, forecast: +week, low: +low, high: +high, chance: +onTimeChance }];
@@ -248,7 +249,8 @@ export class Project {
     const events = [];
 
     // Staffing
-    hire = Math.max(-(this.crews - 1), Math.min(c.maxHirePerWeek, Math.round(hire), c.maxCrews - this.crews));
+    hire = Math.max(-(this.crews - 1), Math.min(c.maxHirePerWeek, Number.isFinite(+hire) ? Math.round(+hire) : 0, c.maxCrews - this.crews));
+    inspect = c.inspectionOptions.reduce((best, o) => (Math.abs(o - (+inspect || 0)) < Math.abs(best - (+inspect || 0)) ? o : best), 0);
     this.decisions.push({ hire, shift: !!shift, inspect: c.inspectionOptions.includes(+inspect) ? +inspect : 0 });
     const cost = this.weekCost({ hire, shift });
     if (this.budget - cost < -c.creditLine) {
@@ -443,7 +445,9 @@ export function playSummary(p) {
       forecast = { week: e.forecast - before.forecast, low: (e.low ?? before.low) - before.low, high: (e.high ?? before.high) - before.high, chance: (e.chance ?? before.chance) - before.chance };
       if (!forecast.week && !forecast.low && !forecast.high && !forecast.chance) forecast = null;
     }
-    const decisions = { crews: h.crews - prev.crews, shift: h.shift !== prev.shift, inspect: h.inspect !== prev.inspect };
+    // The stated plan's second shift for this week (late: weeks 9-11), so playing the plan is not a "change".
+    const plannedShift = p.plan ? p.plan.shift === 'every' || (p.plan.shift === 'late' && h.week >= 9 && h.week <= 11) : false;
+    const decisions = { crews: h.crews - prev.crews, shift: h.shift !== prev.shift && h.shift !== plannedShift, inspect: h.inspect !== prev.inspect };
     const decided = decisions.crews !== 0 || decisions.shift || decisions.inspect;
     return { week: h.week, tabs, used: opened.some((d) => d.tab.startsWith('use:')), copied: opened.some((d) => d.tab === 'ai-copy'),
       forecast, decisions, decided, seconds: p.weekSeconds[h.week] ?? null, engaged: tabs.length > 0 || !!forecast || decided };

@@ -149,7 +149,9 @@ export function ForecastChart({ log, interval, band, deadline, outcome = null, n
       )}
       <path d={d} fill="none" stroke="#34d399" strokeWidth="3" />
       {log.map((f) => <circle key={f.week} cx={x(f.week)} cy={y(f.forecast)} r="3" fill="#34d399" />)}
-      {last && outcome === null && <text x={x(last.week) + 7} y={y(last.forecast) + 4} fontSize="12" fontWeight="700" fill="#6ee7b7">wk {last.forecast}</text>}
+      {last && outcome === null && (x(last.week) > W - PAD.r - 50
+        ? <text x={x(last.week) - 7} y={y(last.forecast) + 4} textAnchor="end" fontSize="12" fontWeight="700" fill="#6ee7b7">wk {last.forecast}</text>
+        : <text x={x(last.week) + 7} y={y(last.forecast) + 4} fontSize="12" fontWeight="700" fill="#6ee7b7">wk {last.forecast}</text>)}
     </svg>
   );
 }

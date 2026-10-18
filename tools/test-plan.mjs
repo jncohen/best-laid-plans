@@ -219,7 +219,8 @@ console.log('The table summarises what matchContracts finds');
   }
   t('no filter is all 40', filterContracts(rows).length === CONFIG.pastContracts);
   const sorted = sortContracts(rows, 'accepted', -1);
-  t('sorting by acceptance week puts the latest first and keeps every row', sorted.length === rows.length && sorted.every((r, i) => !i || sorted[i - 1].accepted >= r.accepted));
+  const sortKey = (r) => (r.delivered === false ? 100 + (r.endedWeek ?? 0) : r.accepted);
+  t('sorting by acceptance week puts the latest first, failures after the delivered, and keeps every row', sorted.length === rows.length && sorted.every((r, i) => !i || sortKey(sorted[i - 1]) >= sortKey(r)));
   t('a stated "late weeks" shift matches the second-shift contracts', matchContracts({ crews: 0, inspect: 0, shift: 'late' }).contracts.every((r) => r.shiftWeeks > 0));
   t('a stated "no shift" plan does not match the second-shift contracts', matchContracts({ crews: 0, inspect: 0, shift: 'none' }).contracts.every((r) => r.shiftWeeks === 0));
 }
@@ -588,6 +589,24 @@ console.log('The forecast is judged in words, not scored');
   if (b.result !== 'DELIVERED') t('a contract never delivered: the range missed, the point has no error', forecastVerdict(b).range.text.endsWith('missed, never delivered') && forecastVerdict(b).point.off === null);
 }
 
+console.log('Audit fixes');
+{
+  const S = screenData(CONFIG, 'ledger');
+  const p = new Project('ledger'); p.commit({ week: 14, low: 13, high: 16, onTimeChance: 20, plan: { crews: 2, inspect: 0.1, shift: 'late' } });
+  while (!p.done) { const w = p.week + 1; p.play({ hire: w === 1 ? 2 : 0, inspect: 0.1, shift: w >= 9 && w <= 11 }); }
+  t('playing a planned late shift is not a change of decision', playSummary(p).weeks.filter((w) => w.week > 1 && w.decided).length === 0);
+  const q = new Project('ledger'); for (let w = 1; w <= 11; w++) q.play({ hire: w === 1 ? 2 : 0, inspect: 0.1 });
+  const pc = projectControls(S, { crews: 2, inspect: 0.1, shift: 'none' }, liveScreen(q));
+  const firstTest = pc.defects.findIndex((d) => d.rejected > 0);
+  t('the c-chart limits come from the weeks before the first acceptance test, and test weeks are never "out"', (firstTest < 0 || pc.centre === +(pc.defects.slice(0, firstTest).reduce((a, d) => a + d.count, 0) / firstTest).toFixed(1)) && pc.out.every((w) => pc.defects.find((d) => d.week === w).rejected === 0));
+  const mab = teamChat(S, { crews: 0, inspect: 0.2, shift: 'none' }).find((c) => c.key === 'veteran');
+  t("Mabel never says 'run like yours' for a loose match, and her numbers come from the whole record when crews are dropped", !/run like yours/.test(mab.says) || matchContracts({ crews: 0, inspect: 0.2, shift: 'none' }, { code: 'ledger' }).rule === 'crews, inspection and shift');
+  const r = new Project('ledger'); r.commit({ week: 13, low: 15, high: 12, onTimeChance: 140 });
+  t('a forecast with its ends reversed is sorted and its chance clamped', r.forecast.low === 12 && r.forecast.high === 15 && r.forecast.onTimeChance === 100);
+  const n = new Project('ledger'); n.play({ hire: 'abc', inspect: 0.12 });
+  t('a non-numeric hire is 0 and an off-list inspection snaps to the nearest option', n.crews === 4 && n.history[0].inspect === 0.1 && Number.isFinite(n.spent));
+}
+
 console.log('The promise, and the Status Report light');
 {
   const S = screenData(CONFIG, 'ledger');
@@ -616,7 +635,7 @@ console.log('Records CSV, checks, AI use, checking out');
   const k = checkingSummary(p);
   t('checks are counted before week 1 and during play; the AI steps; checking out after week 3', k.before === 5 && k.during === 6 && k.weeksChecked === 3 && k.stoppedAfter === 3 && k.aiOpened && k.aiCopied && k.csv);
   const fx = gameFacts(p).find((x) => x.key === 'record');
-  t('the fact says it in words', fx.title === 'What you checked' && fx.text.includes('checked information sources 5 times') && fx.text.includes('you stopped checking after week 3')
+  t('the fact says it in words', fx.title === 'What you checked' && fx.text.includes('checked information sources 5 times') && fx.text.includes('your last look was before week 3')
     && fx.text.includes('AI: you opened Ask an AI, copied its prompt, downloaded the records.'));
   t('the results file lists the checks', resultsText(p, gameFacts(p)).includes('- Stopped checking: after week 3.'));
   t('the records CSV download is not a tool check; Ask an AI is not either', !isCheck('records-csv') && !isCheck('ai'));

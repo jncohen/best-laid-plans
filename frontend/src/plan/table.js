@@ -25,7 +25,7 @@ const KEYS = {
   scope: (r) => r.scopeUnits * 100 + r.scopeWeek,
   full: (r) => r.dashboardFullWeek ?? 99,
   rejected: (r) => r.rejected,
-  accepted: (r) => r.accepted,
+  accepted: (r) => (r.delivered === false ? 100 + (r.endedWeek ?? 0) : r.accepted),
   onTime: (r) => (r.onTime ? 1 : 0),
 };
 

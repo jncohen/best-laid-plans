@@ -60,7 +60,7 @@ export default function Records({ past, plan = null, onUse = null }) {
       />
 
       <p className="text-sm text-slate-300" aria-live="polite">
-        {match ? `Contracts run like yours (${sum.n})` : all ? `All ${sum.n} contracts` : `${sum.n} of ${past.contracts.length} contracts`}
+        {match ? (match.rule === 'crews, inspection and shift' ? `Contracts run like yours (${sum.n})` : match.crewsDropped ? `No past plan like yours; the nearest ${sum.n} (${match.rule})` : `Contracts near yours (${match.rule}; ${sum.n})`) : all ? `All ${sum.n} contracts` : `${sum.n} of ${past.contracts.length} contracts`}
         {sum.delivered > 0 && <>: median <strong className="text-amber-300">week {sum.median}</strong>, 10th–90th percentile weeks{' '}
           <strong className="text-amber-300">{sum.p10}–{sum.p90}</strong>{sum.failed.total ? ` (of the ${sum.delivered} delivered)` : ''}, {Math.round(sum.onTimeShare * 100)}% made week {c.deadline}.</>}
         {failuresLine(sum) && <> <span className="text-rose-300">{failuresLine(sum, match ? 'run like yours' : '')}.</span></>}
@@ -100,7 +100,7 @@ export default function Records({ past, plan = null, onUse = null }) {
         </button>
       </div>
       {onUse && sum.delivered > 0 && (
-        <button type="button" onClick={() => onUse({ week: sum.median, low: sum.p10, high: sum.p90, chance: Math.round(100 * sum.onTimeShare), fail: failuresLine(sum, match ? 'run like yours' : '') }, match ? 'contracts run like my plan' : all ? 'all 40' : 'filtered')}
+        <button type="button" onClick={() => onUse({ week: sum.median, low: sum.p10, high: sum.p90, chance: Math.round(100 * sum.onTimeShare), fail: failuresLine(sum, match ? 'run like yours' : '') }, match ? 'contracts run like my plan' : all ? `all ${past.contracts.length}` : 'filtered')}
           className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold">
           Use these {sum.n} contracts on my prediction (week {sum.median}, {sum.p10}–{sum.p90}, {Math.round(100 * sum.onTimeShare)}%{sum.failed.total ? `; ${sum.failed.total} never delivered` : ''})
         </button>

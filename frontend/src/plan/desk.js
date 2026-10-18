@@ -137,7 +137,7 @@ export function statusReport(S, L = null, plan = null) {
     money: { spent: cm.spent, budgetLeft: R.budget - cm.spent, creditLeft: R.budget + R.creditLine - cm.spent, plannedCost: cm.cost.bac, brokeWeek: cm.brokeWeek, budget: R.budget, creditLine: R.creditLine },
     scope, scopeAdded: scope - R.scope, scopeWeek: L ? (L.rows.find((r) => r.shock > 0) || {}).week ?? null : null,
     behind: { schedule: finishLevel > 0, cost: moneyLevel > 0 }, spendAtFinish,
-    forecast: clampF({ week: Math.round(eac), low: Math.floor(Math.min(...eacs)), high: Math.ceil(Math.max(...eacs)), chance: eac <= R.deadline - 0.5 ? 90 : eac <= R.deadline ? 60 : 20 }),
+    forecast: clampF({ week: Math.round(eac), low: Math.max(L ? wk + 1 : 1, Math.floor(Math.min(...eacs))), high: Math.ceil(Math.max(...eacs)), chance: eac <= R.deadline - 0.5 ? 90 : eac <= R.deadline ? 60 : 20 }),
     live: !!L, pace: +pace(S).toFixed(1), weeksAtPace: +(R.scope / pace(S)).toFixed(1), eacWeeks: +eac.toFixed(1), weekly,
     earnedPct, plannedPct, weeksShown: wk, built: earnedPct * scope, planned: plannedPct * scope,
     found: foundSoFar(L), rejectedLast: S.last.rejected, perCrew: +observedPerCrew(S, L).toFixed(1),
@@ -248,9 +248,12 @@ export function teamChat(S, plan, L = null) {
   const gap = S.last.deliveredWeek - S.last.dashboardFullWeek;
   const rejected = Math.round(rejectedSoFar(L)), found = Math.round(foundSoFar(L));
   const spread = Math.round((all.high - all.low) / 2);
-  const yours = (m.crewsDropped ? " Nobody's tried that on this line. I can't vouch for it."
-    : m.week !== all.week ? ` The ones run like yours came in around week ${m.week}.` : '')
-    + (m.failed ? ` And ${word(m.failed)} of the ${word(m.n)} run like yours never got delivered.` : '');
+  const exact = m.rule === 'crews, inspection and shift';
+  const yours = m.crewsDropped ? " Nobody's tried a plan like that on this line, so I'd go by the whole record."
+    : (m.week !== all.week ? ` The ones run ${exact ? 'like yours' : 'with about your crews'} came in around week ${m.week}.` : '')
+      + (m.failed ? ` And ${word(m.failed)} of those ${word(m.n)} never got delivered.` : '');
+  // Mabel's numbers: the matched record, or the whole record when the match ignores crews. Week 12 is gone once it has passed.
+  const mabel = m.crewsDropped ? all : m;
   const lastRow = L ? L.rows[L.rows.length - 1] : null;
   const shown = lastRow ? Math.round(100 * lastRow.reported) : 0;
   // The record's own last stretch: how long after the dashboard read 100% the customer accepted.
@@ -267,13 +270,13 @@ export function teamChat(S, plan, L = null) {
   } else {
     const rw = p.inspect > 0 ? Math.max(1, Math.round(gap / 2)) : gap;
     priya = { forecast: clampF({ week: sc.week + rw, low: sc.week + rw - 1, high: sc.week + rw + 2, chance: sc.week + rw <= R.deadline ? 50 : 15 }),
-      says: `${found > 0 ? `We've caught ${found} bad unit${found === 1 ? '' : 's'} so far. ` : ''}Last time ${S.last.rejected} units bounced at acceptance, and it took ${word(gap)} more weeks after the dashboard said done. Budget ${gap > 1 ? `${word(gap - 1)} or ${word(gap)}` : word(gap)} weeks for rework${p.inspect > 0 ? ', maybe half that if you keep inspecting' : ''}.`,
+      says: `${found > 0 ? `We've caught ${found} bad unit${found === 1 ? '' : 's'} so far. ` : ''}Last time ${S.last.rejected} unit${S.last.rejected === 1 ? '' : 's'} bounced at acceptance, and it took ${word(gap)} more weeks after the dashboard said done. Budget ${gap > 1 ? `${word(gap - 1)} or ${word(gap)}` : word(gap)} weeks for rework${p.inspect > 0 ? ', maybe half that if you keep inspecting' : ''}.`,
       reasoning: `The plan from here (week ${sc.week}) plus the rework the last contract needed after its dashboard read 100% (${gap} weeks${p.inspect > 0 ? ', halved for inspection' : ''}).` };
   }
   return [
     { key: 'supervisor', name: 'Dana', role: 'Line supervisor', frame: 'The pace', approach: 'goes by the pace of the line', confidence: 65, forecast: { week: atPace, low: Math.max(now + 1, atPace - 1), high: atPace + 1, chance: atPace <= R.deadline ? 75 : 30 },
       says: L
-        ? `We built ${Math.round(lastRow.built)} last week, about ${observedPerCrew(S, L).toFixed(1)} a crew; the last contract did ${(pace(S) / R.crews).toFixed(1)}.${scopeNews} At this pace that's ${word(atPace - now)} more week${atPace - now === 1 ? '' : 's'}: week ${atPace}, if nothing goes wrong.`
+        ? `We built ${Math.round(lastRow.built)} last week; about ${observedPerCrew(S, L).toFixed(1)} a crew so far, against ${(pace(S) / R.crews).toFixed(1)} on the last contract.${scopeNews} At this pace that's ${word(atPace - now)} more week${atPace - now === 1 ? '' : 's'}: week ${atPace}, if nothing goes wrong.`
         : `At this pace, ${word(atPace)} weeks, if nothing goes wrong.`,
       reasoning: `${Math.round(left)} units left at ${v.toFixed(1)} a week${L ? ' (the last few weeks built)' : " (the last six weeks' pace)"}.` },
     { key: 'planner', name: 'Sam', role: 'Planner', frame: 'The plan on paper', approach: 'goes by the plan on paper', confidence: 70, forecast: sc,
@@ -285,7 +288,7 @@ export function teamChat(S, plan, L = null) {
         : L && R.deadline - now <= 3 ? `Week ${now} is done and the dashboard says ${shown}%. ${word(R.deadline - now)} week${R.deadline - now === 1 ? '' : 's'} to week ${R.deadline}. The customer wants a firm yes from us this week: are we going to make it?`
         : L ? `Week ${now} is done and the dashboard says ${shown}%. We promised week ${R.deadline}; the customer asked again how it's going.` : `We promised the customer week ${R.deadline}. Our name is on it.`,
       reasoning: 'What the customer was told.' },
-    { key: 'veteran', name: 'Mabel', role: 'Veteran on the line', frame: 'The record', approach: 'goes by the record of past contracts', confidence: 80, forecast: { week: Math.max(m.week, now + 1), low: Math.max(m.low, now + 1), high: Math.max(m.high, now + 1), chance: m.chance, fail: m.fail },
+    { key: 'veteran', name: 'Mabel', role: 'Veteran on the line', frame: 'The record', approach: 'goes by the record of past contracts', confidence: 80, forecast: { week: Math.max(mabel.week, now + 1), low: Math.max(mabel.low, now + 1), high: Math.max(mabel.high, now + 1), chance: now >= R.deadline ? 0 : mabel.chance, fail: mabel.fail },
       says: `Twenty-odd years on this line. These take about ${word(all.week)} weeks, give or take ${spread <= 2 ? 'a couple' : word(spread)}. I've seen ${all.chance / 100 < 0.08 ? '' : 'maybe '}${inWords(all.chance / 100)} make ${word(R.deadline)}.${yours}`
         + (L ? ` You're at ${shown}% on the dashboard after ${word(now)} week${now === 1 ? '' : 's'}. On this line the customer accepts about ${word(tail)} week${tail === 1 ? '' : 's'} after the dashboard first reads 100%.` : ''),
       reasoning: `The record of ${S.contracts.length} contracts: median week ${all.week}, most between ${all.low} and ${all.high} among those delivered, ${all.chance}% on time${all.fail ? `; ${all.fail}` : ''}. For your plan, the ${m.n} run like it: delivered week ${m.week} (${m.low}–${m.high})${m.fail ? `; ${m.fail}` : ''}.` },
@@ -316,10 +319,13 @@ export function projectControls(S, plan, L = null) {
   const plannedLeft = Math.max(0, R.scope * (1 - now.week / R.deadline));
   // Defects found each week, and the c-chart limits once there are three weeks to go on.
   const defects = L ? L.rows.map((r) => ({ week: r.week, found: Math.round(r.found), rejected: Math.round(r.rejected), count: Math.round(r.found + r.rejected) })) : [];
-  const base = defects.filter((d) => d.rejected === 0);
+  const firstTest = defects.findIndex((d) => d.rejected > 0);
+  const base = firstTest < 0 ? defects : defects.slice(0, firstTest);
   const centre = base.length >= 3 ? base.reduce((a, d) => a + d.count, 0) / base.length : null;
-  const ucl = centre === null ? null : centre + 3 * Math.sqrt(Math.max(centre, 0.25));
-  const out = ucl === null ? [] : defects.filter((d) => d.count > ucl).map((d) => d.week);
+  // A c-chart's upper limit, with a floor so a centre of 0 still has a limit above it.
+  const ucl = centre === null ? null : Math.max(centre + 3 * Math.sqrt(centre), 1.5);
+  // Above the limit in an ordinary week; an acceptance test is its own kind of week, shown amber.
+  const out = ucl === null ? [] : defects.filter((d) => d.rejected === 0 && d.count > ucl).map((d) => d.week);
   return {
     live: !!L, scope: L ? L.totalScope : R.scope, deadline: R.deadline, actual, ideal, projection,
     behindBy: Math.round(now.left - plannedLeft), weekNow: now.week, finish: sc ? Math.max(sc.forecast.week, L.week + 1) : null,
